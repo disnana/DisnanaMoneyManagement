@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Alert, Keyboard, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -18,6 +17,10 @@ import { pickOne } from '@/lib/pick';
 import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
+import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { HeaderAction } from '@/ui/HeaderAction';
+import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
 
 const TYPE_LABELS = { income: '収入', expense: '支出', transfer: '振替' };
 
@@ -33,11 +36,10 @@ function dateLabel(date: string): string {
 
 export default function AddScreen() {
   const p = usePalette();
-  const scheme = useColorScheme();
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
   const { id } = params;
   const closing = useRef(false);
-  const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, showSavedTransaction } = useFinance();
+  const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, showSavedTransaction } = useFinance();
   const accountsById = useMemo(() => new Map(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
   const paymentCard = state.accounts.find((a) => a.id === params.toAccountId && a.type === 'credit');
@@ -50,6 +52,8 @@ export default function AddScreen() {
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
   const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
+  const [dateOpen, setDateOpen] = useState(false);
+  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
   const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
     getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds)[0]?.id ?? '');
   const [accountId, setAccountId] = useState(editing?.accountId ?? defaultAccount?.id ?? '');
@@ -83,7 +87,6 @@ export default function AddScreen() {
       : destination.id === paymentCard?.id ? paymentMonth : undefined)
     : undefined;
   const category = getCategoryById(type === 'transfer' ? 'transfer' : categoryId, customCategories);
-  const calendarDate = new Date(`${date}T00:00:00`);
   const shiftDate = (days: number) => {
     const next = new Date(`${date}T00:00:00`);
     next.setDate(next.getDate() + days);
@@ -120,6 +123,8 @@ export default function AddScreen() {
     })));
     if (choice) setter(choice);
   };
+
+  const closeEditor = () => router.canGoBack() ? router.back() : router.replace('/transactions');
 
   const save = (keepOpen: boolean) => {
     if (closing.current) return;
@@ -184,7 +189,7 @@ export default function AddScreen() {
       setMemo('');
       return;
     }
-    router.back();
+    closeEditor();
   };
 
   const fieldRow = (
@@ -240,6 +245,16 @@ export default function AddScreen() {
       <Stack.Screen
         options={{
           title: editing ? `${TYPE_LABELS[type]}を編集` : `${TYPE_LABELS[type]}を記録`,
+          headerRight: editing ? () => (
+            <View style={{ flexDirection: 'row' }}>
+              <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="取引を削除"
+                onPress={({ nativeEvent }) => {
+                  Keyboard.dismiss();
+                  setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY });
+                }} />
+              <HeaderAction name={{ ios: 'checkmark', android: 'check' }} label="取引を保存" accent onPress={() => save(false)} />
+            </View>
+          ) : undefined,
         }}
       />
 
@@ -262,32 +277,12 @@ export default function AddScreen() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: p.card, borderRadius: metrics.cardRadius }}>
           {dateStep(-1, '前の日', { ios: 'chevron.left', android: 'chevron_left' })}
-          {Platform.OS === 'ios' ? (
-            <DateTimePicker
-              accessibilityLabel="取引日"
-              value={calendarDate}
-              mode="date"
-              display="compact"
-              locale="ja-JP"
-              accentColor={p.tint}
-              themeVariant={scheme === 'dark' ? 'dark' : 'light'}
-              onValueChange={(_, selected) => setDate(toDateString(selected))}
-            />
-          ) : Platform.OS === 'android' ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`取引日 ${dateLabel(date)}`}
-              style={{ minHeight: 44, justifyContent: 'center' }} onPress={() => {
-                Keyboard.dismiss();
-                DateTimePickerAndroid.open({
-                  value: calendarDate,
-                  mode: 'date',
-                  onValueChange: (_, selected) => setDate(toDateString(selected)),
-                });
-              }}>
-              <Text style={{ color: p.tint, fontSize: 16, fontWeight: '600' }}>{dateLabel(date)}</Text>
-            </Pressable>
-          ) : (
-            <Text style={{ color: p.tint, fontSize: 16, fontWeight: '600' }}>{dateLabel(date)}</Text>
-          )}
+          <Pressable accessibilityRole="button" accessibilityLabel={`取引日 ${dateLabel(date)}`}
+            style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            onPress={() => { Keyboard.dismiss(); tick(); setDateOpen(true); }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: p.tint, fontSize: 16, fontWeight: '600' }}>{dateLabel(date)}</Text>
+            <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
+          </Pressable>
           {dateStep(1, '次の日', { ios: 'chevron.right', android: 'chevron_right' })}
         </View>
         <Group>
@@ -396,7 +391,7 @@ export default function AddScreen() {
           </Group>
         ) : null}
 
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 4 }}>
+        {!editing ? <View style={{ flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 4 }}>
           <Pressable
             accessibilityRole="button"
             onPress={() => save(false)}
@@ -405,10 +400,10 @@ export default function AddScreen() {
               alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
             })}>
             <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>
-              {editing ? '変更を保存' : '登録'}
+              登録
             </Text>
           </Pressable>
-          {!editing && !paymentMonth ? (
+          {!paymentMonth ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => save(true)}
@@ -419,9 +414,22 @@ export default function AddScreen() {
               <Text style={{ color: p.tint, fontSize: 16, fontWeight: '700' }}>続けて登録</Text>
             </Pressable>
           ) : null}
-        </View>
+        </View> : null}
       </ScrollView>
 
+      {dateOpen ? <TransactionDatePicker date={date} onCancel={() => setDateOpen(false)} onPick={(value) => {
+        setDate(value);
+        setDateOpen(false);
+      }} /> : null}
+      <AnchoredDeleteDialog heading="取引を削除しますか？" title={editing?.title} anchor={deleteAnchor}
+        onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+          if (!editing || closing.current) return;
+          closing.current = true;
+          setDeleteAnchor(undefined);
+          deleteTransaction(editing.id);
+          success();
+          closeEditor();
+        }} />
     </View>
   );
 }
