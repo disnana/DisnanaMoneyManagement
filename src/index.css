@@ -8,15 +8,24 @@
 
 @layer base {
   html,
-  body,
-  #root {
+  body {
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
   }
 
+  /* Pin the app to the real screen: avoids the blank strip / dead zone that iOS standalone
+     leaves with 100% / 100dvh heights (status bar + home-indicator areas included). */
+  #root {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
   html {
     font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     -webkit-tap-highlight-color: transparent;
@@ -105,4 +114,9 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Hide the tab bar while the soft keyboard is up (native behaviour, frees space) */
+html[data-kb="open"] .mobile-nav {
+  display: none;
 }

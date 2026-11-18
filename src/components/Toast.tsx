@@ -9,7 +9,7 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ message, onDismiss }) => {
   return (
-    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+8.25rem)] right-4 left-4 z-50 flex flex-col items-center sm:left-auto sm:right-5 sm:items-end lg:bottom-5">
+    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-4 left-4 z-50 flex flex-col items-center sm:left-auto sm:right-5 sm:items-end lg:bottom-5">
       <AnimatePresence>
         {message && (
           <motion.div

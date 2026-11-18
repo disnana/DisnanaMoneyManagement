@@ -9,6 +9,7 @@ import {
   useTransform,
 } from 'motion/react';
 import { X } from 'lucide-react';
+import { pushLayer } from '../utils/navHistory';
 
 interface ResponsiveSheetProps {
   open: boolean;
@@ -98,16 +99,22 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     }
   }, [open, sheetY]);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKey);
+    // System back (Android) / back gesture closes the sheet instead of leaving the app
+    const release = pushLayer(() => onCloseRef.current());
     return () => {
       window.removeEventListener('keydown', handleKey);
+      release();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const finishPull = useCallback(
     (dy: number, velocityY: number) => {
@@ -244,7 +251,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
       {open && (
         <div
           key="responsive-sheet-root"
-          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+          className="fixed inset-x-0 top-[var(--vvt,0px)] z-50 flex h-[var(--vvh,100%)] items-end justify-center sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -278,7 +285,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             {/* Interactive pull-down layer */}
             <motion.div
               style={{ y: sheetY }}
-              className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
+              className="flex max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
             >
               {/* Pull-to-dismiss handle + sticky header zone */}
               <div
@@ -314,13 +321,21 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
               <div
                 ref={bodyRef}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5"
+                style={
+                  footer
+                    ? undefined
+                    : { paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))' }
+                }
               >
                 {children}
               </div>
 
               {/* Optional Sticky Footer */}
               {footer && (
-                <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3.5 pb-safe sm:px-6 sm:py-4">
+                <div
+                  className="shrink-0 border-t border-slate-200 bg-white px-5 pt-3.5 sm:px-6 sm:pt-4"
+                  style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom, 0px))' }}
+                >
                   {footer}
                 </div>
               )}

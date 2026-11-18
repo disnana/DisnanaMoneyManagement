@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
+import { pushLayer } from '../utils/navHistory';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -37,6 +38,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onCancel]);
 
+  const cancelRef = useRef(onCancel);
+  cancelRef.current = onCancel;
+  useEffect(() => {
+    if (!open) return;
+    return pushLayer(() => cancelRef.current());
+  }, [open]);
+
   const dialogTree = (
     <AnimatePresence>
       {open && (
@@ -49,7 +57,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4"
+          className="fixed inset-x-0 top-[var(--vvt,0px)] z-[60] flex h-[var(--vvh,100%)] items-end justify-center bg-slate-900/40 pb-safe sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-title"

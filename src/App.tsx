@@ -15,8 +15,10 @@ import {
   useState,
 } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
-import { Plus } from 'lucide-react';
-import { haptic } from './utils/haptics';
+import { enterTab, leaveTabs, setTabBackHandler } from './utils/navHistory';
+import { useViewportVars } from './hooks/useViewportVars';
+import { MobileMenuSheet } from './components/mobile/MobileMenuSheet';
+import { SectionTabs, groupOf } from './components/mobile/SectionTabs';
 import { NavSection, Transaction } from './types/finance';
 import { getCurrentMonthKey } from './utils/format';
 import { useFinanceStore } from './hooks/useFinanceStore';
@@ -42,9 +44,9 @@ import { Toast } from './components/Toast';
 const MOBILE_TAB_ORDER: NavSection[] = [
   'dashboard',
   'transactions',
-  'accounts',
   'analytics',
   'budgets',
+  'accounts',
   'planning',
   'tax',
 ];
@@ -160,7 +162,9 @@ export default function App() {
     clearAllData,
   } = useFinanceStore();
 
+  useViewportVars();
   const isDesktop = useIsDesktop();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey);
   const mainScrollRef = useRef<HTMLElement | null>(null);
@@ -185,7 +189,20 @@ export default function App() {
     if (el) scrollPositionsRef.current[prev] = el.scrollTop;
     slideDirRef.current =
       MOBILE_TAB_ORDER.indexOf(section) > MOBILE_TAB_ORDER.indexOf(prev) ? 1 : -1;
+    if (section === 'dashboard') leaveTabs();
+    else enterTab();
     setActiveSection(section);
+  }, []);
+
+  useEffect(() => {
+    // System back from a non-home tab returns to Home
+    setTabBackHandler(() => {
+      const prev = prevSectionRef.current;
+      if (prev === 'dashboard') return;
+      if (mainScrollRef.current) scrollPositionsRef.current[prev] = mainScrollRef.current.scrollTop;
+      slideDirRef.current = -1;
+      setActiveSection('dashboard');
+    });
   }, []);
 
   // Restore each tab's scroll position (top for first visit)
@@ -443,7 +460,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <MotionConfig reducedMotion="user">
-        <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-50 text-slate-900">
+        <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900">
           <Sidebar
             activeSection={activeSection}
             onSelectSection={handleSelectSection}
@@ -456,6 +473,8 @@ export default function App() {
             <TopBar
               activeSection={activeSection}
               onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
+              onOpenMenu={() => setMenuOpen(true)}
+              onBack={() => handleSelectSection('dashboard')}
             />
 
             <main
@@ -468,7 +487,7 @@ export default function App() {
               }}
               className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y"
             >
-              <div className="mx-auto w-full max-w-7xl overflow-x-clip px-4 pt-5 pb-28 sm:px-8 sm:py-8 lg:pb-8">
+              <div className="mx-auto w-full max-w-7xl overflow-x-clip pt-5 pb-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:py-8 sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))]">
                 {isDesktop ? (
                   <AnimatePresence mode="wait">
                     <motion.div
@@ -483,7 +502,7 @@ export default function App() {
                   </AnimatePresence>
                 ) : (
                   <motion.div
-                    key={activeSection}
+                    key={groupOf(activeSection) ?? activeSection}
                     initial={
                       slideDirRef.current === 0
                         ? false
@@ -492,34 +511,34 @@ export default function App() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
                   >
+                    {groupOf(activeSection) && (
+                      <SectionTabs
+                        group={groupOf(activeSection)!}
+                        active={activeSection}
+                        onSelect={handleSelectSection}
+                      />
+                    )}
                     {renderActiveView()}
                   </motion.div>
                 )}
               </div>
             </main>
 
-            {/* Mobile floating action button (replaces header button below lg) */}
-            <button
-              type="button"
-              onClick={() => {
-                haptic(10);
-                openAddTransaction({ type: 'expense' });
-              }}
-              aria-label="収支を記録"
-              className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-30 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-700 text-white shadow-lg shadow-teal-900/25 transition-transform duration-100 active:scale-90 lg:hidden"
-              style={{ marginRight: 'env(safe-area-inset-right, 0px)' }}
-            >
-              <Plus className="h-6 w-6" strokeWidth={2.4} />
-            </button>
-
             <MobileBottomNav
               activeSection={activeSection}
               onSelectSection={handleSelectSection}
-              totalAssets={totalAssets}
-              accountCount={state.accounts.length}
-              onOpenDataModal={() => setDataModalOpen(true)}
+              onAdd={() => openAddTransaction({ type: 'expense' })}
             />
           </div>
+
+          <MobileMenuSheet
+            open={menuOpen && !isDesktop}
+            onClose={() => setMenuOpen(false)}
+            totalAssets={totalAssets}
+            accountCount={state.accounts.length}
+            onSelectSection={handleSelectSection}
+            onOpenDataModal={() => setDataModalOpen(true)}
+          />
 
           <TransactionModal
             open={txModalOpen}

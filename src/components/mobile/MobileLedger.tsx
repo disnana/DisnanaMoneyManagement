@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'motion/react';
 import { Download, Plus, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Account, Transaction, TransactionScope, TransactionType } from '../../types/finance';
 import { ALL_CATEGORIES, getCategoryById } from '../../data/categories';
@@ -7,7 +6,7 @@ import { exportTransactionsToCSV, formatJPY } from '../../utils/format';
 import { MonthSwitcherBar } from '../MonthSwitcherBar';
 import { ResponsiveSheet } from '../ResponsiveSheet';
 import { haptic } from '../../utils/haptics';
-import { InsetGroup, SwipeRow, TxRowBody, getDayHeading } from './MobileKit';
+import { InsetGroup, Segmented, SwipeRow, TxRowBody, getDayHeading } from './MobileKit';
 
 export type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
@@ -50,52 +49,6 @@ const SORTS: { id: SortKey; label: string }[] = [
   { id: 'amount_desc', label: '金額が大きい順' },
   { id: 'amount_asc', label: '金額が小さい順' },
 ];
-
-const Segmented = <T extends string>({
-  value,
-  options,
-  onChange,
-  layoutId,
-}: {
-  value: T;
-  options: readonly { id: T; label: string }[];
-  onChange: (v: T) => void;
-  layoutId: string;
-}) => (
-  <div
-    role="tablist"
-    className="grid rounded-[10px] bg-slate-200/70 p-0.5"
-    style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
-  >
-    {options.map((o) => {
-      const active = value === o.id;
-      return (
-        <button
-          key={o.id}
-          role="tab"
-          aria-selected={active}
-          type="button"
-          onClick={() => {
-            if (!active) haptic(5);
-            onChange(o.id);
-          }}
-          className={`relative min-h-[34px] rounded-[8px] px-2 text-[13px] font-semibold transition-colors ${
-            active ? 'text-slate-900' : 'text-slate-500'
-          }`}
-        >
-          {active && (
-            <motion.span
-              layoutId={layoutId}
-              className="absolute inset-0 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)]"
-              transition={{ type: 'spring', stiffness: 520, damping: 40 }}
-            />
-          )}
-          <span className="relative whitespace-nowrap">{o.label}</span>
-        </button>
-      );
-    })}
-  </div>
-);
 
 export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
   const [filterOpen, setFilterOpen] = useState(false);
