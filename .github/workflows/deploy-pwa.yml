@@ -31,7 +31,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Cache Bun global install cache
         uses: actions/cache@v4
@@ -106,6 +106,12 @@ jobs:
         run: |
           mkdir -p .cache
           bunx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc.tsbuildinfo
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: Audit production dependencies
+        run: bun audit --production --audit-level=high
 
       - name: Build PWA
         env:

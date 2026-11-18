@@ -19,10 +19,12 @@
     "paths": {
       "@/*": [
         "./*"
-      ]
+      ],
+      "@dmm/core": ["./packages/core/src/index.ts"],
+      "@dmm/core/*": ["./packages/core/src/*"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "exclude": ["dist"]
+  "exclude": ["dist", "apps", "node_modules", "ios", "android"]
 }

@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "DMM",
+    "slug": "dmm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "dmm",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.disnana.moneymanagement",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "アプリのロック解除に使用します",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.disnana.moneymanagement",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F766E",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F2F3F7",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 96,
+          "dark": { "backgroundColor": "#000000" }
+        }
+      ],
+      "expo-sqlite",
+      "expo-local-authentication"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

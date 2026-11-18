@@ -3,6 +3,9 @@ import { Capacitor } from '@capacitor/core';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
+import { initTheme } from './utils/theme';
+
+initTheme();
 
 /**
  * PWA update strategy (fast, but never destroys what the user is doing):

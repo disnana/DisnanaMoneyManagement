@@ -1,0 +1,284 @@
+import { useMemo, useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Alert, useColorScheme, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
+import type { Transaction, TransactionType } from '@dmm/core/types/finance';
+import type { IncomeTaxCategory, TransactionScope } from '@dmm/core/types/finance';
+import { ACCOUNTING_SUBJECTS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INCOME_TAX_CATEGORY_LABELS, getCategoryById } from '@dmm/core/data/categories';
+import { getTodayString } from '@dmm/core/utils/format';
+import { useFinance } from '@/lib/store';
+import { usePalette, metrics } from '@/lib/theme';
+import { pickOne } from '@/lib/pick';
+import { success, tick } from '@/lib/haptics';
+import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
+import { Group, Segmented } from '@/ui/kit';
+
+function toDateString(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function dateLabel(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${['日', '月', '火', '水', '木', '金', '土'][d.getDay()]}）`;
+}
+
+export default function AddScreen() {
+  const p = usePalette();
+  const scheme = useColorScheme();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { state, addTransaction, updateTransaction } = useFinance();
+  const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
+
+  const [type, setType] = useState<TransactionType>(editing?.type ?? 'expense');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : '');
+  const [date, setDate] = useState(editing?.date ?? getTodayString());
+  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? EXPENSE_CATEGORIES[0].id);
+  const [accountId, setAccountId] = useState(editing?.accountId ?? state.accounts[0]?.id ?? '');
+  const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? state.accounts[1]?.id ?? state.accounts[0]?.id ?? '');
+  const [title, setTitle] = useState(editing?.title ?? '');
+  const [memo, setMemo] = useState(editing?.memo ?? '');
+  const [scope, setScope] = useState<TransactionScope>(editing?.scope ?? 'personal');
+  const [ratio, setRatio] = useState(String(editing?.businessRatio ?? 100));
+  const [subject, setSubject] = useState(editing?.accountingSubject ?? '');
+  const [counterparty, setCounterparty] = useState(editing?.counterparty ?? '');
+  const [taxCat, setTaxCat] = useState<IncomeTaxCategory | undefined>(editing?.incomeTaxCategory);
+  const [withholding, setWithholding] = useState(editing?.withholdingTax ? String(editing.withholdingTax) : '');
+  const [advanceOn, setAdvanceOn] = useState(Boolean(editing?.advance));
+  const [advanceFor, setAdvanceFor] = useState(editing?.advance?.for ?? '');
+  const isBusiness = scope === 'business' && !advanceOn;
+
+  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const accountName = (aid: string) => state.accounts.find((a) => a.id === aid)?.name ?? '選択';
+  const category = getCategoryById(type === 'transfer' ? 'transfer' : categoryId);
+
+  const changeType = (t: TransactionType) => {
+    setType(t);
+    if (t === 'expense') setCategoryId(EXPENSE_CATEGORIES.some((c) => c.id === categoryId) ? categoryId : EXPENSE_CATEGORIES[0].id);
+    if (t === 'income') setCategoryId(INCOME_CATEGORIES.some((c) => c.id === categoryId) ? categoryId : INCOME_CATEGORIES[0].id);
+  };
+
+  const pickCategory = async () => {
+    const choice = await pickOne('カテゴリ', categories.map((c) => ({ id: c.id, label: c.name })));
+    if (choice) setCategoryId(choice);
+  };
+  const pickAccount = async (setter: (v: string) => void, label: string) => {
+    const choice = await pickOne(label, state.accounts.map((a) => ({ id: a.id, label: a.name })));
+    if (choice) setter(choice);
+  };
+
+  const save = (keepOpen: boolean) => {
+    const value = Math.round(Number(amount.replace(/,/g, '')));
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert('金額を入力してください');
+      return;
+    }
+    const cat = getCategoryById(type === 'transfer' ? 'transfer' : categoryId);
+    const payload: Omit<Transaction, 'id'> = {
+      type,
+      amount: value,
+      date,
+      categoryId: type === 'transfer' ? 'transfer' : categoryId,
+      accountId,
+      toAccountId: type === 'transfer' ? toAccountId : undefined,
+      title: title.trim() || (type === 'transfer' ? '口座振替' : cat.name),
+      memo: memo.trim() || undefined,
+      scope: advanceOn ? 'personal' : scope,
+      ...(isBusiness && type === 'expense'
+        ? {
+            businessRatio: Math.min(100, Math.max(0, Math.round(Number(ratio) || 0))),
+            accountingSubject: subject || getCategoryById(categoryId).defaultAccountingSubject,
+          }
+        : {}),
+      counterparty: counterparty.trim() || undefined,
+      ...(type === 'income'
+        ? { incomeTaxCategory: taxCat ?? (scope === 'business' ? 'business' : undefined), withholdingTax: Math.round(Number(withholding.replace(/,/g, ''))) || undefined }
+        : {}),
+      advance:
+        type === 'expense' && advanceOn
+          ? { ...(editing?.advance ?? {}), for: advanceFor.trim() || '未設定' }
+          : undefined,
+    };
+    if (editing) updateTransaction(editing.id, payload);
+    else addTransaction(payload);
+    success();
+    if (keepOpen && !editing) {
+      setAmount('');
+      setTitle('');
+      setMemo('');
+      return;
+    }
+    router.back();
+  };
+
+  const fieldRow = (label: string, value: string, onPress: () => void) => (
+    <Pressable
+      onPress={() => {
+        tick();
+        onPress();
+      }}
+      android_ripple={{ color: p.fill }}
+      style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text style={{ color: p.text, fontSize: 16 }}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+        <Text numberOfLines={1} style={{ color: p.textSecondary, fontSize: 16, flexShrink: 1 }}>
+          {value}
+        </Text>
+        <SymbolView name={{ ios: 'chevron.up.chevron.down', android: 'unfold_more' }} size={13} tintColor={p.textSecondary} />
+      </View>
+    </Pressable>
+  );
+
+  const input = (value: string, onChangeText: (t: string) => void, placeholder: string) => (
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={p.textSecondary}
+      style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
+    />
+  );
+
+  return (
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
+      <Stack.Screen
+        options={{
+          title: editing ? '取引を編集' : '収支を記録',
+        }}
+      />
+
+      <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 24 }}>
+        <Segmented<TransactionType>
+          value={type}
+          onChange={changeType}
+          options={[
+            { id: 'expense', label: '支出' },
+            { id: 'income', label: '収入' },
+            { id: 'transfer', label: '振替' },
+          ]}
+        />
+
+        <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
+            <Text style={{ color: p.textSecondary, fontSize: 28, fontWeight: '700' }}>¥</Text>
+            <TextInput
+              value={amount}
+              onChangeText={(t) => setAmount(t.replace(/[^0-9]/g, ''))}
+              placeholder="0"
+              placeholderTextColor={p.textSecondary}
+              keyboardType="number-pad"
+              inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+              autoFocus={!editing}
+              style={{ borderWidth: 0, color: type === 'income' ? p.income : p.text, fontSize: 44, fontWeight: '800', minWidth: 120, textAlign: 'center', fontVariant: ['tabular-nums'] }}
+            />
+          </View>
+        </View>
+
+        <Group>
+          <View style={{ minHeight: metrics.rowMinHeight - 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
+            <Text style={{ color: p.text, fontSize: 16 }}>日付</Text>
+            {Platform.OS === 'web' ? (
+              <Text style={{ color: p.textSecondary, fontSize: 16 }}>{dateLabel(date)}</Text>
+            ) : (
+              // Native system date picker: compact (tap -> calendar popover) on iOS, Material dialog on Android
+              <DateTimePicker
+                value={new Date(`${date}T00:00:00`)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                locale="ja-JP"
+                accentColor={p.tint}
+                themeVariant={scheme === 'dark' ? 'dark' : 'light'}
+                onChange={(_, d) => {
+                  if (d) setDate(toDateString(d));
+                }}
+              />
+            )}
+          </View>
+          {type !== 'transfer' ? fieldRow('カテゴリ', category.name, pickCategory) : null}
+          {fieldRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法', accountName(accountId), () => pickAccount(setAccountId, type === 'transfer' ? '出金元' : '口座'))}
+          {type === 'transfer' ? fieldRow('入金先', accountName(toAccountId), () => pickAccount(setToAccountId, '入金先')) : null}
+        </Group>
+
+        {type !== 'transfer' ? (
+          <Group>
+            <View style={{ padding: 8 }}>
+              <Segmented<TransactionScope>
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { id: 'personal', label: '個人' },
+                  { id: 'business', label: '事業' },
+                ]}
+              />
+            </View>
+            {isBusiness && type === 'expense' ? (
+              <>
+                {fieldRow('勘定科目', subject || category.defaultAccountingSubject || '選択', async () => {
+                  const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((x) => ({ id: x, label: x })));
+                  if (choice) setSubject(choice);
+                })}
+                {input(ratio, (t) => setRatio(t.replace(/[^0-9]/g, '')), '事業で使った割合（%）')}
+              </>
+            ) : null}
+            {type === 'income' ? (
+              <>
+                {fieldRow('所得区分', taxCat ? INCOME_TAX_CATEGORY_LABELS[taxCat] : scope === 'business' ? INCOME_TAX_CATEGORY_LABELS.business : '選択', async () => {
+                  const entries = Object.entries(INCOME_TAX_CATEGORY_LABELS) as [IncomeTaxCategory, string][];
+                  const choice = await pickOne('所得区分', entries.map(([id, label]) => ({ id, label })));
+                  if (choice) setTaxCat(choice as IncomeTaxCategory);
+                })}
+                <TextInput
+                  value={withholding}
+                  onChangeText={(t) => setWithholding(t.replace(/[^0-9]/g, ''))}
+                  placeholder="源泉徴収された税額（任意）"
+                  placeholderTextColor={p.textSecondary}
+                  keyboardType="number-pad"
+                  inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+                  style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
+                />
+              </>
+            ) : null}
+            {scope === 'business' ? input(counterparty, setCounterparty, '取引先（任意）') : null}
+          </Group>
+        ) : null}
+
+        {type === 'expense' ? (
+          <Group>
+            <View style={{ minHeight: metrics.rowMinHeight - 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
+              <Text style={{ color: p.text, fontSize: 16 }}>立て替え（あとで回収）</Text>
+              <Switch value={advanceOn} onValueChange={(v) => { tick(); setAdvanceOn(v); }} trackColor={{ true: p.tint }} />
+            </View>
+            {advanceOn ? input(advanceFor, setAdvanceFor, '誰の分？（例: 田中さん）') : null}
+          </Group>
+        ) : null}
+
+        <Group>
+          {input(title, setTitle, '内容（任意）')}
+          {input(memo, setMemo, 'メモ（任意）')}
+        </Group>
+      <View style={{ gap: 4, marginTop: 4 }}>
+        <Pressable
+          onPress={() => save(false)}
+          android_ripple={{ color: 'rgba(255,255,255,0.25)' }}
+          style={({ pressed }) => ({
+            minHeight: 52,
+            borderRadius: Platform.OS === 'ios' ? 14 : 26,
+            backgroundColor: p.tint,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: pressed ? 0.85 : 1,
+          })}>
+          <Text style={{ color: p.onTint, fontSize: 17, fontWeight: '700' }}>{editing ? '変更を保存' : '登録'}</Text>
+        </Pressable>
+        {!editing ? (
+          <Pressable onPress={() => save(true)} style={{ minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>続けて登録</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      </ScrollView>
+
+    </View>
+  );
+}

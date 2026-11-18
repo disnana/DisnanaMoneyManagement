@@ -1,0 +1,9 @@
+[
+  {
+    "id": "GHSA-fc5q-39xc-vjpf",
+    "package": "picomatch",
+    "severity": "high",
+    "reason": "ReDoS needs an attacker-controlled glob pattern. Only reached through build/dev tooling (vite, vitest, metro) on trusted local paths, never shipped in the app bundle. No patched release exists yet (<=4.0.7 is the latest).",
+    "expires": "2026-12-31"
+  }
+]

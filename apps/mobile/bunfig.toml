@@ -1,0 +1,3 @@
+[install]
+# Metro/Expo need a classic hoisted node_modules layout
+linker = "hoisted"

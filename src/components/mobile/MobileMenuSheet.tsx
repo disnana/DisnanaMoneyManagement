@@ -4,6 +4,7 @@ import { NavSection } from '../../types/finance';
 import { formatJPY } from '../../utils/format';
 import { ResponsiveSheet } from '../ResponsiveSheet';
 import { PWAInstallButton } from '../PWAInstallButton';
+import { ThemeSwitch } from '../ThemeSwitch';
 
 interface Props {
   open: boolean;
@@ -75,6 +76,11 @@ export const MobileMenuSheet: React.FC<Props> = ({
             onOpenDataModal();
           }}
         />
+      </div>
+
+      <div>
+        <div className="mb-1.5 px-1 text-xs font-semibold text-slate-500">外観</div>
+        <ThemeSwitch />
       </div>
 
       <PWAInstallButton />

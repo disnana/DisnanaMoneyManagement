@@ -1,0 +1,11 @@
+{
+  "name": "@dmm/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Platform-independent DMM logic shared by web and mobile (no DOM, no React imports)",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  }
+}

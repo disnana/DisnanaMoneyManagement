@@ -1,0 +1,40 @@
+# Several stateless nodes + one PostgreSQL 17/18 (replace `db` with a managed PostgreSQL in production).
+# Put each node behind its own subdomain (a.sync.example.com, b.sync.example.com, ...) with TLS.
+# WebAuthn: DMM_RP_ID is the PARENT domain (sync.example.com) so every subdomain node accepts the same passkeys.
+x-node: &node
+  build: .
+  restart: unless-stopped
+  depends_on:
+    db: { condition: service_healthy }
+  environment: &env
+    DMM_DB_URL: postgres://dmm:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/dmm?sslmode=disable
+    DMM_SECRET: ${DMM_SECRET:?set DMM_SECRET (>= 32 chars, same on every node)}
+    DMM_RP_ID: ${DMM_RP_ID:?e.g. sync.example.com}
+    DMM_RP_ORIGINS: ${DMM_RP_ORIGINS:?e.g. https://sync.example.com,https://money.example.com}
+    DMM_NODES: ${DMM_NODES:-}
+    DMM_TRUST_PROXY: "true"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+services:
+  node-a:
+    <<: *node
+    ports: ["127.0.0.1:8081:8080"]
+  node-b:
+    <<: *node
+    ports: ["127.0.0.1:8082:8080"]
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dmm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dmm
+    volumes: ["pg-data:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dmm -d dmm"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+volumes:
+  pg-data:

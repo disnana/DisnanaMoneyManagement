@@ -1,0 +1,17 @@
+# One command: `docker compose up -d`. Single node with SQLite on a volume.
+# For several nodes + PostgreSQL see compose.cluster.yml and the README.
+services:
+  dmm:
+    build: .
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    environment:
+      DMM_RP_ID: ${DMM_RP_ID:-localhost}
+      DMM_RP_ORIGINS: ${DMM_RP_ORIGINS:-http://localhost:3000}
+      DMM_ALLOW_REGISTRATION: ${DMM_ALLOW_REGISTRATION:-true}
+    volumes: ["dmm-data:/data"]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  dmm-data:

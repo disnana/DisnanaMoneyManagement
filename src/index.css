@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Dark variant follows the resolved theme (data-theme), which is "auto" (OS) by default but user-overridable */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 @theme {
   --font-sans: "Plus Jakarta Sans", "Noto Sans JP", system-ui, -apple-system, sans-serif;
   --font-display: "Plus Jakarta Sans", "Noto Sans JP", system-ui, sans-serif;
@@ -26,13 +29,18 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --app-bg: #f2f3f7;
 }
 
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 /* ---- Dark mode: re-map the palette so every existing utility adapts (iOS-style elevated greys) ---- */
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Native CSS nesting: everything below only applies while the resolved theme is dark */
+:root[data-theme='dark'] {
+  & {
     --app-bg: #000000;
     --color-white: #1c1c1e;
     --color-slate-50: #000000;
@@ -210,7 +218,8 @@ html[data-kb="open"] #root {
   }
 }
 
-@media (prefers-color-scheme: dark) {
+/* Frosted bars in dark */
+:root[data-theme='dark'] {
   .glass-bar {
     background-color: rgb(28 28 30 / 0.82);
   }

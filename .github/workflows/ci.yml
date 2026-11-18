@@ -1,0 +1,248 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+
+jobs:
+  web:
+    name: Web · typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Cache Bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Typecheck web + core (strict)
+        run: |
+          bunx tsc --noEmit
+          bunx tsc --noEmit -p packages/core/tsconfig.json
+      - name: Unit tests
+        run: bun run test
+      - name: Build
+        run: bun run build
+
+  e2e:
+    name: E2E · Playwright (mobile + desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Run E2E
+        run: bunx playwright test
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  mobile:
+    name: Mobile · typecheck & Hermes bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      # The Expo CLI itself runs on Node
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Cache Bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-mobile-${{ runner.os }}-${{ hashFiles('apps/mobile/bun.lock') }}
+          restore-keys: bun-mobile-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bunx expo export --platform android --output-dir "$RUNNER_TEMP/export-android"
+      - run: bunx expo export --platform ios --output-dir "$RUNNER_TEMP/export-ios"
+
+  server:
+    name: Server · Go tests (SQLite + PostgreSQL ${{ matrix.pg }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ['17', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_USER: dmm
+          POSTGRES_PASSWORD: dmm
+          POSTGRES_DB: dmm_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dmm -d dmm_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: go vet ./...
+      - name: Tests (race detector; the store suite also runs on PostgreSQL)
+        env:
+          DMM_TEST_PG_URL: postgres://dmm:dmm@localhost:5432/dmm_test?sslmode=disable
+        run: go test -race -count=1 ./...
+
+  server-security:
+    name: Server · vulnerability scan & Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: govulncheck (pinned)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Build the image and check it starts instantly
+        run: |
+          docker build -t dmm-server:ci .
+          docker run -d --name dmm -p 8080:8080 \
+            -e DMM_RP_ID=localhost -e DMM_RP_ORIGINS=http://localhost:3000 dmm-server:ci
+          ok=0
+          for _ in $(seq 1 50); do
+            if curl -sf --max-time 2 localhost:8080/healthz; then ok=1; break; fi
+            sleep 0.2
+          done
+          docker logs dmm
+          if [ "$ok" != 1 ]; then echo "server did not become healthy"; docker rm -f dmm; exit 1; fi
+          curl -sf --max-time 5 localhost:8080/readyz
+          docker rm -f dmm
+
+  audit:
+    name: Security · dependency audit (bun)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - name: Read documented exceptions
+        id: allow
+        run: |
+          mapfile -t IGNORES < <(bun scripts/audit-allowlist.mjs ids)
+          echo "flags=${IGNORES[*]}" >> "$GITHUB_OUTPUT"
+      - name: Web · install
+        run: bun install --frozen-lockfile
+      - name: Web · production dependencies (no exceptions)
+        run: bun audit --production --audit-level=high
+      - name: Web · all dependencies (high+, only documented exceptions)
+        run: bun audit --audit-level=high ${{ steps.allow.outputs.flags }}
+      - name: Web · full report (informational)
+        run: bun audit || true
+      - name: Mobile · install
+        working-directory: apps/mobile
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Mobile · production dependencies (high+, only documented exceptions)
+        working-directory: apps/mobile
+        run: bun audit --production --audit-level=high ${{ steps.allow.outputs.flags }}
+      - name: Mobile · all dependencies (high+, only documented exceptions)
+        working-directory: apps/mobile
+        run: bun audit --audit-level=high ${{ steps.allow.outputs.flags }}
+
+  secrets:
+    name: Security · secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks (pinned release)
+        env:
+          GITLEAKS_VERSION: '8.28.0'
+        run: |
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tgz gitleaks
+          ./gitleaks detect --source . --no-banner --redact --verbose
+
+  workflows:
+    name: Lint · GitHub Actions workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: actionlint (pinned image)
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7 -color
+
+  # Single required check for branch protection: green only if every job above is green.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [web, e2e, mobile, server, server-security, audit, secrets, workflows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done
