@@ -199,3 +199,13 @@ html[data-kb="open"] .mobile-nav {
     }
   }
 }
+
+/* Tab panes stay mounted (React <Activity>); display:none -> block restarts this quick fade */
+.tab-pane {
+  animation: pane-in 0.12s ease-out;
+}
+@keyframes pane-in {
+  from {
+    opacity: 0.35;
+  }
+}

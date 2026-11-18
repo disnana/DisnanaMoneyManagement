@@ -1,5 +1,4 @@
 import React from 'react';
-import { motion } from 'motion/react';
 import { LayoutDashboard, ReceiptText, CreditCard, PieChart, Plus } from 'lucide-react';
 import { NavSection } from '../types/finance';
 import { haptic } from '../utils/haptics';
@@ -36,14 +35,12 @@ const NavIcon: React.FC<{ active: boolean; children: React.ReactNode }> = ({
   children,
 }) => (
   <span className="relative flex h-8 w-14 items-center justify-center transition-transform duration-100 ease-out [button:active_&]:scale-90">
-    {active && (
-      <motion.span
-        layoutId="mobile-nav-pill"
-        aria-hidden="true"
-        className="absolute inset-0 rounded-full bg-teal-100/80"
-        transition={{ type: 'spring', stiffness: 760, damping: 48, mass: 0.7 }}
-      />
-    )}
+    <span
+      aria-hidden="true"
+      className={`absolute inset-0 rounded-full bg-teal-100/80 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+        active ? 'scale-100 opacity-100' : 'scale-75 opacity-0'
+      }`}
+    />
     <span className="relative">{children}</span>
   </span>
 );
