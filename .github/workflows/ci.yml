@@ -161,7 +161,7 @@ jobs:
           docker build -t dmm-server:ci .
           docker run -d --name dmm -p 8080:8080 \
             -e DMM_RP_ID=localhost -e DMM_RP_ORIGINS=http://localhost:3000 dmm-server:ci
-          for i in $(seq 1 50); do curl -sf localhost:8080/healthz && break; sleep 0.1; done
+          curl -sf --retry 50 --retry-delay 0 --retry-connrefused --retry-all-errors localhost:8080/healthz
           curl -sf localhost:8080/readyz
           docker logs dmm
           docker rm -f dmm
