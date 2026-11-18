@@ -108,12 +108,14 @@ export default function Ledgers() {
                     <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>削除</Text>
                   </Pressable>
                 ) : undefined}>
+                {/* Opaque base: the highlight colour is translucent and would show the delete action behind the row */}
+                <View style={{ backgroundColor: p.card }}>
                 <Pressable accessibilityRole="button" accessibilityLabel={ledger.name} accessibilityState={{ selected }}
                   accessibilityHint={canDelete ? '左にスワイプで削除を表示' : undefined}
                   onPress={() => displayEditor(ledger)}
                   style={({ pressed }) => ({
                     minHeight: 58, paddingHorizontal: 14, paddingVertical: 8, gap: 12, flexDirection: 'row',
-                    alignItems: 'center', backgroundColor: selected || pressed ? p.fill : p.card,
+                    alignItems: 'center', backgroundColor: selected || pressed ? p.fill : 'transparent',
                   })}>
                   <IconBadge name={ledgerIcon(ledger)} color={ledgerColor(ledger) ?? p.tint} size={34} />
                   <View style={{ flex: 1, gap: 2 }}>
@@ -123,6 +125,7 @@ export default function Ledgers() {
                   <SymbolView name={selected ? { ios: 'checkmark.circle.fill', android: 'check_circle' }
                     : { ios: 'chevron.right', android: 'chevron_right' }} size={17} tintColor={selected ? p.tint : p.textSecondary} />
                 </Pressable>
+                </View>
               </Swipeable>
             );
           })}

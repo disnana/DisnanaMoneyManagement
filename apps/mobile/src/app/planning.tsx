@@ -7,6 +7,9 @@ import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/forma
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { filterLedger } from '@dmm/core/utils/ledgers';
 import { assessPurchase, isPlanningDate, planSavings } from '@dmm/core/utils/planning';
+import { buildPurchaseTransaction, groupPurchases, markPurchased, PRIORITY_LABELS, revertToCandidate } from '@dmm/core/utils/purchasePlan';
+import { success } from '@/lib/haptics';
+import { BudgetPie } from '@/ui/PurchaseInsights';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -163,12 +166,22 @@ function Savings() {
 }
 
 function Purchases() {
-  const { state, activeLedger, ledgers, month, removePurchaseCandidate } = useFinance();
+  const { state, activeLedger, ledgers, month, removePurchaseCandidate, savePurchaseCandidate, addTransaction } = useFinance();
   const p = usePalette();
   const [deletion, setDeletion] = useState<{ id: string; anchor: PopoverAnchor }>();
   const ledgerId = activeLedger?.id;
-  const candidates = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
-  const pendingDelete = candidates.find((item) => item.id === deletion?.id);
+  const inView = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
+  const { candidates, confirmed, purchased } = groupPurchases(inView);
+  const pendingDelete = inView.find((item) => item.id === deletion?.id);
+  const accountName = (id?: string) => state.accounts.find((a) => a.id === id)?.name ?? '口座未設定';
+  const buy = (item: (typeof inView)[number]) => {
+    const today = getTodayString();
+    addTransaction(buildPurchaseTransaction(item, item.accountId ?? state.accounts[0]?.id ?? '', today));
+    const { id, ...rest } = item;
+    void id;
+    savePurchaseCandidate(markPurchased({ id: item.id, ...rest }, today), item.id);
+    success();
+  };
   const spendingByGroup = useMemo(() => {
     const groups = new Set((state.purchaseCandidates ?? []).filter((item) => item.month === month).map((item) => item.ledgerId));
     return new Map(Array.from(groups, (groupId) => [
@@ -192,17 +205,42 @@ function Purchases() {
 
   return (
     <>
+      {confirmed.length > 0 ? (
+        <>
+          <SectionTitle>購入予定（確定済み）</SectionTitle>
+          {confirmed.map((item) => {
+            const category = getCategoryById(item.categoryId, state.customCategories);
+            return (
+              <Group key={item.id}>
+                <Row title={item.title}
+                  subtitle={`${item.plannedDate ? formatFullDate(item.plannedDate) : ''} · ${accountName(item.accountId)}${item.installment && item.installment.count > 1 ? ` · ${item.installment.count}回払い` : ''}`}
+                  right={formatJPY(item.amount)} icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
+                <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
+                  <PurchaseAction label="購入した" color={p.tint} onPress={() => buy(item)} />
+                  <PurchaseAction label="調整" color={p.text} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
+                  <PurchaseAction label="候補に戻す" color={p.text} onPress={() => {
+                    const { id, ...rest } = item;
+                    void id;
+                    savePurchaseCandidate(revertToCandidate({ id: item.id, ...rest }), item.id);
+                  }} />
+                </View>
+              </Group>
+            );
+          })}
+        </>
+      ) : null}
       <SectionTitle action="追加" onAction={() => router.push('/purchase-editor')}>購入候補</SectionTitle>
       {candidates.map((item) => {
         const category = getCategoryById(item.categoryId, state.customCategories);
         const budget = estimate(item.ledgerId, item.categoryId, item.amount);
         return (
           <Group key={item.id}>
-            <Row title={item.title} subtitle={ledgerId ? category.name : `${category.name} · ${groupName(item.ledgerId)}`} right={formatJPY(item.amount)}
+            <Row title={item.title} subtitle={`${item.priority ? `${PRIORITY_LABELS[item.priority]} · ` : ''}${ledgerId ? category.name : `${category.name} · ${groupName(item.ledgerId)}`}${item.installment && item.installment.count > 1 ? ` · ${item.installment.count}回払い` : ''}`} right={formatJPY(item.amount)}
               icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
             <Row title="購入後のカテゴリ予算" right={formatPurchaseBudget(budget)} rightColor={budget?.shortfall ? p.danger : undefined} />
             <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
               <PurchaseAction label="試算" color={p.tint} onPress={() => router.push({ pathname: '/purchase-compare', params: { id: item.id } })} />
+              <PurchaseAction label="確定" color={p.tint} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
               <PurchaseAction label="編集" color={p.text} onPress={() => router.push({ pathname: '/purchase-editor', params: { id: item.id } })} />
               <PurchaseAction label="削除" color={p.danger}
                 onPress={({ nativeEvent }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />
@@ -210,6 +248,10 @@ function Purchases() {
           </Group>
         );
       })}
+      {candidates.length + confirmed.length > 0 ? (
+        <BudgetPie month={month} ledgerId={ledgerId} title={candidates.length + confirmed.length > 1 ? '予定をすべて実行した場合の予算' : undefined}
+          extras={[...confirmed, ...candidates].map((item) => ({ categoryId: item.categoryId, amount: item.amount }))} />
+      ) : null}
       {candidates.length > 1 ? (
         <>
           <SectionTitle>候補をすべて買う場合</SectionTitle>
@@ -221,7 +263,20 @@ function Purchases() {
           </Group>
         </>
       ) : null}
-      {candidates.length === 0 ? <Text style={{ color: p.textSecondary }}>候補を追加すると、予算と購入後の残高を試算できます。</Text> : null}
+      {purchased.length > 0 ? (
+        <>
+          <SectionTitle>購入済み</SectionTitle>
+          <Group>
+            {purchased.map((item) => {
+              const category = getCategoryById(item.categoryId, state.customCategories);
+              return <Row key={item.id} title={item.title} subtitle={item.purchasedAt ? formatFullDate(item.purchasedAt) : ''} right={formatJPY(item.amount)}
+                icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color}
+                onPress={({ nativeEvent }: { nativeEvent: { pageX: number; pageY: number } }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />;
+            })}
+          </Group>
+        </>
+      ) : null}
+      {candidates.length + confirmed.length + purchased.length === 0 ? <Text style={{ color: p.textSecondary }}>候補を追加すると、予算と購入後の残高を試算できます。</Text> : null}
       <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
         if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
         setDeletion(undefined);

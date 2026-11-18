@@ -9,13 +9,13 @@ const light: Palette = {
   card: '#FFFFFF',
   fill: 'rgba(118,118,128,0.12)',
   text: '#000000',
-  textSecondary: 'rgba(60,60,67,0.6)',
+  textSecondary: 'rgba(60,60,67,0.75)', // 0.6 (system secondaryLabel) is only 3.4:1 on white; 0.75 reaches 5.1:1 (WCAG AA 4.5:1)
   separator: 'rgba(60,60,67,0.18)',
   tint: '#0F766E',
   onTint: '#FFFFFF',
-  income: '#1F8F4E',
+  income: '#187A42', // 5.4:1 on white
   expense: '#000000',
-  danger: '#FF3B30',
+  danger: '#D70015', // Apple's accessible red; #FF3B30 is only 3.6:1 on white
 };
 
 const dark: Palette = {

@@ -1,0 +1,114 @@
+name: Publish update (EAS Update -> Expo Go)
+
+# Publishes the iOS JS bundle to EAS Update so the app can be opened from the App Store's Expo Go without a
+# dev server or a PC. Free plan only: no EAS Build, no Apple Developer Program. See apps/mobile/README.md.
+#
+# One-time setup (details in the README):
+#   - Secret   EXPO_TOKEN       (Expo access token)
+#   - Variable EXPO_PROJECT_ID  (Expo project id; not a secret)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/core/**'
+      - '.bun-version'
+      - '.github/workflows/eas-update.yml'
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Update message (shown in the Expo dashboard)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-update
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/mobile
+
+env:
+  # Pinned so a new EAS CLI release cannot change this pipeline unnoticed; bump deliberately.
+  EAS_CLI_VERSION: '27.10.0'
+  # Single channel (and branch of the same name). The QR code / link below point at it.
+  UPDATE_CHANNEL: main
+  EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+  EXPO_NO_TELEMETRY: '1'
+  EAS_BUILD_NO_EXPO_GO_WARNING: 'true'
+
+jobs:
+  publish:
+    name: Publish iOS update
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check the one-time setup is done
+        working-directory: .
+        env:
+          HAS_TOKEN: ${{ secrets.EXPO_TOKEN != '' }}
+        run: |
+          missing=0
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error title=EXPO_TOKEN is missing::Add the repository secret EXPO_TOKEN (Expo access token). See apps/mobile/README.md."
+            missing=1
+          fi
+          if [ -z "$EXPO_PROJECT_ID" ]; then
+            echo "::error title=EXPO_PROJECT_ID is missing::Add the repository variable EXPO_PROJECT_ID (Expo project id). See apps/mobile/README.md."
+            missing=1
+          fi
+          exit "$missing"
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      # The EAS CLI itself runs on Node
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+
+      - name: Publish update (iOS only)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          # Passed through the environment, never interpolated into the script (the text is user-controlled)
+          INPUT_MESSAGE: ${{ github.event.inputs.message }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          message="${INPUT_MESSAGE:-}"
+          if [ -z "$message" ]; then message="$(printf '%s' "$COMMIT_MESSAGE" | head -n 1)"; fi
+          if [ -z "$message" ]; then message="manual publish of ${SHA:0:7}"; fi
+          bunx "eas-cli@${EAS_CLI_VERSION}" update \
+            --channel "$UPDATE_CHANNEL" \
+            --platform ios \
+            --environment production \
+            --message "$message" \
+            --json --non-interactive > "$RUNNER_TEMP/update.json"
+          cat "$RUNNER_TEMP/update.json"
+
+      - name: Summary with the link / QR for Expo Go
+        run: |
+          set -euo pipefail
+          runtime="$(node -e "const j=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/update.json','utf8')); const a=Array.isArray(j)?j:[j]; console.log((a.find(u=>u.runtimeVersion)||{}).runtimeVersion||'')")"
+          if [ -z "$runtime" ]; then echo "::error::The publish output has no runtimeVersion"; exit 1; fi
+          group="$(node -e "const j=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/update.json','utf8')); const a=Array.isArray(j)?j:[j]; console.log((a.find(u=>u.group)||{}).group||'')")"
+          url="https://qr.expo.dev/eas-update?projectId=${EXPO_PROJECT_ID}&runtimeVersion=${runtime}&channel=${UPDATE_CHANNEL}"
+          {
+            echo "### Update published"
+            echo
+            echo "- Runtime: \`${runtime}\` (must equal \`exposdk:<SDK>.0.0\` of your Expo Go)"
+            echo "- Channel: \`${UPDATE_CHANNEL}\`"
+            echo "- QR for Expo Go (open on another screen and scan with the iPhone camera): ${url}"
+            if [ -n "$group" ]; then
+              echo "- Direct link for this update group (not verified on a device): \`exp://u.expo.dev/${EXPO_PROJECT_ID}/group/${group}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
