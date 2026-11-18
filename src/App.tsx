@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  startTransition,
   useRef,
   useState,
 } from 'react';
@@ -179,6 +180,8 @@ export default function App() {
   const isDesktop = useIsDesktop();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // navSection updates instantly (tab highlight); activeSection (heavy content) follows in a low-priority transition
+  const [navSection, setNavSection] = useState<NavSection>('dashboard');
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey);
   const mainScrollRef = useRef<HTMLElement | null>(null);
@@ -190,7 +193,6 @@ export default function App() {
 
   const scrollPositionsRef = useRef<Partial<Record<NavSection, number>>>({});
   const prevSectionRef = useRef<NavSection>('dashboard');
-  const slideDirRef = useRef<1 | -1 | 0>(0);
 
   const handleSelectSection = useCallback((section: NavSection) => {
     const prev = prevSectionRef.current;
@@ -201,11 +203,10 @@ export default function App() {
       return;
     }
     if (el) scrollPositionsRef.current[prev] = el.scrollTop;
-    slideDirRef.current =
-      MOBILE_TAB_ORDER.indexOf(section) > MOBILE_TAB_ORDER.indexOf(prev) ? 1 : -1;
     if (section === 'dashboard') leaveTabs();
     else enterTab();
-    setActiveSection(section);
+    setNavSection(section);
+    startTransition(() => setActiveSection(section));
   }, []);
 
   useEffect(() => {
@@ -214,8 +215,8 @@ export default function App() {
       const prev = prevSectionRef.current;
       if (prev === 'dashboard') return;
       if (mainScrollRef.current) scrollPositionsRef.current[prev] = mainScrollRef.current.scrollTop;
-      slideDirRef.current = -1;
-      setActiveSection('dashboard');
+      setNavSection('dashboard');
+      startTransition(() => setActiveSection('dashboard'));
     });
   }, []);
 
@@ -507,7 +508,7 @@ export default function App() {
       <MotionConfig reducedMotion="user">
         <div className="flex h-full w-full overflow-hidden bg-[var(--app-bg)] text-slate-900 lg:bg-slate-50">
           <Sidebar
-            activeSection={activeSection}
+            activeSection={navSection}
             onSelectSection={handleSelectSection}
             totalAssets={totalAssets}
             accountCount={state.accounts.length}
@@ -516,7 +517,7 @@ export default function App() {
 
           <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
             <TopBar
-              activeSection={activeSection}
+              activeSection={navSection}
               onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
               onOpenMenu={() => setMenuOpen(true)}
               onBack={() => handleSelectSection('dashboard')}
@@ -553,13 +554,9 @@ export default function App() {
                 ) : (
                   <motion.div
                     key={groupOf(activeSection) ?? activeSection}
-                    initial={
-                      slideDirRef.current === 0
-                        ? false
-                        : { opacity: 0, x: slideDirRef.current * 28 }
-                    }
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
+                    initial={{ opacity: 0.4 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.12, ease: 'easeOut' }}
                   >
                     <h2 className="mx-auto mb-3 w-full max-w-2xl px-1 text-[32px] font-bold leading-tight tracking-tight text-slate-900">
                       {LARGE_TITLES[activeSection]}
@@ -567,7 +564,7 @@ export default function App() {
                     {groupOf(activeSection) && (
                       <SectionTabs
                         group={groupOf(activeSection)!}
-                        active={activeSection}
+                        active={navSection}
                         onSelect={handleSelectSection}
                       />
                     )}
@@ -578,7 +575,7 @@ export default function App() {
             </main>
 
             <MobileBottomNav
-              activeSection={activeSection}
+              activeSection={navSection}
               onSelectSection={handleSelectSection}
               onAdd={() => openAddTransaction({ type: 'expense' })}
             />

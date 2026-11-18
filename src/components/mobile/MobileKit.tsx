@@ -177,8 +177,14 @@ export const SwipeRow: React.FC<{
   const total = ACTION_W * 2;
   const draggedRef = useRef(false);
 
+  const firstRun = useRef(true);
   useEffect(() => {
-    animate(x, open ? -total : 0, { type: 'spring', stiffness: 520, damping: 42 });
+    // Skip on mount: no animation work for the (many) rows that never move
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    animate(x, open ? -total : 0, { type: 'spring', stiffness: 640, damping: 46 });
   }, [open, x, total]);
 
   return (
@@ -287,7 +293,7 @@ export const Segmented = <T extends string>({
             <motion.span
               layoutId={layoutId}
               className="absolute inset-0 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)] dark:bg-[#636366]"
-              transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+              transition={{ type: 'spring', stiffness: 700, damping: 46 }}
             />
           )}
           <span className="relative whitespace-nowrap">{o.label}</span>
