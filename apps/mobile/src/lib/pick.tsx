@@ -212,12 +212,13 @@ export function PickerHost() {
               style={({ pressed }) => ({
                 paddingHorizontal: 10, minHeight: divided ? 54 : 52, paddingVertical: 8, flexDirection: 'row',
                 alignItems: 'center', gap: 12, borderRadius: 12,
-                backgroundColor: pressed || option.selected ? p.fill : 'transparent',
+                backgroundColor: pressed ? p.fill : option.selected ? (divided ? `${p.tint}0D` : p.fill) : 'transparent',
                 borderWidth: req.description ? 1 : 0, borderColor: option.selected ? p.tint : 'transparent',
                 marginBottom: req.description ? 6 : 0,
               })}>
               {divided && option.selected ? (
-                <View style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, backgroundColor: p.tint }} />
+                <View style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2,
+                  backgroundColor: p.tint, opacity: 0.5 }} />
               ) : null}
               {optionContent(option)}
             </Pressable>
