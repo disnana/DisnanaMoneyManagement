@@ -2,6 +2,7 @@ import { Alert, Text } from 'react-native';
 import { Stack } from 'expo-router';
 import { getPendingAdvances, pendingAdvanceTotals, buildReimbursementTx } from '@dmm/core/utils/advances';
 import { formatJPY, getTodayString } from '@dmm/core/utils/format';
+import { getTransactionLedger } from '@dmm/core/utils/ledgers';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
@@ -11,7 +12,7 @@ import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 /** 立て替え（あとで回収）: what is still owed to the user, and one tap to record the payback. */
 export default function Advances() {
   const p = usePalette();
-  const { state, accountNameMap, addTransaction, updateTransaction } = useFinance();
+  const { state, ledgers, accountNameMap, addTransaction, updateTransaction } = useFinance();
   const pending = getPendingAdvances(state.transactions);
   const totals = pendingAdvanceTotals(state.transactions);
 
@@ -24,7 +25,9 @@ export default function Advances() {
     );
     if (!accountId) return;
     const date = getTodayString();
-    const incomeTx = buildReimbursementTx(adv, accountId, date);
+    const accounts = new Map(state.accounts.map((account) => [account.id, account]));
+    const ledgerId = getTransactionLedger(adv, accounts, ledgers).id;
+    const incomeTx = buildReimbursementTx({ ...adv, ledgerId }, accountId, date);
     // Mark the advance as collected, then record the incoming money
     updateTransaction(adv.id, { advance: { ...adv.advance!, reimbursedAt: date } });
     addTransaction(incomeTx);

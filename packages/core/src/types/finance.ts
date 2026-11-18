@@ -14,6 +14,13 @@ export type AccountType =
 
 export type AccountUsageScope = 'personal' | 'business' | 'household';
 
+export interface Ledger {
+  id: string;
+  name: string;
+  kind: AccountUsageScope;
+  taxExemptions?: Partial<Record<number, number>>;
+}
+
 export type TransactionScope = 'personal' | 'business';
 
 export type ReceiptMethod =
@@ -48,6 +55,7 @@ export interface Account {
   name: string;
   type: AccountType;
   usageScope?: AccountUsageScope; // 個人用 / 業務用 / 家庭用
+  ledgerId?: string;
   initialBalance: number;
   currency?: CurrencyCode; // 通貨 (デフォルト JPY)
   fxRateToJpy?: number; // 参考円換算レート
@@ -57,6 +65,7 @@ export interface Account {
   closingDay?: number; // 1..28 or 31 (月末)
   paymentDay?: number; // 1..28 or 31 (月末)
   paymentMonthOffset?: 1 | 2; // 1: 翌月払い, 2: 翌々月払い
+  paymentWarningDays?: number;
   creditLimit?: number;
   // Linked bank account (type === 'credit' | 'debit', must reference a 'bank' account)
   linkedBankAccountId?: string;
@@ -76,6 +85,7 @@ export interface Transaction {
   transferFee?: number;
   pointUsed?: number;
   scope?: TransactionScope;
+  ledgerId?: string;
   businessRatio?: number;
   accountingSubject?: string;
   counterparty?: string;
@@ -135,6 +145,7 @@ export interface SavingsGoal {
 }
 
 export interface FinanceState {
+  ledgers?: Ledger[];
   accounts: Account[];
   transactions: Transaction[];
   budgets: Budget[];

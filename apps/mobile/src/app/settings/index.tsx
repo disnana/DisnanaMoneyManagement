@@ -33,6 +33,13 @@ export default function Settings() {
         <SectionTitle>事業・精算</SectionTitle>
         <Group>
           <Row
+            icon={{ ios: 'folder', android: 'folder' }}
+            title="家計グループ"
+            subtitle="個人・家庭・事業などを管理"
+            onPress={() => router.push('/settings/ledgers')}
+            chevron
+          />
+          <Row
             icon={{ ios: 'arrow.uturn.backward.circle', android: 'undo' }}
             title="立て替え"
             subtitle="あとで回収する支払い"

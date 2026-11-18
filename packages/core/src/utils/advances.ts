@@ -42,6 +42,7 @@ export function buildReimbursementTx(advance: Transaction, accountId: string, da
     title: `立替の回収: ${advance.title}`,
     memo: advance.advance?.for ? `${advance.advance.for}から` : undefined,
     scope: 'personal',
+    ...(advance.ledgerId ? { ledgerId: advance.ledgerId } : {}),
     reimbursementOf: advance.id,
   };
 }

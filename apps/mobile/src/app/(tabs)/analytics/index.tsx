@@ -6,16 +6,22 @@ import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { DonutChart } from '@/ui/PieChart';
-import { Group, IconBadge, MonthBar, Screen, SectionTitle } from '@/ui/kit';
+import { LedgerPicker } from '@/ui/LedgerPicker';
+import { Group, IconBadge, SectionTitle } from '@/ui/kit';
+import { MonthScreen } from '@/ui/MonthScreen';
 
 export default function Analytics() {
+  return <MonthScreen>{(month) => <AnalyticsMonth month={month} />}</MonthScreen>;
+}
+
+function AnalyticsMonth({ month }: { month: string }) {
   const p = usePalette();
-  const { state, month, setMonth } = useFinance();
-  const m = computeMonthMetrics(state, month);
+  const { visibleState } = useFinance();
+  const m = computeMonthMetrics(visibleState, month);
 
   return (
-    <Screen>
-      <MonthBar month={month} onChange={setMonth} />
+    <>
+      <LedgerPicker />
 
       <DonutChart
         slices={m.categoryBreakdown.map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
@@ -52,6 +58,6 @@ export default function Analytics() {
           ))}
         </Group>
       )}
-    </Screen>
+    </>
   );
 }

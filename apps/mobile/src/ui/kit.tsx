@@ -144,6 +144,8 @@ export function Segmented<T extends string>({
           <View key={o.id} style={{ flex: 1, flexDirection: 'row' }}>
             <View style={{ width: StyleSheet.hairlineWidth * 2, marginVertical: 8, backgroundColor: showDivider ? p.textSecondary : 'transparent', opacity: 0.35 }} />
             <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               onPress={() => {
                 if (!active) tick();
                 onChange(o.id);
@@ -174,6 +176,8 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
   const btn = (delta: number, name: SymbolViewProps['name']) => (
     <Pressable
       hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={delta < 0 ? '前月' : '翌月'}
       onPress={() => {
         tick();
         onChange(shiftMonth(month, delta));
@@ -189,7 +193,8 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
       <View style={{ minWidth: 150, alignItems: 'center', justifyContent: 'center', height: 44 }}>
         <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
         <Pressable
-          accessibilityLabel="年月を選ぶ"
+          accessibilityRole="button"
+          accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
           style={{ position: 'absolute', inset: 0 }}
           onPress={() => {
             tick();

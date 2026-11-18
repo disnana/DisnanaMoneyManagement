@@ -9,13 +9,17 @@ export function AddButton() {
   return (
     <Pressable
       accessibilityLabel="収支を記録"
-      hitSlop={10}
+      accessibilityRole="button"
       onPress={() => {
         tick();
         router.push('/add');
       }}
-      style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
-      <SymbolView name={{ ios: 'plus', android: 'add' }} size={24} tintColor={p.tint} />
+      style={({ pressed }) => ({
+        width: 54, height: 54, marginHorizontal: 5, borderRadius: 27,
+        alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
+        transform: [{ scale: pressed ? 0.94 : 1 }],
+      })}>
+      <SymbolView name={{ ios: 'plus', android: 'add' }} size={27} tintColor={p.onTint} />
     </Pressable>
   );
 }

@@ -2,6 +2,7 @@ import {
   Account,
   Budget,
   FinanceState,
+  Ledger,
   RecurringItem,
   SavingsGoal,
   Transaction,
@@ -12,6 +13,7 @@ import {
   getEffectiveOutflow,
   getTransferTotalFees,
 } from '../utils/format';
+import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
 
 export const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
@@ -86,7 +88,14 @@ export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | nul
       Boolean(g && typeof g.id === 'string' && typeof g.title === 'string' && Number.isFinite(Number(g.targetAmount)))
   );
 
+  const ledgers = Array.isArray(parsed.ledgers)
+    ? parsed.ledgers.filter((ledger): ledger is Ledger => Boolean(ledger &&
+      typeof ledger.id === 'string' && typeof ledger.name === 'string' &&
+      (ledger.kind === 'personal' || ledger.kind === 'household' || ledger.kind === 'business')))
+    : undefined;
+
   return {
+    ...(ledgers?.length ? { ledgers } : {}),
     accounts,
     transactions,
     budgets,
@@ -259,12 +268,16 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const updateAccount = useCallback(
     (id: string, patch: Partial<Omit<Account, 'id'>>) => {
-      setState((prev) => ({
-        ...prev,
-        accounts: prev.accounts.map((acc) =>
-          acc.id === id ? { ...acc, ...patch } : acc
-        ),
-      }));
+      setState((prev) => {
+        const accounts = prev.accounts.map((acc) => acc.id === id ? { ...acc, ...patch } : acc);
+        if (!patch.ledgerId) return { ...prev, accounts };
+        const ledgers = getLedgers(prev);
+        const previousAccounts = new Map(prev.accounts.map((acc) => [acc.id, acc]));
+        const transactions = prev.transactions.map((tx) => tx.accountId === id && !tx.ledgerId
+          ? { ...tx, ledgerId: getTransactionLedger(tx, previousAccounts, ledgers).id }
+          : tx);
+        return { ...prev, accounts, transactions };
+      });
     },
     []
   );
@@ -273,6 +286,38 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     setState((prev) => ({
       ...prev,
       accounts: prev.accounts.filter((acc) => acc.id !== id),
+    }));
+  }, []);
+
+  const addLedger = useCallback((name: string, kind: Ledger['kind']) => {
+    const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind }] }));
+    return id;
+  }, []);
+
+  const renameLedger = useCallback((id: string, name: string) => {
+    setState((prev) => ({
+      ...prev,
+      ledgers: getLedgers(prev).map((ledger) => ledger.id === id ? { ...ledger, name } : ledger),
+    }));
+  }, []);
+
+  const deleteLedger = useCallback((id: string, destinationId: string) => {
+    setState((prev) => removeLedger(prev, id, destinationId));
+  }, []);
+
+  const setLedgerTaxExemption = useCallback((id: string, year: number, amount?: number) => {
+    if (!Number.isInteger(year) || year < 1000 || year > 9999 ||
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
+    setState((prev) => ({
+      ...prev,
+      ledgers: getLedgers(prev).map((ledger) => {
+        if (ledger.id !== id) return ledger;
+        const taxExemptions = { ...ledger.taxExemptions };
+        if (amount === undefined) delete taxExemptions[year];
+        else taxExemptions[year] = amount;
+        return { ...ledger, taxExemptions };
+      }),
     }));
   }, []);
 
@@ -406,6 +451,10 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     addAccount,
     updateAccount,
     deleteAccount,
+    addLedger,
+    renameLedger,
+    deleteLedger,
+    setLedgerTaxExemption,
     upsertBudget,
     removeBudget,
     addRecurringItem,

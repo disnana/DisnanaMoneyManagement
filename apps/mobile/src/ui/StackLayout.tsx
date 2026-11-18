@@ -1,9 +1,10 @@
-import { Stack } from 'expo-router';
+import { Stack, type NativeStackNavigationOptions } from 'expo-router';
 import { usePalette } from '@/lib/theme';
-import { AddButton } from '@/ui/AddButton';
+
+export type TabStackProps = { title: string; indexOptions?: NativeStackNavigationOptions };
 
 /** Android / default: standard top app bar on the tonal background. */
-export function TabStack({ title }: { title: string }) {
+export function TabStack({ title, indexOptions }: TabStackProps) {
   const p = usePalette();
   return (
     <Stack
@@ -13,7 +14,7 @@ export function TabStack({ title }: { title: string }) {
         headerShadowVisible: false,
         contentStyle: { backgroundColor: p.bg },
       }}>
-      <Stack.Screen name="index" options={{ title, headerRight: () => <AddButton /> }} />
+      <Stack.Screen name="index" options={{ title, ...indexOptions }} />
     </Stack>
   );
 }
