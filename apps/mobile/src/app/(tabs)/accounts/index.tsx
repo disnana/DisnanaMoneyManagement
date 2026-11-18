@@ -45,14 +45,16 @@ export default function Accounts() {
     ? <ReorderList items={section} renderItem={rowFor} onReorder={(ids) => reorder(section, ids)} />
     : <Group>{section.map((a) => <View key={a.id}>{rowFor(a)}</View>)}</Group>;
 
+
   return (
     <Screen>
       <LedgerPicker />
-      {others.length > 0 ? (
-        <>
-          <SectionTitle action={sorting ? '完了' : '並び替え'} onAction={() => setSorting((v) => !v)}>口座</SectionTitle>
-          {list(others)}
-        </>
+      <SectionTitle action={sorting ? '完了' : others.length > 1 || cards.length > 1 ? '並び替え' : undefined} onAction={() => setSorting((v) => !v)}>口座</SectionTitle>
+      {others.length > 0 ? list(others) : null}
+      {!sorting ? (
+        <Group>
+          <Row title="口座を追加" icon={{ ios: 'plus.circle.fill', android: 'add_circle' }} onPress={() => router.push('/accounts/account')} />
+        </Group>
       ) : null}
       <SectionTitle action={sorting ? undefined : '追加'} onAction={() => router.push('/accounts/card')}>カード</SectionTitle>
       {cards.length > 0 ? list(cards) : null}

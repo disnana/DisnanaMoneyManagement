@@ -60,6 +60,12 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
                 if (choice) updateAccount(account.id, { ledgerId: choice });
               }} />
             </Group>
+            {!isCard ? (
+              <Group>
+                <Row title="口座の設定" subtitle="名前・開始残高・削除" chevron
+                  onPress={() => router.push({ pathname: '/accounts/account', params: { id } })} />
+              </Group>
+            ) : null}
             {isCard ? (
               <>
                 <SectionTitle action="設定" onAction={() => router.push({ pathname: '/accounts/card', params: { id } })}>

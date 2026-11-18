@@ -57,6 +57,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # expo-modules-jsi needs Swift 6.2; Xcode 26.3's compiler rejects one data-race check in it
+        # (JavaScriptObject.swift: "sending 'slot' risks causing data races"), so also try older 26.x
+        xcode: ['26.2', '26.1']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -69,25 +75,16 @@ jobs:
         with:
           node-version: '22'
       - run: bun install --frozen-lockfile
-      - name: Select the newest installed Xcode
+      - name: Select Xcode ${{ matrix.xcode }}
         shell: bash
         working-directory: .
         run: |
-          # Expo SDK 58 targets the latest Xcode; prefer Xcode 26+ when the image has it
-          LATEST=$(find /Applications -maxdepth 1 -name 'Xcode_*.app' | sort -V | tail -1)
+          APP="/Applications/Xcode_${{ matrix.xcode }}.app"
           echo "installed: $(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tr '\n' ' ')"
-          if [ -n "$LATEST" ]; then sudo xcode-select -s "$LATEST/Contents/Developer"; fi
+          if [ ! -d "$APP" ]; then echo "Xcode ${{ matrix.xcode }} is not installed on this runner"; exit 1; fi
+          sudo xcode-select -s "$APP/Contents/Developer"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
-      - name: Build ExpoModulesJSI in Swift 5 mode
-        # Xcode 26.3's Swift 6.2 rejects "sending 'slot' risks causing data races" in expo-modules-jsi
-        # (JavaScriptObject.swift). Swift 5 language mode reports it as a warning; the code is unchanged.
-        shell: bash
-        run: |
-          PKG=node_modules/expo-modules-jsi/apple/Package.swift
-          grep -n 'swiftLanguageModes' "$PKG"
-          sed -i.bak 's/swiftLanguageModes: \[\.v6\]/swiftLanguageModes: [.v5]/' "$PKG"
-          grep -n 'swiftLanguageModes' "$PKG"
       - name: Generate native project
         run: bunx expo prebuild --platform ios
       - name: Build (no code signing)
@@ -108,7 +105,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-xcodebuild-log
+          name: ios-xcodebuild-log-${{ matrix.xcode }}
           path: ${{ runner.temp }}/xcodebuild.log
           retention-days: 7
       - name: Package IPA
@@ -118,6 +115,6 @@ jobs:
           zip -qr DMM-mobile-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
-          name: DMM-mobile-ios-unsigned-ipa
+          name: DMM-mobile-ios-unsigned-ipa-xcode${{ matrix.xcode }}
           path: apps/mobile/DMM-mobile-unsigned.ipa
           retention-days: 30
