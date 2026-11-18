@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
 import type { Budget, SavingsGoal } from '@dmm/core/types/finance';
@@ -13,6 +13,7 @@ import { Group, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit'
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { PlanningInput as Input, PlanningActions as Actions } from '@/ui/PlanningForm';
 import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
+import { PurchaseDeleteDialog, type PurchaseDeleteAnchor } from '@/ui/PurchaseDeleteDialog';
 import { pickCategory } from '@/lib/categoryPicker';
 import { categoryIcon } from '@/lib/categoryIcons';
 
@@ -191,9 +192,11 @@ function Savings() {
 function Purchases() {
   const { state, visibleState, activeLedger, month, removePurchaseCandidate } = useFinance();
   const p = usePalette();
+  const [deletion, setDeletion] = useState<{ id: string; anchor: PurchaseDeleteAnchor }>();
   const ledgerId = activeLedger?.id;
   const budgets = state.budgets.filter((budget) => budget.ledgerId === ledgerId);
   const candidates = (state.purchaseCandidates ?? []).filter((item) => item.ledgerId === ledgerId && item.month === month);
+  const pendingDelete = candidates.find((item) => item.id === deletion?.id);
   const spending = useMonthlySpending({ visibleState, month });
   const totals = new Map<string, number>();
   for (const item of candidates) totals.set(item.categoryId, (totals.get(item.categoryId) ?? 0) + item.amount);
@@ -214,7 +217,7 @@ function Purchases() {
               <PurchaseAction label="試算" color={p.tint} onPress={() => router.push({ pathname: '/purchase-compare', params: { id: item.id } })} />
               <PurchaseAction label="編集" color={p.text} onPress={() => router.push({ pathname: '/purchase-editor', params: { id: item.id } })} />
               <PurchaseAction label="削除" color={p.danger}
-                onPress={() => void confirmRemoval(`「${item.title}」を削除しますか？`, () => removePurchaseCandidate(item.id))} />
+                onPress={({ nativeEvent }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />
             </View>
           </Group>
         );
@@ -232,11 +235,15 @@ function Purchases() {
         </>
       ) : null}
       {candidates.length === 0 ? <Text style={{ color: p.textSecondary }}>候補を追加すると、予算と購入後の残高を試算できます。</Text> : null}
+      <PurchaseDeleteDialog title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
+        if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
+        setDeletion(undefined);
+      }} />
     </>
   );
 }
 
-function PurchaseAction({ label, color, onPress }: { label: string; color: string; onPress: () => void }) {
+function PurchaseAction({ label, color, onPress }: { label: string; color: string; onPress: NonNullable<PressableProps['onPress']> }) {
   const p = usePalette();
   return (
     <Pressable accessibilityRole="button" onPress={onPress}

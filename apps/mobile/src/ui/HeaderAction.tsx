@@ -1,4 +1,4 @@
-import { Pressable } from 'react-native';
+import { Pressable, type PressableProps } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -6,14 +6,14 @@ import { tick } from '@/lib/haptics';
 export function HeaderAction({ name, label, onPress, selected, accent }: {
   name: SymbolViewProps['name'];
   label: string;
-  onPress: () => void;
+  onPress: NonNullable<PressableProps['onPress']>;
   selected?: boolean;
   accent?: boolean;
 }) {
   const p = usePalette();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
-      onPress={() => { tick(); onPress(); }}
+      onPress={(event) => { tick(); onPress(event); }}
       style={({ pressed }) => ({
         width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
         borderRadius: accent ? 22 : 12, backgroundColor: selected || pressed ? p.fill : 'transparent',

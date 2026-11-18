@@ -1,18 +1,18 @@
 import { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { CURRENCY_META, getCategoryById } from '@dmm/core/data/categories';
 import type { CurrencyCode, ForeignPurchasePrice } from '@dmm/core/types/finance';
-import { formatJPY, formatMonthLabel } from '@dmm/core/utils/format';
+import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { assessPurchaseForMonth, estimatePurchaseJPY, FOREIGN_PURCHASE_CURRENCIES } from '@dmm/core/utils/planning';
 import { pickCategory } from '@/lib/categoryPicker';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { Group, Row, Screen } from '@/ui/kit';
+import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 import { PlanningActions, PlanningInput } from '@/ui/PlanningForm';
-import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
+import { PurchaseCashPreview } from '@/ui/PurchaseCashPreview';
 
 const CURRENCIES = ['JPY', ...FOREIGN_PURCHASE_CURRENCIES] as const;
 
@@ -34,9 +34,12 @@ export default function PurchaseEditor() {
   const foreignPrice: ForeignPurchasePrice | undefined = currency !== 'JPY'
     ? { currency, amount: Number(amount), yenPerUnit: Number(rate), feeJPY: Number(fee) } : undefined;
   const price = foreignPrice ? estimatePurchaseJPY(foreignPrice) : Number(amount);
-  const valid = Boolean(title.trim() && category && price && price > 0);
+  const purchaseAmount = price && price > 0 ? price : undefined;
+  const valid = Boolean(title.trim() && category && purchaseAmount);
   const selectedCategory = category ? getCategoryById(category, state.customCategories) : undefined;
-  const budget = category && price && price > 0 ? assessPurchaseForMonth(state, targetMonth, category, price, ledgerId) : undefined;
+  const budget = category ? assessPurchaseForMonth(state, targetMonth, category, purchaseAmount ?? 0, ledgerId) : undefined;
+  const nextBudget = category && purchaseAmount
+    ? assessPurchaseForMonth(state, shiftMonth(targetMonth, 1), category, purchaseAmount, ledgerId) : undefined;
   const chooseCurrency = async () => {
     const choice = await pickOne('支払い通貨', CURRENCIES.map((code) => ({
       id: code, label: CURRENCY_META[code].label, selected: code === currency,
@@ -70,18 +73,15 @@ export default function PurchaseEditor() {
               <Row title="支払い通貨" right={currency === 'JPY' ? '日本円' : currency} chevron onPress={() => void chooseCurrency()} />
               {foreignPrice ? <PlanningInput label={`為替レート（1 ${currency} あたり円）`} value={rate} onChange={setRate} decimal /> : null}
               {foreignPrice ? <PlanningInput label="手数料（円・任意）" value={fee} onChange={setFee} yen /> : null}
+              {foreignPrice && purchaseAmount ? <Row title="円換算（手数料込み）" right={formatJPY(purchaseAmount)} /> : null}
             </Group>
-            {price && price > 0 ? (
-              <View style={{ padding: 15, gap: 5, borderRadius: 14, backgroundColor: p.fill }}>
-                <Text style={{ color: p.textSecondary, fontSize: 13 }}>{foreignPrice ? '手数料込みの円見積もり' : '見込み価格'}</Text>
-                <Text style={{ color: p.text, fontSize: 24, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{formatJPY(price)}</Text>
-                {category ? <Text style={{ color: budget?.shortfall ? p.danger : p.textSecondary }}>購入後の予算 · {formatPurchaseBudget(budget)}</Text> : null}
-              </View>
-            ) : null}
+            <SectionTitle>資金の試算</SectionTitle>
+            <PurchaseCashPreview amount={purchaseAmount} month={targetMonth} ledgerId={ledgerId}
+              budget={budget} nextBudget={nextBudget} categorySelected={Boolean(category)} />
             <PlanningActions valid={valid} close={() => router.back()} save={() => {
-              if (!price || closing.current) return;
+              if (!purchaseAmount || closing.current) return;
               closing.current = true;
-              savePurchaseCandidate({ title: title.trim(), categoryId: category, amount: price, foreignPrice,
+              savePurchaseCandidate({ title: title.trim(), categoryId: category, amount: purchaseAmount, foreignPrice,
                 month: targetMonth, ledgerId }, existing?.id);
               router.back();
             }} />

@@ -3,6 +3,7 @@ import { Text, TextInput, View } from 'react-native';
 import { getBankCardWithdrawals } from '@dmm/core/utils/creditCard';
 import { formatJPY, formatMonthLabel, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { comparePurchaseCash, type assessPurchase } from '@dmm/core/utils/planning';
+import { filterLedger } from '@dmm/core/utils/ledgers';
 import { computeAccountBalances } from '@dmm/core/store/finance';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
@@ -16,24 +17,29 @@ export function formatPurchaseBudget(budget: BudgetEstimate): string {
   return budget.shortfall ? `${formatJPY(budget.shortfall)} 超過` : `残り ${formatJPY(budget.remaining)}`;
 }
 
-export function PurchaseCashPreview({ amount, month, budget, nextBudget }: {
-  amount: number;
+export function PurchaseCashPreview({ amount, month, ledgerId, budget, nextBudget, categorySelected = true }: {
+  amount?: number;
   month: string;
+  ledgerId?: string;
   budget: BudgetEstimate;
   nextBudget: BudgetEstimate;
+  categorySelected?: boolean;
 }) {
   const p = usePalette();
-  const { state, visibleState, activeLedger } = useFinance();
+  const { state } = useFinance();
   const today = getTodayString();
   const currentMonth = today.slice(0, 7);
   const nextMonth = shiftMonth(month, 1);
-  const orderedAccounts = [...visibleState.accounts, ...state.accounts.filter((a) => !visibleState.accounts.some((v) => v.id === a.id))];
+  const scopedAccounts = useMemo(() => filterLedger(state, ledgerId ?? null).accounts, [state, ledgerId]);
+  const orderedAccounts = [...scopedAccounts, ...state.accounts.filter((a) => !scopedAccounts.some((v) => v.id === a.id))];
   const banks = orderedAccounts.filter((a) => a.type === 'bank' && (!a.currency || a.currency === 'JPY'));
-  const goals = state.savingsGoals.filter((goal) => !activeLedger || goal.ledgerId === activeLedger.id);
+  const goals = state.savingsGoals.filter((goal) => !ledgerId || goal.ledgerId === ledgerId);
   const contributionDefault = goals.reduce((sum, goal) => sum + (goal.monthlyContribution ?? 0), 0);
   const [bankId, setBankId] = useState<string>();
   const [source, setSource] = useState<{ kind: 'bank' | 'goal'; id: string }>();
   const [contributionText, setContributionText] = useState<string>();
+  const [adjusting, setAdjusting] = useState(false);
+  const budgetValue = categorySelected ? formatPurchaseBudget(budget) : 'カテゴリを選択';
   const bank = banks.find((account) => account.id === bankId) ?? banks[0];
   const selectedGoal = source?.kind === 'goal' ? goals.find((goal) => goal.id === source.id) : undefined;
   const sourceBank = source?.kind === 'bank' ? banks.find((account) => account.id === source.id && account.id !== bank?.id) : undefined;
@@ -43,7 +49,7 @@ export function PurchaseCashPreview({ amount, month, budget, nextBudget }: {
 
   if (month < currentMonth || !bank) {
     return <Group>
-      <Row title="カテゴリ予算" right={formatPurchaseBudget(budget)} />
+      <Row title="予算残り" right={budgetValue} />
       <Row title={bank ? '現在残高の試算は今月以降が対象です' : '試算に使える円建て銀行口座がありません'} />
     </Group>;
   }
@@ -60,11 +66,11 @@ export function PurchaseCashPreview({ amount, month, budget, nextBudget }: {
       sourceBank && sourceDue ? Math.max(0, (balances[sourceBank.id] ?? 0) - sourceDue.confirmed - sourceDue.estimated) : 0,
     sameAccount: Boolean(selectedGoal),
   };
-  const result = comparePurchaseCash(balance, due.confirmed + due.estimated, amount, contribution, savings);
+  const result = comparePurchaseCash(balance, due.confirmed + due.estimated, amount ?? 0, contribution, savings);
   const nextReserve = selectedGoal ? Math.max(0, Math.min(selectedGoal.currentAmount, balance - nextDue.confirmed - nextDue.estimated)) : 0;
-  const deferred = comparePurchaseCash(balance, nextDue.confirmed + nextDue.estimated, amount, contribution,
+  const deferred = comparePurchaseCash(balance, nextDue.confirmed + nextDue.estimated, amount ?? 0, contribution,
     { available: nextReserve, sameAccount: Boolean(selectedGoal) });
-  const anyShortfall = (budget?.shortfall ?? 0) > 0 || result.free < 0;
+  const anyShortfall = amount !== undefined && ((budget?.shortfall ?? 0) > 0 || result.free < 0);
   const color = (value: number) => value < 0 ? p.danger : p.text;
   const chooseSavings = async () => {
     const choice = await pickOne('貯金の出どころ', [
@@ -84,48 +90,75 @@ export function PurchaseCashPreview({ amount, month, budget, nextBudget }: {
   return (
     <View style={{ gap: 12 }}>
       <Group>
-        <Row title="カテゴリ予算" right={formatPurchaseBudget(budget)} rightColor={budget?.shortfall ? p.danger : undefined} />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, padding: 16 }}>
+          <CashMetric label={amount === undefined ? '引落後の残高' : '購入・引落後の残高'} value={formatJPY(result.bankRemaining)}
+            color={color(result.bankRemaining)} primary />
+          <CashMetric label="予算残り" value={budget && !budget.shortfall ? formatJPY(budget.remaining) : budgetValue}
+            color={budget?.shortfall ? p.danger : p.text} primary />
+        </View>
         <Row title="支払口座" right={bank.name} chevron={banks.length > 1} onPress={banks.length > 1 ? async () => {
           const choice = await pickOne('支払口座', banks.map((account) => ({ id: account.id, label: account.name, selected: account.id === bank.id })));
           if (choice) { setBankId(choice); setSource(undefined); }
         } : undefined} />
-        <Row title="現在の口座残高" right={formatJPY(balance)} />
-        <Row title="クレカ引落（確定・未払い）" right={formatJPY(due.confirmed)} />
-        <Row title="クレカ引落（利用履歴からの見込み）" right={formatJPY(due.estimated)} />
-        <Row title="購入と引落後の口座残高" right={formatJPY(result.bankRemaining)} rightColor={color(result.bankRemaining)} />
+        <View style={{ padding: 16, gap: 8 }}>
+          <Text style={{ color: p.textSecondary, fontSize: 12 }}>口座残高とカード引落の内訳</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+            <CashMetric label="現在残高" value={formatJPY(balance)} color={p.text} />
+            <CashMetric label="引落・確定" value={formatJPY(due.confirmed)} color={p.text} />
+            <CashMetric label="引落・見込み" value={formatJPY(due.estimated)} color={p.text} />
+          </View>
+        </View>
       </Group>
       <Group>
-        <View style={{ paddingHorizontal: 16, paddingVertical: 9 }}>
-          <Text style={{ color: p.textSecondary, fontSize: 13 }}>この口座から今月これから積み立てる額（円）</Text>
-          <TextInput accessibilityLabel="今月これから積み立てる額（円）" keyboardType="number-pad"
-            value={contributionText ?? (contributionDefault ? String(contributionDefault) : '')} placeholder="0"
-            placeholderTextColor={p.textSecondary}
-            onChangeText={(value) => setContributionText(value.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 12))}
-            style={{ color: p.text, minHeight: 36, fontSize: 17 }} />
-        </View>
-        <Row title="貯金の出どころ" right={selectedGoal?.title ?? sourceBank?.name ?? '指定なし'} chevron onPress={() => void chooseSavings()} />
-        <Row title="積立・取り置き後に使える残り" right={formatJPY(result.free)} rightColor={color(result.free)}
-          subtitle={selectedGoal ? `口座内の貯金 ${formatJPY(savings.available)} を確保` : undefined} />
+        <Row title={adjusting ? '貯金・積立の調整を閉じる' : '貯金・積立を調整'} chevron onPress={() => setAdjusting((value) => !value)} />
+        {adjusting ? (
+          <>
+            <View style={{ paddingHorizontal: 16, paddingVertical: 9 }}>
+              <Text style={{ color: p.textSecondary, fontSize: 13 }}>この口座からの今月の積立（円）</Text>
+              <TextInput accessibilityLabel="この口座からの今月の積立（円）" keyboardType="number-pad"
+                value={contributionText ?? (contributionDefault ? String(contributionDefault) : '')} placeholder="0"
+                placeholderTextColor={p.textSecondary}
+                onChangeText={(value) => setContributionText(value.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 12))}
+                style={{ color: p.text, minHeight: 36, fontSize: 17 }} />
+            </View>
+            <Row title="貯金の出どころ" right={selectedGoal?.title ?? sourceBank?.name ?? '指定なし'} chevron onPress={() => void chooseSavings()} />
+          </>
+        ) : null}
+        {adjusting || contribution > 0 || selectedGoal ? (
+          <Row title="手元に残る額" right={formatJPY(result.free)} rightColor={color(result.free)}
+            subtitle={selectedGoal ? `積立と貯金 ${formatJPY(savings.available)} を確保後` : '積立を確保後'} />
+        ) : null}
       </Group>
       {anyShortfall ? (
         <Group>
           <Row title="貯金から出す" right={savings.available && result.savingsUsed ? formatJPY(result.afterSavings) : undefined}
             rightColor={color(result.afterSavings)}
             subtitle={savings.available && result.savingsUsed
-              ? `${formatJPY(result.savingsUsed)} を使った後の残り · 貯金は ${formatJPY(savings.available - result.savingsUsed)} 残る`
-              : savings.available ? '手元資金に不足なし' : '貯金の出どころを選ぶと試算できます'} />
+              ? `${formatJPY(result.savingsUsed)} を使う · 貯金残り ${formatJPY(savings.available - result.savingsUsed)}`
+              : savings.available ? '手元資金に不足なし' : '貯金の出どころを選択'} />
           <Row title="今月だけ積立を減らす" right={result.contributionCut ? formatJPY(result.afterContributionCut) : undefined}
             rightColor={color(result.afterContributionCut)}
             subtitle={result.contributionCut
-              ? `${formatJPY(result.contributionCut)} 減らした後の残り · 今月の積立 ${formatJPY(contribution - result.contributionCut)}`
-              : contribution ? '手元資金に不足なし' : 'これから積み立てる額を入れると比較できます'} />
+              ? `今月は ${formatJPY(result.contributionCut)} 減額`
+              : contribution ? '手元資金に不足なし' : '今月の積立額を入力'} />
           <Row title={`${formatMonthLabel(nextMonth)}に回す`} right={formatJPY(deferred.free)} rightColor={color(deferred.free)}
             subtitle={`手元の残り · カテゴリ予算 ${formatPurchaseBudget(nextBudget)}`} />
         </Group>
       ) : null}
-      <Text style={{ color: p.textSecondary, fontSize: 12, paddingHorizontal: 4 }}>
-        選択月末までの引落を差し引く試算です。今後の入金は含めず、取引・積立・購入予定月は変わりません。
-      </Text>
+      {adjusting ? <Text style={{ color: p.textSecondary, fontSize: 12, paddingHorizontal: 4 }}>月末までの引落を反映。今後の入金は試算対象外です。</Text> : null}
+    </View>
+  );
+}
+
+function CashMetric({ label, value, color, primary }: {
+  label: string; value: string; color: string; primary?: boolean;
+}) {
+  const p = usePalette();
+  return (
+    <View style={{ flex: 1, minWidth: primary ? 120 : 72, gap: 4 }}>
+      <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: primary ? 23 : 14,
+        fontWeight: '800', fontVariant: ['tabular-nums'] }}>{value}</Text>
     </View>
   );
 }
