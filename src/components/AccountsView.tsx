@@ -286,7 +286,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
       {/* Scope Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        <div className="flex flex-wrap rounded-lg bg-slate-100 p-1">
           {(
             [
               { id: 'all', label: 'すべての用途' },
@@ -381,14 +381,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                   key={card.id}
                   className="overflow-hidden rounded-xl border border-slate-200 bg-white"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
                         <CreditCard className="h-5 w-5" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-base font-semibold text-slate-900">
+                          <h4 className="text-base font-semibold text-slate-900 break-words">
                             {card.name}
                           </h4>
                           <span className="text-xs font-medium text-teal-800">
@@ -605,6 +605,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                     <AnimatePresence initial={false}>
                       {isExpanded && (
                         <motion.div
+                          key="statement-details"
                           initial={{ opacity: 0, y: -4 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -4 }}
@@ -629,13 +630,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                 {summary.thisMonthTransactions.map((tx) => (
                                   <div
                                     key={tx.id}
-                                    className="flex items-center justify-between py-2 text-xs"
+                                    className="flex items-start justify-between gap-3 py-2 text-xs"
                                   >
-                                    <div className="min-w-0 pr-3">
-                                      <div className="truncate font-medium text-slate-800">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium leading-snug text-slate-800 break-words">
                                         {tx.title}
                                       </div>
-                                      <div className="text-[11px] text-slate-400 tabular-nums">
+                                      <div className="mt-0.5 text-[11px] text-slate-400 tabular-nums">
                                         {formatFullDate(tx.date)}
                                         {(tx.pointUsed ?? 0) > 0 &&
                                           ` · P充当 ${formatJPY(tx.pointUsed ?? 0)}`}
@@ -668,10 +669,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                                 {summary.nextMonthTransactions.map((tx) => (
                                   <div
                                     key={tx.id}
-                                    className="flex items-center justify-between py-2 text-xs"
+                                    className="flex items-start justify-between gap-3 py-2 text-xs"
                                   >
-                                    <div className="min-w-0 pr-3">
-                                      <div className="truncate font-medium text-slate-800">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-medium leading-snug text-slate-800 break-words">
                                         {tx.title}
                                       </div>
                                       <div className="text-[11px] text-slate-400 tabular-nums">
@@ -718,14 +719,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                   key={card.id}
                   className="overflow-hidden rounded-xl border border-slate-200 bg-white"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
                         <Banknote className="h-5 w-5" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-base font-semibold text-slate-900">
+                          <h4 className="text-base font-semibold text-slate-900 break-words">
                             {card.name}
                           </h4>
                           <span className="text-xs font-medium text-sky-700">
@@ -747,7 +748,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         onClick={() =>
@@ -849,7 +850,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {nonCardAccounts.map((acc) => {
-              const Icon = ACCOUNT_ICONS[acc.type];
+              const Icon = ACCOUNT_ICONS[acc.type] ?? Landmark;
               const balance = accountBalances[acc.id] ?? acc.initialBalance;
               const scopeLabel = ACCOUNT_USAGE_LABELS[acc.usageScope ?? 'personal'];
 
@@ -860,22 +861,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 >
                   <div>
                     <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex min-w-0 flex-1 items-start gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700">
                           <Icon className="h-5 w-5" />
                         </div>
-                        <div className="min-w-0">
-                          <h4 className="truncate text-base font-semibold text-slate-900">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-base font-semibold leading-snug text-slate-900 break-words">
                             {acc.name}
                           </h4>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-                            <span>{ACCOUNT_TYPE_LABELS[acc.type]}</span>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+                            <span>{ACCOUNT_TYPE_LABELS[acc.type] ?? acc.type}</span>
                             <span aria-hidden="true">·</span>
                             <span className="font-medium text-teal-800">{scopeLabel}</span>
                             {acc.institution && (
                               <>
                                 <span aria-hidden="true">·</span>
-                                <span className="truncate">{acc.institution}</span>
+                                <span className="break-words">{acc.institution}</span>
                               </>
                             )}
                           </div>
@@ -911,7 +912,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                     )}
                   </div>
 
-                  <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
+                  <div className="mt-5 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-100 pt-3">
                     <button
                       type="button"
                       onClick={() =>
@@ -944,6 +945,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       <AnimatePresence>
         {modalOpen && (
           <motion.div
+            key="acc-modal-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -957,7 +959,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 6, scale: 0.98 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+              className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
                 <h3 className="text-base font-semibold text-slate-900">
@@ -993,7 +995,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                               setLinkedBankAccountId(bankOnlyAccounts[0]?.id ?? '');
                             }
                           }}
-                          className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-xs font-medium leading-tight transition-colors ${
                             active
                               ? 'border-teal-700 bg-teal-50 text-teal-900'
                               : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -1004,7 +1006,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                               active ? 'text-teal-700' : 'text-slate-400'
                             }`}
                           />
-                          <span className="truncate">{ACCOUNT_TYPE_LABELS[t]}</span>
+                          <span>{ACCOUNT_TYPE_LABELS[t]}</span>
                         </button>
                       );
                     })}
@@ -1107,7 +1109,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       <CheckCircle2 className="h-3.5 w-3.5 text-teal-700" />
                       <span>クレジットカード締切日・支払日・引落銀行</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                       <div>
                         <label className="block text-xs font-medium text-slate-600">
                           締切日

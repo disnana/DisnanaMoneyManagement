@@ -3,6 +3,13 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
 
-registerSW({ immediate: true });
+if (import.meta.env.PROD) {
+  registerSW({
+    immediate: true,
+    onRegisterError: () => {
+      // Ignore service worker registration errors in restricted iframe environments
+    },
+  });
+}
 
 createRoot(document.getElementById('root')!).render(<App />);

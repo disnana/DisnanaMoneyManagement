@@ -327,17 +327,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 key={s.card.id}
                 className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3"
               >
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-slate-900 break-words">
                     {s.card.name}
                   </div>
-                  <div className="text-xs text-slate-500">
+                  <div className="mt-0.5 text-xs text-slate-500">
                     {formatDayLabel(s.card.closingDay)}締め ·{' '}
                     {s.card.paymentMonthOffset === 2 ? '翌々月' : '翌月'}
                     {formatDayLabel(s.card.paymentDay)}払い
                   </div>
                 </div>
-                <div className="flex items-center gap-5 font-mono text-xs tabular-nums">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs tabular-nums">
                   <div>
                     <div className="text-slate-500">今月引落</div>
                     <div className="text-sm font-bold text-slate-900">
@@ -421,19 +421,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           <div className="mt-5">
             <svg
-              viewBox="0 0 600 220"
-              className="h-56 w-full overflow-visible"
+              viewBox="0 0 620 228"
+              className="h-56 w-full"
               role="img"
               aria-label="6ヶ月間の収入と支出の棒グラフ"
             >
               {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-                const y = 180 - ratio * 155;
+                const y = 186 - ratio * 158;
                 const val = Math.round(trendData.maxVal * ratio);
                 return (
                   <g key={ratio}>
                     <line
-                      x1="56"
-                      x2="590"
+                      x1="68"
+                      x2="604"
                       y1={y}
                       y2={y}
                       stroke="#E2E8F0"
@@ -441,10 +441,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       strokeWidth="1"
                     />
                     <text
-                      x="48"
+                      x="60"
                       y={y + 4}
                       textAnchor="end"
-                      className="fill-slate-400 font-mono text-[10px]"
+                      className="fill-slate-400 font-mono text-[11px]"
                     >
                       {val === 0 ? '¥0' : `¥${Math.round(val / 10000)}万`}
                     </text>
@@ -453,18 +453,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
 
               {trendData.items.map((item, idx) => {
-                const groupWidth = (590 - 66) / trendData.items.length;
-                const centerX = 66 + groupWidth * idx + groupWidth / 2;
+                const groupWidth = (604 - 76) / trendData.items.length;
+                const centerX = 76 + groupWidth * idx + groupWidth / 2;
                 const barWidth = 22;
                 const gap = 5;
 
                 const incH = Math.max(
                   item.income > 0 ? 3 : 0,
-                  (item.income / trendData.maxVal) * 155
+                  (item.income / trendData.maxVal) * 158
                 );
                 const expH = Math.max(
                   item.expense > 0 ? 3 : 0,
-                  (item.expense / trendData.maxVal) * 155
+                  (item.expense / trendData.maxVal) * 158
                 );
                 const isSelected = item.monthKey === selectedMonth;
                 const isHovered = item.monthKey === hoveredMonth;
@@ -479,15 +479,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   >
                     <rect
                       x={centerX - groupWidth / 2 + 4}
-                      y={16}
+                      y={20}
                       width={groupWidth - 8}
-                      height={170}
+                      height={172}
                       rx="6"
                       fill={isHovered || isSelected ? '#F8FAFC' : 'transparent'}
                     />
                     <rect
                       x={centerX - barWidth - gap / 2}
-                      y={180 - incH}
+                      y={186 - incH}
                       width={barWidth}
                       height={incH}
                       rx="3"
@@ -495,7 +495,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     />
                     <rect
                       x={centerX + gap / 2}
-                      y={180 - expH}
+                      y={186 - expH}
                       width={barWidth}
                       height={expH}
                       rx="3"
@@ -503,9 +503,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     />
                     <text
                       x={centerX}
-                      y={202}
+                      y={212}
                       textAnchor="middle"
-                      className={`text-[11px] ${
+                      className={`text-[12px] ${
                         isSelected
                           ? 'fill-slate-900 font-semibold'
                           : 'fill-slate-500 font-normal'
@@ -522,7 +522,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Expense Category Breakdown */}
         <section className="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-5">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">カテゴリ別支出</h3>
               <p className="mt-0.5 text-xs text-slate-500">
@@ -554,7 +554,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div className="mt-5 space-y-4">
               {metrics.categoryBreakdown.slice(0, 6).map((item) => (
                 <div key={item.category.id}>
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs">
                     <span className="font-medium text-slate-800">{item.category.name}</span>
                     <div className="flex items-center gap-2 font-mono tabular-nums">
                       <span className="text-slate-400">{Math.round(item.share)}%</span>
@@ -622,13 +622,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     key={tx.id}
                     type="button"
                     onClick={() => onEditTransaction(tx)}
-                    className="flex w-full items-center justify-between gap-4 px-6 py-3 text-left transition-colors hover:bg-slate-50"
+                    className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left transition-colors hover:bg-slate-50"
                   >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-slate-900">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-slate-900 break-words">
                         {tx.title}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 truncate">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs leading-relaxed text-slate-500">
                         <span className="tabular-nums">{formatShortDate(tx.date)}</span>
                         <span aria-hidden="true">·</span>
                         <span>{cat.name}</span>
@@ -719,8 +719,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                 return (
                   <div key={item.category.id} className="px-6 py-3.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-medium text-slate-900">
                           {item.category.name}
                         </span>

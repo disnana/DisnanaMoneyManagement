@@ -15,10 +15,10 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={install}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3.5 py-2.5 text-xs font-medium text-white transition-colors hover:bg-slate-800 whitespace-nowrap"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2.5 text-xs font-medium text-white transition-colors hover:bg-slate-800"
       >
         <Download className="h-3.5 w-3.5 shrink-0" />
-        <span>アプリをインストール (PWA)</span>
+        <span>アプリをインストール</span>
       </button>
     );
   }
@@ -28,10 +28,10 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={() => setShowGuide(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
         <Smartphone className="h-3.5 w-3.5 shrink-0 text-slate-500" />
-        <span>{isIOS ? 'ホーム画面に追加 (iOS)' : 'PC・スマホにインストール'}</span>
+        <span>{isIOS ? 'ホーム画面に追加' : 'アプリを端末に追加'}</span>
       </button>
 
       {showGuide && (

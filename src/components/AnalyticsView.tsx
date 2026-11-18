@@ -52,7 +52,7 @@ const DonutChart: React.FC<{
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const total = useMemo(() => slices.reduce((s, x) => s + x.value, 0), [slices]);
 
-  const radius = 64;
+  const radius = 82;
   const circumference = 2 * Math.PI * radius;
 
   const segments = useMemo(() => {
@@ -86,15 +86,15 @@ const DonutChart: React.FC<{
       ) : (
         <div className="mt-6 grid grid-cols-1 items-center gap-6 sm:grid-cols-12">
           <div className="flex justify-center sm:col-span-5">
-            <div className="relative h-48 w-48">
-              <svg viewBox="0 0 180 180" className="h-full w-full -rotate-90">
+            <div className="relative h-56 w-56">
+              <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
                 <circle
-                  cx="90"
-                  cy="90"
+                  cx="110"
+                  cy="110"
                   r={radius}
                   fill="none"
                   stroke="#F1F5F9"
-                  strokeWidth="26"
+                  strokeWidth="22"
                 />
                 {segments.map((seg) => {
                   const isHovered = hoveredId === seg.id;
@@ -102,12 +102,12 @@ const DonutChart: React.FC<{
                   return (
                     <circle
                       key={seg.id}
-                      cx="90"
-                      cy="90"
+                      cx="110"
+                      cy="110"
                       r={radius}
                       fill="none"
                       stroke={seg.color}
-                      strokeWidth={isHovered ? 30 : 26}
+                      strokeWidth={isHovered ? 26 : 22}
                       strokeDasharray={`${seg.strokeLength} ${circumference}`}
                       strokeDashoffset={seg.offset}
                       className="cursor-pointer transition-all duration-150"
@@ -118,15 +118,15 @@ const DonutChart: React.FC<{
                   );
                 })}
               </svg>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-                <span className="text-[11px] font-medium text-slate-500 truncate max-w-full">
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-7 text-center">
+                <span className="line-clamp-2 text-[11px] font-medium leading-tight text-slate-500">
                   {activeSlice ? activeSlice.label : centerLabel}
                 </span>
-                <span className="mt-0.5 font-mono text-base font-bold text-slate-900 tabular-nums">
+                <span className="mt-1 font-mono text-sm font-bold text-slate-900 tabular-nums sm:text-base">
                   {formatJPY(activeSlice ? activeSlice.value : total)}
                 </span>
                 {activeSlice && (
-                  <span className="font-mono text-[11px] text-slate-500 tabular-nums">
+                  <span className="mt-0.5 font-mono text-[11px] text-slate-500 tabular-nums">
                     {activeSlice.percentage.toFixed(1)}%
                   </span>
                 )}
@@ -134,29 +134,29 @@ const DonutChart: React.FC<{
             </div>
           </div>
 
-          <div className="space-y-2.5 sm:col-span-7">
-            {slices.slice(0, 7).map((slice) => {
+          <div className="space-y-2 sm:col-span-7">
+            {slices.slice(0, 10).map((slice) => {
               const isHovered = hoveredId === slice.id;
               return (
                 <div
                   key={slice.id}
                   onMouseEnter={() => setHoveredId(slice.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
+                  className={`flex cursor-pointer items-start justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
                     isHovered ? 'bg-slate-50' : ''
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex min-w-0 items-start gap-2">
                     <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-xs"
+                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-xs"
                       style={{ backgroundColor: slice.color }}
                       aria-hidden="true"
                     />
-                    <span className="truncate font-medium text-slate-800">
+                    <span className="font-medium leading-snug text-slate-800 break-words">
                       {slice.label}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums">
+                  <div className="flex shrink-0 items-center gap-2.5 font-mono tabular-nums">
                     <span className="text-slate-400">{slice.percentage.toFixed(1)}%</span>
                     <span className="font-semibold text-slate-900">
                       {formatJPY(slice.value)}
@@ -501,7 +501,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-7">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">
                 月次純収支（黒字・赤字）トレンド
@@ -519,25 +519,25 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
 
           <div className="mt-6">
-            <svg viewBox="0 0 560 200" className="h-52 w-full overflow-visible">
+            <svg viewBox="0 0 600 224" className="h-56 w-full">
               {[0, 0.5, 1].map((r) => {
-                const y = 165 - r * 135;
+                const y = 180 - r * 136;
                 const val = Math.round(maxTrendValue * r);
                 return (
                   <g key={r}>
                     <line
-                      x1="54"
-                      x2="545"
+                      x1="66"
+                      x2="580"
                       y1={y}
                       y2={y}
                       stroke="#E2E8F0"
                       strokeDasharray={r === 0 ? undefined : '3 3'}
                     />
                     <text
-                      x="46"
+                      x="58"
                       y={y + 4}
                       textAnchor="end"
-                      className="fill-slate-400 font-mono text-[10px]"
+                      className="fill-slate-400 font-mono text-[11px]"
                     >
                       {val === 0 ? '¥0' : `¥${Math.round(val / 10000)}万`}
                     </text>
@@ -555,9 +555,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   strokeLinecap="round"
                   points={monthlyTrend
                     .map((d, i) => {
-                      const x = 84 + i * ((545 - 84 - 30) / (monthlyTrend.length - 1));
+                      const x = 96 + i * ((554 - 96) / (monthlyTrend.length - 1));
                       const clamped = Math.max(0, d.net);
-                      const y = 165 - (clamped / maxTrendValue) * 135;
+                      const y = 180 - (clamped / maxTrendValue) * 136;
                       return `${x},${y}`;
                     })
                     .join(' ')}
@@ -565,9 +565,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               )}
 
               {monthlyTrend.map((d, i) => {
-                const x = 84 + i * ((545 - 84 - 30) / Math.max(1, monthlyTrend.length - 1));
+                const x = 96 + i * ((554 - 96) / Math.max(1, monthlyTrend.length - 1));
                 const clamped = Math.max(0, d.net);
-                const y = 165 - (clamped / maxTrendValue) * 135;
+                const y = 180 - (clamped / maxTrendValue) * 136;
                 return (
                   <g key={d.monthKey}>
                     <circle
@@ -580,9 +580,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     />
                     <text
                       x={x}
-                      y={y - 10}
+                      y={Math.max(18, y - 12)}
                       textAnchor="middle"
-                      className="fill-slate-700 font-mono text-[10px] font-semibold"
+                      className="fill-slate-700 font-mono text-[11px] font-semibold"
                     >
                       {d.net >= 0
                         ? `+${Math.round(d.net / 1000)}k`
@@ -590,9 +590,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                     </text>
                     <text
                       x={x}
-                      y="188"
+                      y="206"
                       textAnchor="middle"
-                      className="fill-slate-500 text-[11px]"
+                      className="fill-slate-500 text-[12px]"
                     >
                       {d.label}
                     </text>

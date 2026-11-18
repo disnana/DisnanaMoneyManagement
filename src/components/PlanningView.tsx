@@ -197,9 +197,9 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                     key={item.id}
                     className="flex flex-wrap items-center justify-between gap-4 px-6 py-4"
                   >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-semibold text-slate-900 break-words">
                           {item.title}
                         </span>
                         <span aria-hidden="true" className="text-slate-300">
@@ -209,7 +209,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                           毎月 {item.dayOfMonth}日
                         </span>
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
                         <span>{item.type === 'income' ? '収入' : '支出'}</span>
                         <span aria-hidden="true">·</span>
                         <span>{cat.name}</span>
@@ -218,7 +218,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span
                         className={`font-mono text-sm font-bold tabular-nums ${
                           item.type === 'income' ? 'text-emerald-700' : 'text-slate-900'
@@ -332,7 +332,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                     )}
 
                     <div className="mt-4">
-                      <div className="flex items-baseline justify-between text-xs font-mono tabular-nums">
+                      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs font-mono tabular-nums">
                         <span className="text-base font-bold text-slate-900">
                           {formatJPY(goal.currentAmount)}
                         </span>
@@ -354,7 +354,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                     <button
                       type="button"
                       onClick={() => onContributeGoal(goal.id, 10000)}

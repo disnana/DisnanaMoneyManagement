@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Component, ErrorInfo, ReactNode, useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { NavSection, Transaction } from './types/finance';
 import { getCurrentMonthKey } from './utils/format';
@@ -24,6 +24,63 @@ import {
 import { DataModal } from './components/DataModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast } from './components/Toast';
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Handled via UI fallback
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-slate-900">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <h2 className="text-base font-semibold text-slate-900">
+              画面の表示中に問題が発生しました
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              ブラウザに保存されているデータ形式との不整合などが原因の可能性があります。再読み込みをお試しください。
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
+              >
+                再読み込みする
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('kakeibo_finance_state_v3');
+                  } catch {
+                    // ignore
+                  }
+                  window.location.reload();
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                初期データに戻して再読み込み
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const {
@@ -96,8 +153,9 @@ export default function App() {
   };
 
   return (
-    <MotionConfig reducedMotion="user">
-      <div className="flex min-h-screen bg-slate-50 text-slate-900">
+    <AppErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <div className="flex min-h-screen overflow-x-clip bg-slate-50 text-slate-900">
         <Sidebar
           activeSection={activeSection}
           onSelectSection={setActiveSection}
@@ -286,7 +344,8 @@ export default function App() {
 
         <OfflineIndicator />
         <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
-      </div>
-    </MotionConfig>
+        </div>
+      </MotionConfig>
+    </AppErrorBoundary>
   );
 }

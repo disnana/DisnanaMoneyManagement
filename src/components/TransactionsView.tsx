@@ -149,7 +149,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             exportTransactionsToCSV(
               filtered,
               accountNameMap,
-              `kakeibo-${monthFilter === 'all' ? 'all' : monthFilter}.csv`
+              `dmm-${monthFilter === 'all' ? 'all' : monthFilter}.csv`
             )
           }
           disabled={filtered.length === 0}
@@ -212,7 +212,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
           </div>
 
-          <div className="relative min-w-[240px] flex-1 max-w-sm">
+          <div className="relative w-full sm:min-w-[240px] sm:flex-1 sm:max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -323,93 +323,61 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
-                  <th className="py-3 pl-6 pr-3 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={toggleDateSort}
-                      className="inline-flex items-center gap-1 font-medium hover:text-slate-900"
-                    >
-                      <span>日付</span>
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </th>
-                  <th className="px-3 py-3 whitespace-nowrap">項目・税務/取引詳細</th>
-                  <th className="px-3 py-3 whitespace-nowrap">カテゴリ / 区分</th>
-                  <th className="px-3 py-3 whitespace-nowrap">口座</th>
-                  <th className="px-3 py-3 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={toggleAmountSort}
-                      className="inline-flex items-center justify-end gap-1 font-medium hover:text-slate-900"
-                    >
-                      <span>金額</span>
-                      <ArrowUpDown className="h-3 w-3" />
-                    </button>
-                  </th>
-                  <th className="py-3 pl-3 pr-6 text-right whitespace-nowrap">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filtered.map((tx) => {
-                  const cat = getCategoryById(tx.categoryId);
-                  const accName = accountNameMap[tx.accountId] ?? '不明な口座';
-                  const toAccName = tx.toAccountId
-                    ? accountNameMap[tx.toAccountId] ?? '不明な口座'
-                    : '';
+          <>
+            {/* Mobile Card List (no hidden columns or horizontal scroll) */}
+            <div className="divide-y divide-slate-100 md:hidden">
+              {filtered.map((tx) => {
+                const cat = getCategoryById(tx.categoryId);
+                const accName = accountNameMap[tx.accountId] ?? '不明な口座';
+                const toAccName = tx.toAccountId
+                  ? accountNameMap[tx.toAccountId] ?? '不明な口座'
+                  : '';
 
-                  const detailParts: string[] = [];
-                  if (tx.counterparty) detailParts.push(tx.counterparty);
-                  if (tx.type === 'income') {
-                    if (tx.receiptMethod) {
-                      detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
-                    }
-                    if (tx.incomeTaxCategory) {
-                      detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
-                    }
+                const detailParts: string[] = [];
+                if (tx.counterparty) detailParts.push(tx.counterparty);
+                if (tx.type === 'income') {
+                  if (tx.receiptMethod) {
+                    detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
                   }
-                  if (tx.type === 'expense' && tx.scope === 'business') {
-                    detailParts.push(tx.accountingSubject ?? '経費');
-                    if ((tx.businessRatio ?? 100) < 100) {
-                      detailParts.push(`按分${tx.businessRatio}%`);
-                    }
+                  if (tx.incomeTaxCategory) {
+                    detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
                   }
-                  if (tx.type === 'transfer' && tx.isPrepayment) {
-                    detailParts.push('先払い・繰上返済');
+                }
+                if (tx.type === 'expense' && tx.scope === 'business') {
+                  detailParts.push(tx.accountingSubject ?? '経費');
+                  if ((tx.businessRatio ?? 100) < 100) {
+                    detailParts.push(`按分${tx.businessRatio}%`);
                   }
-                  if (tx.memo) detailParts.push(tx.memo);
+                }
+                if (tx.type === 'transfer' && tx.isPrepayment) {
+                  detailParts.push('先払い・繰上返済');
+                }
+                if (tx.memo) detailParts.push(tx.memo);
 
-                  return (
-                    <tr
-                      key={tx.id}
-                      className="group transition-colors hover:bg-slate-50/80"
-                    >
-                      <td className="py-2.5 pl-6 pr-3 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
-                        {formatFullDate(tx.date)}
-                      </td>
-                      <td className="px-3 py-2.5 max-w-sm">
-                        <div className="truncate font-medium text-slate-900">
+                return (
+                  <div key={tx.id} className="space-y-2 px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold leading-snug text-slate-900 break-words">
                           {tx.title}
                         </div>
-                        {detailParts.length > 0 && (
-                          <div className="truncate text-xs text-slate-500">
-                            {detailParts.join(' · ')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-slate-700 whitespace-nowrap">
-                        <div>{cat.name}</div>
-                        <div className="text-[11px] text-slate-400">
-                          {tx.scope === 'business' ? '事業・経費' : '個人'}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+                          <span className="font-mono tabular-nums">{formatFullDate(tx.date)}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{cat.name}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>
+                            {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
+                          </span>
+                          {tx.scope === 'business' && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="font-medium text-teal-800">事業</span>
+                            </>
+                          )}
                         </div>
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">
-                        {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap">
+                      </div>
+                      <div className="shrink-0 text-right font-mono tabular-nums">
                         <div
                           className={`text-sm font-semibold ${
                             tx.type === 'income'
@@ -428,37 +396,179 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         )}
                         {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
                           <div className="text-[11px] text-teal-700">
-                            P充当 {formatJPY(tx.pointUsed ?? 0)} · 実請求{' '}
-                            {formatJPY(getEffectiveOutflow(tx))}
+                            P充当 {formatJPY(tx.pointUsed ?? 0)}
                           </div>
                         )}
-                      </td>
-                      <td className="py-2.5 pl-3 pr-6 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => onEditTransaction(tx)}
-                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            aria-label={`${tx.title}を編集`}
+                      </div>
+                    </div>
+
+                    {detailParts.length > 0 && (
+                      <p className="text-xs leading-relaxed text-slate-500 break-words">
+                        {detailParts.join(' · ')}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => onEditTransaction(tx)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        <span>編集</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingTx(tx)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span>削除</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                    <th className="py-3 pl-6 pr-3 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={toggleDateSort}
+                        className="inline-flex items-center gap-1 font-medium hover:text-slate-900"
+                      >
+                        <span>日付</span>
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </th>
+                    <th className="px-3 py-3">項目・税務/取引詳細</th>
+                    <th className="px-3 py-3 whitespace-nowrap">カテゴリ / 区分</th>
+                    <th className="px-3 py-3 whitespace-nowrap">口座</th>
+                    <th className="px-3 py-3 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={toggleAmountSort}
+                        className="inline-flex items-center justify-end gap-1 font-medium hover:text-slate-900"
+                      >
+                        <span>金額</span>
+                        <ArrowUpDown className="h-3 w-3" />
+                      </button>
+                    </th>
+                    <th className="py-3 pl-3 pr-6 text-right whitespace-nowrap">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map((tx) => {
+                    const cat = getCategoryById(tx.categoryId);
+                    const accName = accountNameMap[tx.accountId] ?? '不明な口座';
+                    const toAccName = tx.toAccountId
+                      ? accountNameMap[tx.toAccountId] ?? '不明な口座'
+                      : '';
+
+                    const detailParts: string[] = [];
+                    if (tx.counterparty) detailParts.push(tx.counterparty);
+                    if (tx.type === 'income') {
+                      if (tx.receiptMethod) {
+                        detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
+                      }
+                      if (tx.incomeTaxCategory) {
+                        detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
+                      }
+                    }
+                    if (tx.type === 'expense' && tx.scope === 'business') {
+                      detailParts.push(tx.accountingSubject ?? '経費');
+                      if ((tx.businessRatio ?? 100) < 100) {
+                        detailParts.push(`按分${tx.businessRatio}%`);
+                      }
+                    }
+                    if (tx.type === 'transfer' && tx.isPrepayment) {
+                      detailParts.push('先払い・繰上返済');
+                    }
+                    if (tx.memo) detailParts.push(tx.memo);
+
+                    return (
+                      <tr
+                        key={tx.id}
+                        className="group align-top transition-colors hover:bg-slate-50/80"
+                      >
+                        <td className="py-3 pl-6 pr-3 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
+                          {formatFullDate(tx.date)}
+                        </td>
+                        <td className="min-w-[200px] px-3 py-3">
+                          <div className="font-medium leading-snug text-slate-900 break-words">
+                            {tx.title}
+                          </div>
+                          {detailParts.length > 0 && (
+                            <div className="mt-0.5 text-xs leading-relaxed text-slate-500 break-words">
+                              {detailParts.join(' · ')}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-slate-700">
+                          <div className="leading-snug">{cat.name}</div>
+                          <div className="mt-0.5 text-[11px] text-slate-400">
+                            {tx.scope === 'business' ? '事業・経費' : '個人'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-xs leading-snug text-slate-600 break-words">
+                          {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          <div
+                            className={`text-sm font-semibold ${
+                              tx.type === 'income'
+                                ? 'text-emerald-700'
+                                : tx.type === 'expense'
+                                ? 'text-slate-900'
+                                : 'text-slate-500'
+                            }`}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeletingTx(tx)}
-                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-                            aria-label={`${tx.title}を削除`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                            {formatSignedJPY(tx.amount, tx.type)}
+                          </div>
+                          {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                            <div className="text-[11px] text-slate-500">
+                              手数料 {formatJPY(tx.transferFee ?? 0)}
+                            </div>
+                          )}
+                          {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
+                            <div className="text-[11px] text-teal-700">
+                              P充当 {formatJPY(tx.pointUsed ?? 0)} · 実請求{' '}
+                              {formatJPY(getEffectiveOutflow(tx))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 pl-3 pr-6 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onEditTransaction(tx)}
+                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              aria-label={`${tx.title}を編集`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTx(tx)}
+                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                              aria-label={`${tx.title}を削除`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 

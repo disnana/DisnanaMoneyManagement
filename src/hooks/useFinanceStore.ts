@@ -12,6 +12,84 @@ import { getCurrentMonthKey, getEffectiveOutflow } from '../utils/format';
 
 const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
+const VALID_ACCOUNT_TYPES = new Set([
+  'bank',
+  'credit',
+  'debit',
+  'cash',
+  'emoney',
+  'investment',
+]);
+
+function sanitizeState(parsed: Partial<FinanceState>): FinanceState | null {
+  if (
+    !Array.isArray(parsed.accounts) ||
+    !Array.isArray(parsed.transactions) ||
+    !Array.isArray(parsed.budgets) ||
+    !Array.isArray(parsed.recurringItems) ||
+    !Array.isArray(parsed.savingsGoals)
+  ) {
+    return null;
+  }
+
+  const accounts: Account[] = parsed.accounts
+    .filter((a): a is Account => Boolean(a && typeof a.id === 'string' && typeof a.name === 'string'))
+    .map((a) => ({
+      ...a,
+      type: VALID_ACCOUNT_TYPES.has(a.type) ? a.type : 'bank',
+      usageScope:
+        a.usageScope === 'personal' || a.usageScope === 'household' || a.usageScope === 'business'
+          ? a.usageScope
+          : 'personal',
+      initialBalance: Number.isFinite(Number(a.initialBalance)) ? Number(a.initialBalance) : 0,
+    }));
+
+  if (accounts.length === 0) return null;
+
+  const transactions: Transaction[] = parsed.transactions
+    .filter(
+      (t): t is Transaction =>
+        Boolean(
+          t &&
+            typeof t.id === 'string' &&
+            typeof t.date === 'string' &&
+            typeof t.title === 'string' &&
+            typeof t.accountId === 'string'
+        )
+    )
+    .map((t) => ({
+      ...t,
+      type:
+        t.type === 'income' || t.type === 'expense' || t.type === 'transfer'
+          ? t.type
+          : 'expense',
+      amount: Number.isFinite(Number(t.amount)) ? Number(t.amount) : 0,
+    }));
+
+  const budgets: Budget[] = parsed.budgets.filter(
+    (b): b is Budget =>
+      Boolean(b && typeof b.categoryId === 'string' && Number.isFinite(Number(b.monthlyLimit)))
+  );
+
+  const recurringItems: RecurringItem[] = parsed.recurringItems.filter(
+    (r): r is RecurringItem =>
+      Boolean(r && typeof r.id === 'string' && typeof r.title === 'string' && Number.isFinite(Number(r.amount)))
+  );
+
+  const savingsGoals: SavingsGoal[] = parsed.savingsGoals.filter(
+    (g): g is SavingsGoal =>
+      Boolean(g && typeof g.id === 'string' && typeof g.title === 'string' && Number.isFinite(Number(g.targetAmount)))
+  );
+
+  return {
+    accounts,
+    transactions,
+    budgets,
+    recurringItems,
+    savingsGoals,
+  };
+}
+
 function loadInitialState(): FinanceState {
   try {
     const raw =
@@ -20,14 +98,9 @@ function loadInitialState(): FinanceState {
       localStorage.getItem('kakeibo_finance_state_v1');
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<FinanceState>;
-      if (
-        Array.isArray(parsed.accounts) &&
-        Array.isArray(parsed.transactions) &&
-        Array.isArray(parsed.budgets) &&
-        Array.isArray(parsed.recurringItems) &&
-        Array.isArray(parsed.savingsGoals)
-      ) {
-        return parsed as FinanceState;
+      const sanitized = sanitizeState(parsed);
+      if (sanitized) {
+        return sanitized;
       }
     }
   } catch {

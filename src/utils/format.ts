@@ -103,7 +103,7 @@ export function getDeductibleBusinessAmount(tx: Transaction): number {
 export function exportTransactionsToCSV(
   transactions: Transaction[],
   accountMap: Record<string, string>,
-  filename = 'kakeibo-transactions.csv'
+  filename = 'dmm-transactions.csv'
 ): void {
   const header = [
     '日付',

@@ -170,7 +170,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
     exportTransactionsToCSV(
       relevant,
       accountNameMap,
-      `kakeibo-tax-${selectedYear}.csv`
+      `dmm-tax-${selectedYear}.csv`
     );
   };
 
@@ -300,10 +300,10 @@ export const TaxView: React.FC<TaxViewProps> = ({
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs text-slate-500">
-                  <th className="py-2 font-medium">所得区分</th>
-                  <th className="py-2 text-right font-medium">件数</th>
-                  <th className="py-2 text-right font-medium">源泉徴収</th>
-                  <th className="py-2 text-right font-medium">金額</th>
+                  <th className="py-2 pr-3 font-medium">所得区分</th>
+                  <th className="py-2 px-3 text-right font-medium whitespace-nowrap">件数</th>
+                  <th className="py-2 px-3 text-right font-medium whitespace-nowrap">源泉徴収</th>
+                  <th className="py-2 pl-3 text-right font-medium whitespace-nowrap">金額</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -316,18 +316,18 @@ export const TaxView: React.FC<TaxViewProps> = ({
                 ) : (
                   taxSummary.incomeByTaxCategory.map(([key, data]) => (
                     <tr key={key}>
-                      <td className="py-2.5 font-medium text-slate-900">
+                      <td className="py-2.5 pr-3 font-medium text-slate-900">
                         {INCOME_TAX_CATEGORY_LABELS[
                           key as keyof typeof INCOME_TAX_CATEGORY_LABELS
                         ] ?? key}
                       </td>
-                      <td className="py-2.5 text-right font-mono text-xs text-slate-500 tabular-nums">
+                      <td className="py-2.5 px-3 text-right font-mono text-xs text-slate-500 tabular-nums whitespace-nowrap">
                         {data.count}件
                       </td>
-                      <td className="py-2.5 text-right font-mono text-xs text-slate-600 tabular-nums">
+                      <td className="py-2.5 px-3 text-right font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
                         {formatJPY(data.withholding)}
                       </td>
-                      <td className="py-2.5 text-right font-mono font-semibold text-emerald-700 tabular-nums">
+                      <td className="py-2.5 pl-3 text-right font-mono font-semibold text-emerald-700 tabular-nums whitespace-nowrap">
                         {formatJPY(data.amount)}
                       </td>
                     </tr>
@@ -456,30 +456,29 @@ export const TaxView: React.FC<TaxViewProps> = ({
                   key={tx.id}
                   type="button"
                   onClick={() => onEditTransaction(tx)}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-3 text-left hover:bg-slate-50"
+                  className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left hover:bg-slate-50"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-slate-900">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium leading-snug text-slate-900 break-words">
                       {tx.title}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
                       <span className="tabular-nums">{formatFullDate(tx.date)}</span>
                       <span aria-hidden="true">·</span>
                       <span>
-                        {
-                          INCOME_TAX_CATEGORY_LABELS[
-                            tx.incomeTaxCategory ?? 'miscellaneous'
-                          ]
-                        }
+                        {INCOME_TAX_CATEGORY_LABELS[
+                          tx.incomeTaxCategory ?? 'miscellaneous'
+                        ] ?? '雑所得'}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span>
-                        {RECEIPT_METHOD_LABELS[tx.receiptMethod ?? 'bank_transfer']}
+                        {RECEIPT_METHOD_LABELS[tx.receiptMethod ?? 'bank_transfer'] ??
+                          '銀行振込'}
                       </span>
                       {tx.counterparty && (
                         <>
                           <span aria-hidden="true">·</span>
-                          <span>{tx.counterparty}</span>
+                          <span className="break-words">{tx.counterparty}</span>
                         </>
                       )}
                     </div>
@@ -518,13 +517,13 @@ export const TaxView: React.FC<TaxViewProps> = ({
                     key={tx.id}
                     type="button"
                     onClick={() => onEditTransaction(tx)}
-                    className="flex w-full items-center justify-between gap-4 px-6 py-3 text-left hover:bg-slate-50"
+                    className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left hover:bg-slate-50"
                   >
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-slate-900">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium leading-snug text-slate-900 break-words">
                         {tx.title}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
                         <span className="tabular-nums">{formatFullDate(tx.date)}</span>
                         <span aria-hidden="true">·</span>
                         <span>

@@ -378,6 +378,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     <AnimatePresence>
       {open && (
         <motion.div
+          key="tx-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -411,7 +412,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <form onSubmit={handleSubmit} className="space-y-5 p-6">
               {/* Type & Scope Bar */}
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="grid min-w-[240px] flex-1 grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+                <div className="grid w-full grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto sm:min-w-[240px] sm:flex-1">
                   <button
                     type="button"
                     onClick={() => handleTypeChange('expense')}
@@ -623,7 +624,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {type === 'transfer' && (
                 <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
                   <div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <label htmlFor="tx-fee" className="text-xs font-medium text-slate-700">
                         振替・振込手数料 (円)
                       </label>
@@ -754,7 +755,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       </div>
 
                       <div>
-                        <div className="flex items-center justify-between text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span className="font-medium text-slate-700">
                             家事按分率: <strong className="font-mono">{businessRatio}%</strong>
                           </span>
@@ -854,7 +855,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <label className="block text-xs font-medium text-slate-700">
                           源泉徴収税額 (円・任意)
                         </label>

@@ -107,7 +107,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white">
             <button
               type="button"
@@ -284,7 +284,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-baseline justify-between border-t border-slate-100 pt-3 text-xs">
+                <div className="mt-4 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-100 pt-3 text-xs">
                   <span className="font-mono text-slate-600 tabular-nums">
                     {formatJPY(spent)} / {formatJPY(budget.monthlyLimit)}
                   </span>

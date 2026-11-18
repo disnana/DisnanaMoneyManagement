@@ -50,16 +50,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navContent = (
     <div className="flex h-full flex-col justify-between bg-white">
       <div className="overflow-y-auto">
-        <div className="flex h-16 items-center justify-between border-b border-slate-200 px-6">
+        <div className="flex min-h-16 items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
           <button
             type="button"
             onClick={() => {
               onSelectSection('dashboard');
               onCloseMobile();
             }}
-            className="text-left text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap"
+            className="text-left min-w-0"
           >
-            Kakeibo
+            <span className="block text-[13px] font-bold tracking-tight text-slate-900 leading-snug break-words">
+              DisnanaMoneyManagement
+            </span>
+            <span className="block text-[11px] font-mono font-semibold text-teal-700 leading-tight mt-0.5">
+              (DMM)
+            </span>
           </button>
           <button
             type="button"
@@ -119,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onOpenDataModal();
             onCloseMobile();
           }}
-          className="flex w-full items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 whitespace-nowrap"
+          className="flex w-full items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
         >
           <Database className="h-4 w-4 shrink-0 text-slate-500" />
           <span>データ管理・バックアップ</span>
