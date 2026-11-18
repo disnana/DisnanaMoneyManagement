@@ -40,7 +40,7 @@ export default function Accounts() {
         title={a.name}
         subtitle={a.institution ? `${ACCOUNT_TYPE_LABELS[a.type]} · ${a.institution}` : ACCOUNT_TYPE_LABELS[a.type]}
         right={a.type === 'debit' ? undefined : formatJPY(bal)}
-        rightColor={bal < 0 ? p.danger : undefined}
+        rightColor={bal < 0 ? p.danger : p.income}
       />
     );
   };

@@ -18,7 +18,6 @@ type Store = ReturnType<typeof useFinanceStore> & {
   activeLedger: Ledger | undefined;
   setActiveLedgerId: (id: string | null) => void;
   visibleState: ReturnType<typeof useFinanceStore>['state'];
-  visibleAssets: number;
 };
 
 const Ctx = React.createContext<Store | null>(null);
@@ -34,9 +33,6 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     () => filterLedger(store.state, activeLedger?.id ?? null),
     [store.state, activeLedger?.id]
   );
-  const visibleAssets = activeLedger
-    ? visibleState.accounts.reduce((sum, account) => sum + (store.accountBalances[account.id] ?? 0), 0)
-    : store.totalAssets;
   const showSavedTransaction = React.useCallback((date: string, type: TransactionType, ledgerId: string) => {
     setMonth(date.slice(0, 7));
     setTransactionFilter((filter) => filter === type ? filter : 'all');
@@ -44,7 +40,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const value = {
     ...store, month, setMonth, transactionFilter, setTransactionFilter, showSavedTransaction,
-    ledgers, activeLedger, setActiveLedgerId, visibleState, visibleAssets,
+    ledgers, activeLedger, setActiveLedgerId, visibleState,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -58,8 +58,8 @@ function TransactionsMonth({ month, calendar, isPreview }: { month: string; cale
       <Group>
         <View style={{ flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, gap: 8 }}>
           {[{ label: '収入', value: totals.income, color: p.income },
-            { label: '支出', value: totals.expense, color: p.danger },
-            { label: '収支', value: totals.net, color: p.text }].map(({ label, value, color }) => (
+            { label: '支出', value: totals.expense, color: totals.expense === 0 ? p.income : p.danger },
+            { label: '収支', value: totals.net, color: totals.net < 0 ? p.danger : p.income }].map(({ label, value, color }) => (
             <View key={label} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
               <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
               <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 17, fontWeight: '700' }}>{formatJPY(value)}</Text>

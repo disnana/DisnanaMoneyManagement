@@ -5,6 +5,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
+import { MonthPicker } from './MonthPicker';
 
 /** Scrollable screen. On iOS the transparent large-title bar insets content automatically. */
 export function Screen({ children, ...rest }: ScrollViewProps & { children: ReactNode }) {
@@ -189,69 +190,21 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
     </Pressable>
   );
   return (
-    <View style={{ gap: 8 }}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-      {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
-      <View style={{ minWidth: 150, alignItems: 'center', justifyContent: 'center', height: 44 }}>
-        <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
-          style={{ position: 'absolute', inset: 0 }}
-          onPress={() => {
-            tick();
-            setOpen((v) => !v);
-          }}
-        />
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+        {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
+        <Pressable accessibilityRole="button" accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
+          onPress={() => { tick(); setOpen(true); }}
+          style={{ minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+          <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
+        </Pressable>
+        {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
       </View>
-      {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
-      </View>
-      {open ? <MonthPanel month={month} onPick={(m) => { onChange(m); setOpen(false); }} /> : null}
-    </View>
-  );
-}
-
-/** Year + month only, expanded in place under the bar: no modal, no animation, instant to open and re-open. */
-function MonthPanel({ month, onPick }: { month: string; onPick: (m: string) => void }) {
-  const p = usePalette();
-  const [selYear, selMonth] = month.split('-').map(Number);
-  const [year, setYear] = useState(selYear);
-  const stepper = (delta: number, name: SymbolViewProps['name']) => (
-    <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y + delta); }} style={{ width: 48, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-      <SymbolView name={name} size={18} tintColor={p.tint} />
-    </Pressable>
-  );
-  return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius + 4, padding: 12, gap: 8 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        {stepper(-1, { ios: 'chevron.left', android: 'chevron_left' })}
-        <Text style={{ color: p.text, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{year}年</Text>
-        {stepper(1, { ios: 'chevron.right', android: 'chevron_right' })}
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-          const active = year === selYear && m === selMonth;
-          return (
-            <Pressable
-              key={m}
-              onPress={() => {
-                tick();
-                onPick(`${year}-${String(m).padStart(2, '0')}`);
-              }}
-              style={{
-                width: '23%',
-                flexGrow: 1,
-                minHeight: 46,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: metrics.controlRadius + 2,
-                backgroundColor: active ? p.tint : p.fill,
-              }}>
-              <Text style={{ color: active ? p.onTint : p.text, fontSize: 16, fontWeight: active ? '700' : '500' }}>{m}月</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
+      {open ? <MonthPicker month={month} onCancel={() => setOpen(false)} onPick={(m) => {
+        setOpen(false);
+        onChange(m);
+      }} /> : null}
+    </>
   );
 }

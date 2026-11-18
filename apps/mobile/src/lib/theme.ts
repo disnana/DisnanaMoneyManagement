@@ -27,7 +27,7 @@ const light: Palette = {
   separator: 'transparent',
   tint: '#0F766E',
   onTint: '#FFFFFF',
-  income: '#0B7A4B',
+  income: '#0759AF',
   expense: '#16201F',
   danger: '#B3261E',
 };
@@ -41,7 +41,7 @@ const dark: Palette = {
   separator: 'transparent',
   tint: '#5EEAD4',
   onTint: '#00201C',
-  income: '#6EE7A8',
+  income: '#78B9FF',
   expense: '#E6EEEC',
   danger: '#F2B8B5',
 };

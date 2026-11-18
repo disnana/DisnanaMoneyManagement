@@ -40,6 +40,8 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
   const bank = state.accounts.find((a) => a.id === account?.linkedBankAccountId && a.type === 'bank');
   const summary = account?.type === 'credit' ? computeCreditCardSummary(account, state.transactions, bal, month) : undefined;
   const debitSpend = list.reduce((sum, tx) => sum + (tx.type === 'expense' && tx.accountId === id ? getEffectiveOutflow(tx) : 0), 0);
+  const displayBalance = summary?.totalUnpaidBalance ?? (account?.type === 'debit' ? debitSpend : bal);
+  const negativeBalance = isCard ? displayBalance > 0 : displayBalance < 0;
 
   return (
     <>
@@ -50,8 +52,8 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
             <Text style={{ color: p.textSecondary, fontSize: 13, textAlign: 'center' }}>
               {summary ? '現在の未払い残高' : account.type === 'debit' ? '選択月の利用額' : '現在の残高'}
             </Text>
-            <Text style={{ color: bal < 0 ? p.danger : p.text, fontSize: 34, fontWeight: '800', textAlign: 'center', marginTop: -14, fontVariant: ['tabular-nums'] }}>
-              {formatJPY(summary?.totalUnpaidBalance ?? (account.type === 'debit' ? debitSpend : bal))}
+            <Text style={{ color: negativeBalance ? p.danger : p.income, fontSize: 34, fontWeight: '800', textAlign: 'center', marginTop: -14, fontVariant: ['tabular-nums'] }}>
+              {formatJPY(displayBalance)}
             </Text>
             <Group>
               <Row title="家計グループ" right={ledger?.name} chevron

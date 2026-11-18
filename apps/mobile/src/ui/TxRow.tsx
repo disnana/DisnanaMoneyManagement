@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import type { Transaction } from '@dmm/core/types/finance';
 import { getCategoryById } from '@dmm/core/data/categories';
-import { formatSignedJPY, formatShortDate } from '@dmm/core/utils/format';
+import { formatJPY, formatSignedJPY, formatShortDate } from '@dmm/core/utils/format';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
@@ -45,8 +45,8 @@ export function TxRow({ tx, showDate }: { tx: Transaction; showDate?: boolean })
       iconColor={cat.color}
       title={tx.title}
       subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${tx.type === 'transfer' ? `${acc} → ${to}` : `${cat.name} · ${acc}`}`}
-      right={formatSignedJPY(tx.amount, tx.type)}
-      rightColor={tx.type === 'income' ? p.income : p.text}
+      right={tx.amount === 0 ? formatJPY(0) : formatSignedJPY(tx.amount, tx.type)}
+      rightColor={tx.amount === 0 || tx.type === 'income' ? p.income : tx.type === 'expense' ? p.danger : p.text}
       onPress={() => router.push({ pathname: '/add', params: { id: tx.id } })}
       onLongPress={onLongPress}
     />

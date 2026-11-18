@@ -13,7 +13,7 @@ const light: Palette = {
   separator: 'rgba(60,60,67,0.18)',
   tint: '#0F766E',
   onTint: '#FFFFFF',
-  income: '#187A42', // 5.4:1 on white
+  income: '#0759AF', // accessible blue on grouped backgrounds
   expense: '#000000',
   danger: '#D70015', // Apple's accessible red; #FF3B30 is only 3.6:1 on white
 };
@@ -27,7 +27,7 @@ const dark: Palette = {
   separator: 'rgba(84,84,88,0.6)',
   tint: '#2DD4BF',
   onTint: '#00201C',
-  income: '#30D158',
+  income: '#78B9FF',
   expense: '#FFFFFF',
   danger: '#FF453A',
 };
