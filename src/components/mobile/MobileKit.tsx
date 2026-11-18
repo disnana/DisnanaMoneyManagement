@@ -181,6 +181,9 @@ export const SwipeRow: React.FC<{
   const openRef = useRef(open);
   openRef.current = open;
   const g = useRef({ id: -1, x0: 0, y0: 0, t0: 0, base: 0, dx: 0, locked: false, dragging: false, cancelled: false });
+  // true once the finger moved noticeably: the click that follows must NOT count as a tap
+  const movedRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const setX = (v: number, withTransition: boolean) => {
     const el = surfaceRef.current;
@@ -198,6 +201,40 @@ export const SwipeRow: React.FC<{
     setX(open ? -total : 0, true);
   }, [open, total]);
 
+  // An open row closes when you touch elsewhere or scroll (iOS Mail behaviour)
+  useEffect(() => {
+    if (!open) return;
+    const close = () => onOpenChange(false);
+    const onDown = (ev: PointerEvent) => {
+      if (rootRef.current && ev.target instanceof Node && rootRef.current.contains(ev.target)) return;
+      // Touching elsewhere only closes the row: swallow the click that follows this touch
+      const swallow = (c: Event) => {
+        c.stopPropagation();
+        c.preventDefault();
+      };
+      document.addEventListener('click', swallow, { capture: true, once: true });
+      window.setTimeout(() => document.removeEventListener('click', swallow, true), 500);
+      close();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [open, onOpenChange]);
+
+  // Native click: iOS withholds it when the touch merely stopped momentum scrolling or began a scroll,
+  // so a stray touch can never open the editor.
+  const onClick = () => {
+    if (movedRef.current || g.current.dragging) {
+      movedRef.current = false;
+      return;
+    }
+    if (openRef.current) onOpenChange(false);
+    else onTap();
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     g.current = {
@@ -211,6 +248,7 @@ export const SwipeRow: React.FC<{
       dragging: false,
       cancelled: false,
     };
+    movedRef.current = false;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -218,6 +256,7 @@ export const SwipeRow: React.FC<{
     if (e.pointerId !== s.id || s.cancelled) return;
     const dx = e.clientX - s.x0;
     const dy = e.clientY - s.y0;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) movedRef.current = true;
     if (!s.locked) {
       if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) {
         s.locked = true;
@@ -253,14 +292,10 @@ export const SwipeRow: React.FC<{
       onOpenChange(shouldOpen);
       return;
     }
-    if (!s.cancelled && !cancelled && Math.abs(e.clientX - s.x0) < 8 && Math.abs(e.clientY - s.y0) < 8) {
-      if (openRef.current) onOpenChange(false);
-      else onTap();
-    }
   };
 
   return (
-    <div data-no-tab-swipe="true" className="relative overflow-hidden bg-white">
+    <div ref={rootRef} data-no-tab-swipe="true" className="relative overflow-hidden bg-white">
       <div className="absolute inset-y-0 right-0 flex" style={{ width: total }}>
         <button
           type="button"
@@ -296,6 +331,7 @@ export const SwipeRow: React.FC<{
         onPointerMove={onPointerMove}
         onPointerUp={(e) => finish(e, false)}
         onPointerCancel={(e) => finish(e, true)}
+        onClick={onClick}
         style={{ touchAction: 'pan-y' }}
         className="relative bg-white active:bg-slate-50"
       >
