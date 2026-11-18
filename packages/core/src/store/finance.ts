@@ -357,16 +357,16 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     });
   }, []);
 
-  const addLedger = useCallback((name: string, kind: Ledger['kind']) => {
+  const addLedger = useCallback((name: string, kind: Ledger['kind'], appearance?: Pick<Ledger, 'icon' | 'color'>) => {
     const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind }] }));
+    setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind, ...appearance }] }));
     return id;
   }, []);
 
-  const renameLedger = useCallback((id: string, name: string) => {
+  const updateLedger = useCallback((id: string, changes: Partial<Pick<Ledger, 'name' | 'icon' | 'color'>>) => {
     setState((prev) => ({
       ...prev,
-      ledgers: getLedgers(prev).map((ledger) => ledger.id === id ? { ...ledger, name } : ledger),
+      ledgers: getLedgers(prev).map((ledger) => ledger.id === id ? { ...ledger, ...changes } : ledger),
     }));
   }, []);
 
@@ -550,7 +550,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     setCategoryOrder,
     setCategoryHidden,
     addLedger,
-    renameLedger,
+    updateLedger,
     deleteLedger,
     setLedgerTaxExemption,
     upsertBudget,

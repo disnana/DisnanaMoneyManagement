@@ -7,16 +7,18 @@ import { assessPurchaseForMonth } from '@dmm/core/utils/planning';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
-import { PurchaseCashPreview } from '@/ui/PurchaseCashPreview';
-import { PurchaseDeleteDialog, type PurchaseDeleteAnchor } from '@/ui/PurchaseDeleteDialog';
-import { Screen } from '@/ui/kit';
+import { PurchaseBankPicker, PurchaseCashPreview, usePurchaseBank } from '@/ui/PurchaseCashPreview';
+import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { Group, Screen } from '@/ui/kit';
 
 export default function PurchaseCompare() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, removePurchaseCandidate } = useFinance();
   const p = usePalette();
-  const [deleteAnchor, setDeleteAnchor] = useState<PurchaseDeleteAnchor>();
+  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
   const candidate = state.purchaseCandidates?.find((item) => item.id === id);
+  const payment = usePurchaseBank(candidate?.ledgerId);
   const category = candidate ? getCategoryById(candidate.categoryId, state.customCategories) : undefined;
   const price = candidate?.foreignPrice;
 
@@ -41,13 +43,14 @@ export default function PurchaseCompare() {
                 {formatForeignCurrency(price.amount, price.currency)} · レート {price.yenPerUnit}円{price.feeJPY ? ` · 手数料 ${formatJPY(price.feeJPY)}` : ''}
               </Text> : null}
             </View>
-            <PurchaseCashPreview amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId}
+            <Group><PurchaseBankPicker {...payment} /></Group>
+            <PurchaseCashPreview amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId} bank={payment.bank} banks={payment.banks}
               budget={assessPurchaseForMonth(state, candidate.month, candidate.categoryId, candidate.amount, candidate.ledgerId)}
               nextBudget={assessPurchaseForMonth(state, shiftMonth(candidate.month, 1), candidate.categoryId, candidate.amount, candidate.ledgerId)} />
           </>
         ) : <Text style={{ color: p.textSecondary }}>購入候補が見つかりません</Text>}
       </Screen>
-      <PurchaseDeleteDialog title={deleteAnchor ? candidate?.title : undefined} anchor={deleteAnchor} onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+      <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={deleteAnchor ? candidate?.title : undefined} anchor={deleteAnchor} onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
         if (!candidate) return;
         setDeleteAnchor(undefined);
         removePurchaseCandidate(candidate.id);

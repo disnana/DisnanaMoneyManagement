@@ -5,7 +5,8 @@ import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary, getCycleRangeLabel } from '@dmm/core/utils/creditCard';
 import { formatDayLabel, formatJPY, formatMonthLabel, getEffectiveOutflow } from '@dmm/core/utils/format';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
-import { pickOne } from '@/lib/pick';
+import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
+import { pickNear } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, SectionTitle } from '@/ui/kit';
@@ -33,6 +34,7 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
     () => state.transactions.filter((t) => (t.accountId === id || t.toAccountId === id) && t.date.slice(0, 7) === month),
     [state.transactions, id, month]
   );
+  const ledger = account ? getAccountLedger(account, ledgers) : undefined;
   const bal = accountBalances[id] ?? 0;
   const isCard = account?.type === 'credit' || account?.type === 'debit';
   const bank = state.accounts.find((a) => a.id === account?.linkedBankAccountId && a.type === 'bank');
@@ -52,8 +54,9 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
               {formatJPY(summary?.totalUnpaidBalance ?? (account.type === 'debit' ? debitSpend : bal))}
             </Text>
             <Group>
-              <Row title="家計グループ" right={getAccountLedger(account, ledgers).name} chevron onPress={async () => {
-                const choice = await pickOne('家計グループ', ledgers.map(({ id, name }) => ({ id, label: name })));
+              <Row title="家計グループ" right={ledger?.name} chevron
+                icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)} onPress={async (event) => {
+                const choice = await pickNear(event, '家計グループ', ledgerOptions(ledgers, ledger?.id));
                 if (choice) updateAccount(account.id, { ledgerId: choice });
               }} />
             </Group>

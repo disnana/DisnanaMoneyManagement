@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { useState } from 'react';
-import { Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, type PressableProps, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -84,7 +84,7 @@ export function Row({
   subtitle?: string;
   right?: string;
   rightColor?: string;
-  onPress?: () => void;
+  onPress?: PressableProps['onPress'];
   onLongPress?: () => void;
   chevron?: boolean;
 }) {

@@ -1,24 +1,33 @@
-import { Pressable, type PressableProps } from 'react-native';
+import { Pressable, View, type PressableProps } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
 
-export function HeaderAction({ name, label, onPress, selected, accent }: {
+export function HeaderAction({ name, label, onPress, selected, accent, circular, disabled }: {
   name: SymbolViewProps['name'];
   label: string;
   onPress: NonNullable<PressableProps['onPress']>;
   selected?: boolean;
   accent?: boolean;
+  circular?: boolean;
+  disabled?: boolean;
 }) {
   const p = usePalette();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected }}
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected, disabled }} disabled={disabled}
       onPress={(event) => { tick(); onPress(event); }}
       style={({ pressed }) => ({
-        width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
-        borderRadius: accent ? 22 : 12, backgroundColor: selected || pressed ? p.fill : 'transparent',
+        width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.45 : 1,
+        borderRadius: accent ? 22 : 12, backgroundColor: !circular && (selected || pressed) ? p.fill : 'transparent',
       })}>
-      <SymbolView name={name} size={accent ? 22 : 20} tintColor={selected || accent ? p.tint : p.text} />
+      {({ pressed }) => circular ? (
+        <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: pressed ? p.tint : p.fill }}>
+          <SymbolView name={name} size={22} tintColor={pressed ? p.onTint : p.tint} />
+        </View>
+      ) : (
+        <SymbolView name={name} size={accent ? 22 : 20} tintColor={selected || accent ? p.tint : p.text} />
+      )}
     </Pressable>
   );
 }

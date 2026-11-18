@@ -1,17 +1,20 @@
+import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { getOrderedCategories } from '@dmm/core/data/categories';
 import { categoryIcon } from '@/lib/categoryIcons';
-import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { Group, IconBadge, Row, Screen } from '@/ui/kit';
 
 export default function CategoryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, setCategoryHidden } = useFinance();
   const p = usePalette();
+  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
   const category = getOrderedCategories('expense', state.customCategories).concat(getOrderedCategories('income', state.customCategories))
     .find((item) => item.id === id);
   const hidden = state.hiddenCategoryIds?.includes(id);
@@ -20,10 +23,8 @@ export default function CategoryDetail() {
     <>
       <Stack.Screen options={{ title: 'カテゴリ', headerRight: category ? () => (
         <View style={{ flexDirection: 'row' }}>
-          {!hidden ? <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="削除" onPress={async () => {
-            const choice = await pickOne(`「${category.name}」を入力候補から削除`, [{ id: 'hide', label: '削除（履歴には残す）', destructive: true }]);
-            if (choice === 'hide') { setCategoryHidden(id, true); router.back(); }
-          }} /> : null}
+          {!hidden ? <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="削除"
+            onPress={({ nativeEvent }) => setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY })} /> : null}
           <HeaderAction name={{ ios: 'pencil', android: 'edit' }} label="編集"
             onPress={() => router.push({ pathname: '/category-editor', params: { id } })} />
         </View>
@@ -49,6 +50,13 @@ export default function CategoryDetail() {
           </>
         ) : <Text style={{ color: p.textSecondary }}>カテゴリが見つかりません</Text>}
       </Screen>
+      <AnchoredDeleteDialog heading="カテゴリを削除しますか？" title={category?.name} anchor={deleteAnchor}
+        description="過去の取引にはカテゴリ名が残ります。"
+        onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+          setCategoryHidden(id, true);
+          setDeleteAnchor(undefined);
+          router.back();
+        }} />
     </>
   );
 }

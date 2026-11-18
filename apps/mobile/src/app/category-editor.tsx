@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
@@ -6,6 +6,7 @@ import { getOrderedCategories } from '@dmm/core/data/categories';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, IconBadge, Screen, SectionTitle, Segmented } from '@/ui/kit';
 
 const ICONS = [
@@ -32,12 +33,25 @@ export default function CategoryEditor() {
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [icon, setIcon] = useState(editing?.icon ?? editing?.id ?? 'daily');
   const [color, setColor] = useState(editing?.color ?? COLORS[0].value);
+  const closing = useRef(false);
   const taken = getOrderedCategories(type, state.customCategories)
     .some((category) => category.id !== editing?.id && category.type === type && category.name === name.trim());
+  const canSave = Boolean(name.trim()) && !taken;
+  const save = () => {
+    if (!canSave || closing.current) return;
+    closing.current = true;
+    saveCustomCategory({ name: name.trim(), type, icon, color, memo: memo.trim() || undefined,
+      defaultAccountingSubject: editing?.defaultAccountingSubject }, editing?.id);
+    router.back();
+  };
 
   return (
     <>
-      <Stack.Screen options={{ title: editing ? 'カテゴリを編集' : 'カテゴリを追加' }} />
+      <Stack.Screen options={{
+        title: editing ? 'カテゴリを編集' : 'カテゴリを追加',
+        headerRight: () => <HeaderAction name={{ ios: 'checkmark', android: 'check' }}
+          label="カテゴリを保存" accent disabled={!canSave} onPress={save} />,
+      }} />
       <Screen automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         {!editing ? <Segmented value={type} onChange={setType} options={[{ id: 'expense', label: '支出' }, { id: 'income', label: '収入' }]} /> : null}
         <Group>
@@ -74,14 +88,6 @@ export default function CategoryEditor() {
             </Pressable>
           ))}
         </View>
-        <Pressable accessibilityRole="button" disabled={taken || !name.trim()} onPress={() => {
-          saveCustomCategory({ name: name.trim(), type, icon, color, memo: memo.trim() || undefined,
-            defaultAccountingSubject: editing?.defaultAccountingSubject }, editing?.id);
-          router.back();
-        }} style={{ minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: p.tint,
-          opacity: taken || !name.trim() ? 0.45 : 1 }}>
-          <Text style={{ color: p.onTint, fontWeight: '700' }}>カテゴリを保存</Text>
-        </Pressable>
       </Screen>
     </>
   );

@@ -3,7 +3,8 @@ import { Alert, Text, TextInput } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { formatDayLabel } from '@dmm/core/utils/format';
-import { pickOne } from '@/lib/pick';
+import { ACCOUNT_ICONS } from '@/lib/accountIcons';
+import { pickNear, pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
@@ -101,14 +102,16 @@ export default function CardSettings() {
                 style={inputStyle}
               />
               <Row title="引落口座" right={bank?.name ?? '未選択'} chevron={!fixedBank}
-                onPress={fixedBank ? undefined : async () => {
-                  const options = banks.map((account) => ({ id: account.id, label: account.name }));
-                  if (type === 'credit') options.push({ id: '', label: '指定なし' });
+                onPress={fixedBank ? undefined : async (event) => {
+                  const options: PickOption[] = banks.map((account) => ({
+                    id: account.id, label: account.name, icon: ACCOUNT_ICONS.bank, selected: bankId === account.id,
+                  }));
+                  if (type === 'credit') options.push({ id: '', label: '指定なし', selected: !bankId });
                   if (options.length === 0) {
                     Alert.alert('登録済みの銀行口座がありません');
                     return;
                   }
-                  const choice = await pickOne('引落口座', options);
+                  const choice = await pickNear(event, '引落口座', options);
                   if (choice !== null) setBankId(choice || undefined);
                 }}
               />

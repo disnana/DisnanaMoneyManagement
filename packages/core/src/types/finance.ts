@@ -18,6 +18,8 @@ export interface Ledger {
   id: string;
   name: string;
   kind: AccountUsageScope;
+  icon?: string;
+  color?: string;
   taxExemptions?: Partial<Record<number, number>>;
 }
 

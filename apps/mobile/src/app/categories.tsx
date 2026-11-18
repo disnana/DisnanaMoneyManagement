@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -8,10 +8,11 @@ import { getOrderedCategories } from '@dmm/core/data/categories';
 import type { CategoryDef } from '@dmm/core/types/finance';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { tick } from '@/lib/haptics';
-import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { AnchoredPopover, type PopoverAnchor } from '@/ui/AnchoredPopover';
+import { DeleteConfirmation } from '@/ui/AnchoredDeleteDialog';
 import { Group, IconBadge, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 
 const ROW_HEIGHT = 62;
@@ -25,7 +26,7 @@ function CategoryRow({ category, index, count, from, target, offset, move, menu 
   target: SharedValue<number>;
   offset: SharedValue<number>;
   move: (from: number, to: number) => void;
-  menu: () => void;
+  menu: NonNullable<PressableProps['onPress']>;
 }) {
   const p = usePalette();
   const gesture = usePanGesture({
@@ -102,6 +103,7 @@ export default function Categories() {
   const { state, setCategoryOrder, setCategoryHidden } = useFinance();
   const p = usePalette();
   const [type, setType] = useState<Kind>(initial === 'income' ? 'income' : 'expense');
+  const [menu, setMenu] = useState<{ category: CategoryDef; anchor: PopoverAnchor; confirming: boolean }>();
   const from = useSharedValue(-1);
   const target = useSharedValue(-1);
   const offset = useSharedValue(0);
@@ -123,14 +125,6 @@ export default function Categories() {
     setCategoryOrder(type, ids);
   };
 
-  const menu = async (category: CategoryDef) => {
-    const choice = await pickOne(category.name, [
-      { id: 'edit', label: '編集' }, { id: 'hide', label: '削除（履歴には残す）', destructive: true },
-    ]);
-    if (choice === 'edit') router.push({ pathname: '/category-editor', params: { id: category.id } });
-    if (choice === 'hide') setCategoryHidden(category.id, true);
-  };
-
   return (
     <>
       <Stack.Screen options={{ title: 'カテゴリ管理', headerRight: () => (
@@ -144,7 +138,9 @@ export default function Categories() {
           <View style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: p.card }}>
             {categories.map((category, index) => (
               <CategoryRow key={category.id} category={category} index={index} count={categories.length}
-                from={from} target={target} offset={offset} move={move} menu={() => void menu(category)} />
+                from={from} target={target} offset={offset} move={move} menu={({ nativeEvent }) => {
+                  setMenu({ category, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY }, confirming: false });
+                }} />
             ))}
           </View>
         ) : <Text style={{ color: p.textSecondary }}>表示中のカテゴリはありません</Text>}
@@ -159,6 +155,28 @@ export default function Categories() {
           </>
         ) : null}
       </Screen>
+      {menu ? (
+        <AnchoredPopover anchor={menu.anchor} onClose={() => setMenu(undefined)}
+          width={menu.confirming ? 280 : 180} initialHeight={104}>
+          {menu.confirming ? (
+            <DeleteConfirmation heading="カテゴリを削除しますか？" title={menu.category.name}
+              description="過去の取引にはカテゴリ名が残ります。"
+              onCancel={() => setMenu(undefined)} onDelete={() => {
+                setCategoryHidden(menu.category.id, true);
+                setMenu(undefined);
+              }} />
+          ) : (
+            <>
+              <Row title="編集" icon={{ ios: 'pencil', android: 'edit' }} onPress={() => {
+                setMenu(undefined);
+                router.push({ pathname: '/category-editor', params: { id: menu.category.id } });
+              }} />
+              <Row title="削除" icon={{ ios: 'trash', android: 'delete' }} iconColor={p.danger}
+                onPress={() => setMenu({ ...menu, confirming: true })} />
+            </>
+          )}
+        </AnchoredPopover>
+      ) : null}
     </>
   );
 }

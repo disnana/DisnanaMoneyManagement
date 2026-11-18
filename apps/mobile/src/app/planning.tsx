@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
-import type { Budget, SavingsGoal } from '@dmm/core/types/finance';
+import type { SavingsGoal } from '@dmm/core/types/finance';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
+import { filterLedger } from '@dmm/core/utils/ledgers';
 import { assessPurchase, isPlanningDate, planSavings } from '@dmm/core/utils/planning';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
@@ -13,8 +14,8 @@ import { Group, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit'
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { PlanningInput as Input, PlanningActions as Actions } from '@/ui/PlanningForm';
 import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
-import { PurchaseDeleteDialog, type PurchaseDeleteAnchor } from '@/ui/PurchaseDeleteDialog';
-import { pickCategory } from '@/lib/categoryPicker';
+import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { categoryIcon } from '@/lib/categoryIcons';
 
 type Section = 'budget' | 'savings' | 'purchase';
@@ -31,44 +32,20 @@ function useMonthlySpending({ visibleState, month }: PlanningData) {
 }
 
 function Budgets() {
-  const { state, activeLedger, visibleState, month, upsertBudget, removeBudget } = useFinance();
+  const { state, activeLedger, visibleState, month } = useFinance();
   const p = usePalette();
   const ledgerId = activeLedger?.id;
   const budgets = state.budgets.filter((item) => item.ledgerId === ledgerId);
   const spending = useMonthlySpending({ visibleState, month });
-  const [editing, setEditing] = useState<'new' | Budget>();
-  const [category, setCategory] = useState('');
-  const [amount, setAmount] = useState('');
-  const edit = (budget?: 'new' | Budget) => {
-    setEditing(budget);
-    setCategory(budget && budget !== 'new' ? budget.categoryId : '');
-    setAmount(budget && budget !== 'new' ? String(budget.monthlyLimit) : '');
+  const openEditor = (categoryId?: string) => {
+    router.push({ pathname: '/budget-editor', params: { categoryId, ledgerId } });
   };
-  const selected = getCategoryById(category, state.customCategories);
   const spent = budgets.reduce((sum, item) => sum + (spending.get(item.categoryId) ?? 0), 0);
   const limit = budgets.reduce((sum, item) => sum + item.monthlyLimit, 0);
-  const valid = Boolean(category) && Number(amount) > 0;
 
   return (
     <>
-      <SectionTitle action="追加" onAction={() => edit('new')}>月間予算</SectionTitle>
-      {editing ? (
-        <>
-          <Group>
-            <Row title="カテゴリ" right={category ? selected.name : '選択'} chevron={editing === 'new'}
-              onPress={editing === 'new' ? () => void pickCategory('expense', category, state, (id) => {
-                const budget = budgets.find((item) => item.categoryId === id);
-                setCategory(id);
-                setAmount(budget ? String(budget.monthlyLimit) : '');
-              }) : undefined} />
-            <Input label="毎月の上限（円）" value={amount} onChange={setAmount} yen />
-          </Group>
-          <Actions valid={valid} close={() => edit()} save={() => {
-            upsertBudget({ categoryId: category, monthlyLimit: Number(amount), ledgerId });
-            edit();
-          }} />
-        </>
-      ) : null}
+      <SectionTitle action="追加" onAction={() => openEditor()}>月間予算</SectionTitle>
       <Group>
         <Row title="予算を設定したカテゴリの残額" right={formatJPY(limit - spent)} rightColor={spent > limit ? p.danger : p.tint}
           subtitle={`${formatJPY(spent)} 使用 / ${formatJPY(limit)}`} />
@@ -79,11 +56,7 @@ function Budgets() {
             <Row key={budget.categoryId} title={getCategoryById(budget.categoryId, state.customCategories).name}
               subtitle={`${formatJPY(used)} 使用 / ${formatJPY(budget.monthlyLimit)}`}
               right={remaining < 0 ? `${formatJPY(-remaining)}超過` : `残り ${formatJPY(remaining)}`}
-              rightColor={remaining < 0 ? p.danger : undefined} chevron onPress={() => edit(budget)}
-              onLongPress={() => void confirmRemoval('カテゴリ予算を削除しますか？', () => {
-                removeBudget(budget.categoryId, ledgerId);
-                if (category === budget.categoryId) edit();
-              })} />
+              rightColor={remaining < 0 ? p.danger : undefined} chevron onPress={() => openEditor(budget.categoryId)} />
           );
         })}
       </Group>
@@ -190,27 +163,42 @@ function Savings() {
 }
 
 function Purchases() {
-  const { state, visibleState, activeLedger, month, removePurchaseCandidate } = useFinance();
+  const { state, activeLedger, ledgers, month, removePurchaseCandidate } = useFinance();
   const p = usePalette();
-  const [deletion, setDeletion] = useState<{ id: string; anchor: PurchaseDeleteAnchor }>();
+  const [deletion, setDeletion] = useState<{ id: string; anchor: PopoverAnchor }>();
   const ledgerId = activeLedger?.id;
-  const budgets = state.budgets.filter((budget) => budget.ledgerId === ledgerId);
-  const candidates = (state.purchaseCandidates ?? []).filter((item) => item.ledgerId === ledgerId && item.month === month);
+  const candidates = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
   const pendingDelete = candidates.find((item) => item.id === deletion?.id);
-  const spending = useMonthlySpending({ visibleState, month });
-  const totals = new Map<string, number>();
-  for (const item of candidates) totals.set(item.categoryId, (totals.get(item.categoryId) ?? 0) + item.amount);
+  const spendingByGroup = useMemo(() => {
+    const groups = new Set((state.purchaseCandidates ?? []).filter((item) => item.month === month).map((item) => item.ledgerId));
+    return new Map(Array.from(groups, (groupId) => [
+      groupId,
+      new Map(computeMonthMetrics(filterLedger(state, groupId ?? null), month).categoryBreakdown.map(({ categoryId, amount }) => [categoryId, amount])),
+    ]));
+  }, [state, month]);
+  const estimate = (groupId: string | undefined, categoryId: string, amount: number) =>
+    assessPurchase(state.budgets.find((entry) => entry.ledgerId === groupId && entry.categoryId === categoryId)?.monthlyLimit,
+      spendingByGroup.get(groupId)?.get(categoryId) ?? 0, amount);
+  const groupName = (id?: string) => ledgers.find((ledger) => ledger.id === id)?.name ?? '選択なし';
+  const totals = new Map<string | undefined, Map<string, number>>();
+  for (const item of candidates) {
+    let totalsByCategory = totals.get(item.ledgerId);
+    if (!totalsByCategory) {
+      totalsByCategory = new Map();
+      totals.set(item.ledgerId, totalsByCategory);
+    }
+    totalsByCategory.set(item.categoryId, (totalsByCategory.get(item.categoryId) ?? 0) + item.amount);
+  }
 
   return (
     <>
       <SectionTitle action="追加" onAction={() => router.push('/purchase-editor')}>購入候補</SectionTitle>
       {candidates.map((item) => {
         const category = getCategoryById(item.categoryId, state.customCategories);
-        const budget = assessPurchase(budgets.find((entry) => entry.categoryId === item.categoryId)?.monthlyLimit,
-          spending.get(item.categoryId) ?? 0, item.amount);
+        const budget = estimate(item.ledgerId, item.categoryId, item.amount);
         return (
           <Group key={item.id}>
-            <Row title={item.title} subtitle={category.name} right={formatJPY(item.amount)}
+            <Row title={item.title} subtitle={ledgerId ? category.name : `${category.name} · ${groupName(item.ledgerId)}`} right={formatJPY(item.amount)}
               icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
             <Row title="購入後のカテゴリ予算" right={formatPurchaseBudget(budget)} rightColor={budget?.shortfall ? p.danger : undefined} />
             <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
@@ -226,16 +214,15 @@ function Purchases() {
         <>
           <SectionTitle>候補をすべて買う場合</SectionTitle>
           <Group>
-            {Array.from(totals, ([id, price]) => (
-              <Row key={id} title={getCategoryById(id, state.customCategories).name} right={formatJPY(price)}
-                subtitle={formatPurchaseBudget(assessPurchase(budgets.find((entry) => entry.categoryId === id)?.monthlyLimit,
-                  spending.get(id) ?? 0, price))} />
-            ))}
+            {Array.from(totals, ([groupId, byCategory]) => Array.from(byCategory, ([id, price]) => (
+              <Row key={`${groupId ?? ''}:${id}`} title={getCategoryById(id, state.customCategories).name} right={formatJPY(price)}
+                subtitle={`${ledgerId ? '' : `${groupName(groupId)} · `}${formatPurchaseBudget(estimate(groupId, id, price))}`} />
+            ))).flat()}
           </Group>
         </>
       ) : null}
       {candidates.length === 0 ? <Text style={{ color: p.textSecondary }}>候補を追加すると、予算と購入後の残高を試算できます。</Text> : null}
-      <PurchaseDeleteDialog title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
+      <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
         if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
         setDeletion(undefined);
       }} />
