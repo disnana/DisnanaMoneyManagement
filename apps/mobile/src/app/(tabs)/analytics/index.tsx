@@ -4,9 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { getOrderedCategories } from '@dmm/core/data/categories';
-import { moveWithin } from '@dmm/core/utils/order';
 import { kv } from '@/lib/kv';
-import { MoveButtons } from '@/ui/MoveButtons';
+import { ReorderList } from '@/ui/ReorderList';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -31,7 +30,30 @@ function AnalyticsMonth({ month }: { month: string }) {
   const rank = (id: string) => { const i = fullOrder.indexOf(id); return i < 0 ? fullOrder.length : i; };
   const rows = sort === 'custom' ? [...m.categoryBreakdown].sort((a, b) => rank(a.categoryId) - rank(b.categoryId)) : m.categoryBreakdown;
   const shown = new Set(rows.map((r) => r.categoryId));
-  const move = (id: string, delta: -1 | 1) => setCategoryOrder('expense', moveWithin(fullOrder, id, delta, (x) => shown.has(x)));
+  const reorder = (ids: string[]) => {
+    let next = 0;
+    setCategoryOrder('expense', fullOrder.map((id) => (shown.has(id) ? ids[next++] : id)));
+  };
+  const reorderable = sort === 'custom' ? rows.filter((r) => r.categoryId !== 'transfer_fee') : [];
+
+  const categoryRow = (c: (typeof rows)[number]) => (
+    <Pressable
+      key={c.categoryId}
+      onPress={() => router.push({ pathname: '/analytics/category', params: { id: c.categoryId } })}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: pressed ? p.fill : 'transparent' })}>
+      <IconBadge name={categoryIcon(visibleState.customCategories?.find((item) => item.id === c.categoryId)?.icon ?? c.categoryId)} color={c.color} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>{c.name}</Text>
+        <View style={{ height: 6, borderRadius: 3, backgroundColor: p.fill, marginTop: 6, overflow: 'hidden' }}>
+          <View style={{ width: `${Math.round(c.share * 100)}%`, height: 6, backgroundColor: c.color }} />
+        </View>
+      </View>
+      <View style={{ alignItems: 'flex-end' }}>
+        <Text style={{ color: p.text, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(c.amount)}</Text>
+        <Text style={{ color: p.textSecondary, fontSize: 12 }}>{Math.round(c.share * 100)}%</Text>
+      </View>
+    </Pressable>
+  );
 
   return (
     <>
@@ -45,7 +67,10 @@ function AnalyticsMonth({ month }: { month: string }) {
 
       <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
       {m.categoryBreakdown.length > 1 ? (
-        <Segmented<'amount' | 'custom'> value={sort} onChange={setSort} options={[{ id: 'amount', label: '金額順' }, { id: 'custom', label: '並び順（変更できます）' }]} />
+        <Segmented<'amount' | 'custom'> value={sort} onChange={setSort} options={[{ id: 'amount', label: '金額順' }, { id: 'custom', label: '並び順' }]} />
+      ) : null}
+      {sort === 'custom' && m.categoryBreakdown.length > 1 ? (
+        <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>右の ≡ を押したまま上下にドラッグして並び替えます。</Text>
       ) : null}
       {m.categoryBreakdown.length === 0 ? (
         <Group>
@@ -54,33 +79,16 @@ function AnalyticsMonth({ month }: { month: string }) {
           </View>
         </Group>
       ) : (
-        <Group>
-          {rows.map((c, index) => (
-            <View key={c.categoryId} style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Pressable
-              onPress={() => router.push({ pathname: '/analytics/category', params: { id: c.categoryId } })}
-              style={({ pressed }) => ({ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: pressed ? p.fill : 'transparent' })}>
-              <IconBadge name={categoryIcon(visibleState.customCategories?.find((item) => item.id === c.categoryId)?.icon ?? c.categoryId)} color={c.color} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>{c.name}</Text>
-                <View style={{ height: 6, borderRadius: 3, backgroundColor: p.fill, marginTop: 6, overflow: 'hidden' }}>
-                  <View style={{ width: `${Math.round(c.share * 100)}%`, height: 6, backgroundColor: c.color }} />
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: p.text, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(c.amount)}</Text>
-                <Text style={{ color: p.textSecondary, fontSize: 12 }}>{Math.round(c.share * 100)}%</Text>
-              </View>
-            </Pressable>
-            {sort === 'custom' && c.categoryId !== 'transfer_fee' ? (
-              <View style={{ paddingRight: 8 }}>
-                <MoveButtons label={c.name} canUp={index > 0} canDown={index < rows.length - 1}
-                  onUp={() => move(c.categoryId, -1)} onDown={() => move(c.categoryId, 1)} />
-              </View>
+        sort === 'custom' ? (
+          <>
+            <ReorderList items={reorderable.map((c) => ({ ...c, id: c.categoryId }))} renderItem={(c) => categoryRow(c)} onReorder={reorder} />
+            {rows.some((r) => r.categoryId === 'transfer_fee') ? (
+              <Group>{rows.filter((r) => r.categoryId === 'transfer_fee').map((c) => categoryRow(c))}</Group>
             ) : null}
-            </View>
-          ))}
-        </Group>
+          </>
+        ) : (
+          <Group>{rows.map((c) => categoryRow(c))}</Group>
+        )
       )}
     </>
   );

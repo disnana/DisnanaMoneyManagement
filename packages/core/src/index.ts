@@ -8,4 +8,3 @@ export * from './utils/metrics';
 export * from './utils/advances';
 export * from './utils/tax';
 export * from './utils/purchasePlan';
-export * from './utils/order';
