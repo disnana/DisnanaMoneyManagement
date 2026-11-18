@@ -21,30 +21,56 @@ interface ResponsiveSheetProps {
   children: React.ReactNode;
 }
 
+interface SheetCustom {
+  skip: boolean;
+  mobile: boolean;
+}
+
 const scrimVariants: Variants = {
   initial: { opacity: 0 },
   animate: {
     opacity: 1,
     transition: { duration: 0.14, ease: 'easeOut' },
   },
-  exit: (skip: boolean) => ({
+  exit: ({ skip }: SheetCustom) => ({
     opacity: 0,
-    transition: { duration: skip ? 0 : 0.08, ease: 'easeOut' },
+    transition: { duration: skip ? 0 : 0.18, ease: 'easeOut' },
   }),
 };
 
+const isMobileViewport = () =>
+  typeof window !== 'undefined' && window.innerWidth < 640;
+
+// Mobile: true bottom sheet that rises from the screen edge (spring) and sinks away.
+// Desktop (>= sm): centered dialog with a soft fade/scale.
 const sheetTransitionVariants: Variants = {
-  initial: { y: 36, opacity: 0 },
-  animate: {
-    y: 0,
-    opacity: 1,
-    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
-  },
-  exit: (skip: boolean) => ({
-    y: skip ? 0 : 48,
-    opacity: 0,
-    transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
-  }),
+  initial: ({ mobile }: SheetCustom) =>
+    mobile ? { y: '100%' } : { y: 12, opacity: 0, scale: 0.98 },
+  animate: ({ mobile }: SheetCustom) =>
+    mobile
+      ? {
+          y: 0,
+          transition: { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 },
+        }
+      : {
+          y: 0,
+          opacity: 1,
+          scale: 1,
+          transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
+        },
+  exit: ({ skip, mobile }: SheetCustom) =>
+    mobile
+      ? {
+          y: skip ? 0 : '100%',
+          opacity: skip ? 0 : 1,
+          transition: { duration: skip ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] },
+        }
+      : {
+          y: skip ? 0 : 8,
+          opacity: 0,
+          scale: 1,
+          transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
+        },
 };
 
 export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
@@ -211,9 +237,10 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   }, [open, finishPull, sheetY]);
 
   const skipExit = instantClose || dragDismissed;
+  const custom: SheetCustom = { skip: skipExit, mobile: isMobileViewport() };
 
   const sheetTree = (
-    <AnimatePresence custom={skipExit}>
+    <AnimatePresence custom={custom}>
       {open && (
         <div
           key="responsive-sheet-root"
@@ -229,7 +256,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            custom={skipExit}
+            custom={custom}
             onClick={onClose}
             className="absolute inset-0"
           >
@@ -245,7 +272,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            custom={skipExit}
+            custom={custom}
             className={`relative z-10 w-full ${maxWidthClass}`}
           >
             {/* Interactive pull-down layer */}

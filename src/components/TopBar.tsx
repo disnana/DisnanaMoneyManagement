@@ -22,14 +22,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAddTransaction,
 }) => {
   return (
-    <header className="shrink-0 z-30 flex h-13 sm:h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-8 pt-safe">
+    <header className="glass-bar shrink-0 z-30 flex h-13 sm:h-16 items-center justify-between gap-4 border-b border-slate-200/80 pt-safe pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))]">
       <div className="min-w-0">
         <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight truncate">
           {SECTION_LABELS[activeSection]}
         </h1>
       </div>
 
-      <div className="shrink-0">
+      <div className="hidden shrink-0 lg:block">
         <button
           type="button"
           onClick={onOpenAddTransaction}

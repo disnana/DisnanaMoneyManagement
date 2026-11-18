@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import {
   LayoutDashboard,
   ReceiptText,
@@ -15,6 +16,7 @@ import { NavSection } from '../types/finance';
 import { formatJPY } from '../utils/format';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { PWAInstallButton } from './PWAInstallButton';
+import { haptic } from '../utils/haptics';
 
 interface MobileBottomNavProps {
   activeSection: NavSection;
@@ -27,7 +29,7 @@ interface MobileBottomNavProps {
 const PRIMARY_TABS: {
   id: NavSection;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
 }[] = [
   { id: 'dashboard', label: 'ホーム', icon: LayoutDashboard },
   { id: 'transactions', label: '取引', icon: ReceiptText },
@@ -61,6 +63,24 @@ const MORE_ITEMS: {
   },
 ];
 
+/** Icon wrapper: a pill that glides between tabs (shared layout) + press feedback. */
+const NavIcon: React.FC<{
+  active: boolean;
+  children: React.ReactNode;
+}> = ({ active, children }) => (
+  <span className="relative flex h-8 w-14 items-center justify-center transition-transform duration-100 ease-out [button:active_&]:scale-90">
+    {active && (
+      <motion.span
+        layoutId="mobile-nav-pill"
+        aria-hidden="true"
+        className="absolute inset-0 rounded-full bg-teal-100/80"
+        transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.8 }}
+      />
+    )}
+    <span className="relative">{children}</span>
+  </span>
+);
+
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeSection,
   onSelectSection,
@@ -80,9 +100,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     <>
       <nav
         aria-label="モバイルナビゲーション"
-        className="shrink-0 z-30 border-t border-slate-200 bg-white pb-safe lg:hidden"
+        className="glass-bar shrink-0 z-30 border-t border-slate-200/80 pb-safe pl-safe pr-safe lg:hidden"
       >
-        <div className="mx-auto grid h-14 max-w-xl grid-cols-5 items-stretch">
+        <div className="mx-auto grid h-[58px] max-w-xl grid-cols-5 items-stretch">
           {PRIMARY_TABS.map((tab) => {
             const Icon = tab.icon;
             const active = activeSection === tab.id;
@@ -91,24 +111,26 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => {
+                  if (!active) haptic(6);
                   setInstantCloseMore(true);
                   setMoreOpen(false);
                   onSelectSection(tab.id);
                 }}
-                className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 transition-colors active:scale-95 ${
-                  active ? 'text-teal-700' : 'text-slate-500 hover:text-slate-900'
+                aria-current={active ? 'page' : undefined}
+                className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 transition-colors ${
+                  active ? 'text-teal-700' : 'text-slate-500'
                 }`}
               >
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className="text-[11px] font-semibold leading-none whitespace-nowrap">
+                <NavIcon active={active}>
+                  <Icon className="h-[22px] w-[22px] shrink-0" strokeWidth={active ? 2.4 : 1.9} />
+                </NavIcon>
+                <span
+                  className={`text-[10.5px] leading-none whitespace-nowrap ${
+                    active ? 'font-bold' : 'font-medium'
+                  }`}
+                >
                   {tab.label}
                 </span>
-                {active && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-teal-700"
-                  />
-                )}
               </button>
             );
           })}
@@ -116,26 +138,28 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
           <button
             type="button"
             onClick={() => {
+              haptic(6);
               setInstantCloseMore(false);
               setMoreOpen(true);
             }}
-            className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 transition-colors active:scale-95 ${
-              isMoreSection || moreOpen
-                ? 'text-teal-700'
-                : 'text-slate-500 hover:text-slate-900'
+            className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 transition-colors ${
+              isMoreSection || moreOpen ? 'text-teal-700' : 'text-slate-500'
             }`}
             aria-expanded={moreOpen}
           >
-            <MoreHorizontal className="h-5 w-5 shrink-0" />
-            <span className="text-[11px] font-semibold leading-none whitespace-nowrap">
+            <NavIcon active={isMoreSection}>
+              <MoreHorizontal
+                className="h-[22px] w-[22px] shrink-0"
+                strokeWidth={isMoreSection ? 2.4 : 1.9}
+              />
+            </NavIcon>
+            <span
+              className={`text-[10.5px] leading-none whitespace-nowrap ${
+                isMoreSection ? 'font-bold' : 'font-medium'
+              }`}
+            >
               その他
             </span>
-            {isMoreSection && (
-              <span
-                aria-hidden="true"
-                className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-teal-700"
-              />
-            )}
           </button>
         </div>
       </nav>
@@ -174,6 +198,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => {
+                    haptic(6);
                     setInstantCloseMore(true);
                     setMoreOpen(false);
                     onSelectSection(item.id);

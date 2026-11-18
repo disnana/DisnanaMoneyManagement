@@ -10,10 +10,13 @@ import {
   TouchEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
+import { Plus } from 'lucide-react';
+import { haptic } from './utils/haptics';
 import { NavSection, Transaction } from './types/finance';
 import { getCurrentMonthKey } from './utils/format';
 import { useFinanceStore } from './hooks/useFinanceStore';
@@ -167,12 +170,32 @@ export default function App() {
     locked: 'h' | 'v' | null;
   } | null>(null);
 
+  const scrollPositionsRef = useRef<Partial<Record<NavSection, number>>>({});
+  const prevSectionRef = useRef<NavSection>('dashboard');
+  const slideDirRef = useRef<1 | -1 | 0>(0);
+
   const handleSelectSection = useCallback((section: NavSection) => {
-    setActiveSection(section);
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTop = 0;
+    const prev = prevSectionRef.current;
+    const el = mainScrollRef.current;
+    if (prev === section) {
+      // Re-tap on the active tab: scroll back to top (native behaviour)
+      el?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
+    if (el) scrollPositionsRef.current[prev] = el.scrollTop;
+    slideDirRef.current =
+      MOBILE_TAB_ORDER.indexOf(section) > MOBILE_TAB_ORDER.indexOf(prev) ? 1 : -1;
+    setActiveSection(section);
   }, []);
+
+  // Restore each tab's scroll position (top for first visit)
+  useLayoutEffect(() => {
+    if (prevSectionRef.current === activeSection) return;
+    prevSectionRef.current = activeSection;
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTop = scrollPositionsRef.current[activeSection] ?? 0;
+    }
+  }, [activeSection]);
 
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txPrefill, setTxPrefill] = useState<TransactionModalPrefill | null>(null);
@@ -445,7 +468,7 @@ export default function App() {
               }}
               className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y"
             >
-              <div className="mx-auto w-full max-w-7xl px-4 pt-5 pb-6 sm:px-8 sm:py-8">
+              <div className="mx-auto w-full max-w-7xl overflow-x-clip px-4 pt-5 pb-28 sm:px-8 sm:py-8 lg:pb-8">
                 {isDesktop ? (
                   <AnimatePresence mode="wait">
                     <motion.div
@@ -459,10 +482,35 @@ export default function App() {
                     </motion.div>
                   </AnimatePresence>
                 ) : (
-                  renderActiveView()
+                  <motion.div
+                    key={activeSection}
+                    initial={
+                      slideDirRef.current === 0
+                        ? false
+                        : { opacity: 0, x: slideDirRef.current * 28 }
+                    }
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
+                  >
+                    {renderActiveView()}
+                  </motion.div>
                 )}
               </div>
             </main>
+
+            {/* Mobile floating action button (replaces header button below lg) */}
+            <button
+              type="button"
+              onClick={() => {
+                haptic(10);
+                openAddTransaction({ type: 'expense' });
+              }}
+              aria-label="収支を記録"
+              className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+4.5rem)] z-30 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-700 text-white shadow-lg shadow-teal-900/25 transition-transform duration-100 active:scale-90 lg:hidden"
+              style={{ marginRight: 'env(safe-area-inset-right, 0px)' }}
+            >
+              <Plus className="h-6 w-6" strokeWidth={2.4} />
+            </button>
 
             <MobileBottomNav
               activeSection={activeSection}
