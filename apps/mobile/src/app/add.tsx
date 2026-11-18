@@ -21,8 +21,17 @@ import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
+import { TransactionInput } from '@/ui/TransactionForm';
 
 const TYPE_LABELS = { income: '収入', expense: '支出', transfer: '振替' };
+const TAX_CATEGORY_GUIDE: Record<IncomeTaxCategory, string> = {
+  salary: '勤務先から受け取る給与・賞与',
+  business: '事業として営む活動から得た所得',
+  miscellaneous: '公的年金など。他の所得区分に当てはまらないもの',
+  dividend: '株式の配当や預貯金の利子をまとめて記録',
+  temporary: '懸賞の賞金など、対価の性質を持たない一時的な所得',
+  non_taxable: '非課税と確認した収入や贈与の記録用',
+};
 
 function toDateString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -71,6 +80,7 @@ export default function AddScreen() {
   const [subject, setSubject] = useState(editing?.accountingSubject ?? '');
   const [counterparty, setCounterparty] = useState(editing?.counterparty ?? '');
   const [taxCat, setTaxCat] = useState<IncomeTaxCategory | undefined>(editing?.incomeTaxCategory);
+  const taxSelection = taxCat ?? (scope === 'business' ? 'business' : undefined);
   const [withholding, setWithholding] = useState(editing?.withholdingTax ? String(editing.withholdingTax) : '');
   const [advanceOn, setAdvanceOn] = useState(Boolean(editing?.advance));
   const [advanceFor, setAdvanceFor] = useState(editing?.advance?.for ?? '');
@@ -172,7 +182,7 @@ export default function AddScreen() {
       accountingSubject: isBusiness && type === 'expense'
         ? subject || category.defaultAccountingSubject : undefined,
       counterparty: counterparty.trim() || undefined,
-      incomeTaxCategory: type === 'income' ? taxCat ?? (scope === 'business' ? 'business' : undefined) : undefined,
+      incomeTaxCategory: type === 'income' ? taxSelection : undefined,
       withholdingTax: type === 'income' ? Math.round(Number(withholding)) || undefined : undefined,
       advance:
         type === 'expense' && advanceOn
@@ -222,16 +232,6 @@ export default function AddScreen() {
     fieldRow(label, selected?.name ?? '選択', () => pickAccount(setter, label, excludeId),
       selected ? { name: ACCOUNT_ICONS[selected.type], color: p.tint } : undefined,
       selected ? ACCOUNT_TYPE_LABELS[selected.type] : undefined);
-
-  const input = (value: string, onChangeText: (t: string) => void, placeholder: string) => (
-    <TextInput
-      value={value}
-      onChangeText={onChangeText}
-      placeholder={placeholder}
-      placeholderTextColor={p.textSecondary}
-      style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
-    />
-  );
 
   const dateStep = (days: number, label: string, name: SymbolViewProps['name']) => (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => shiftDate(days)}
@@ -317,19 +317,24 @@ export default function AddScreen() {
         <Group>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 }}>
             <Text style={{ color: p.textSecondary, fontSize: 22, fontWeight: '700' }}>¥</Text>
-            <TextInput
-              accessibilityLabel="金額"
-              value={amount}
-              onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
-              placeholder="金額"
-              placeholderTextColor={p.textSecondary}
-              keyboardType="number-pad"
-              inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
-              style={{ flex: 1, minHeight: 64, color: type === 'income' ? p.income : p.text, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
-            />
+            <View style={{ flex: 1, minHeight: 64, justifyContent: 'center' }}>
+              <Text style={{ color: p.textSecondary, fontSize: 12 }}>金額</Text>
+              <TextInput
+                accessibilityLabel="金額"
+                value={amount}
+                onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
+                placeholder="金額"
+                placeholderTextColor={p.textSecondary}
+                keyboardType="number-pad"
+                inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+                style={{ flex: 1, minHeight: 38, color: type === 'income' ? p.income : p.text, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
+              />
+            </View>
           </View>
-          {input(title, setTitle, '内容（任意）')}
-          {input(memo, setMemo, 'メモ（任意）')}
+          <TransactionInput label="取引内容" icon={{ ios: 'text.alignleft', android: 'subject' }} optional
+            value={title} onChangeText={setTitle} placeholder="取引の名前" />
+          <TransactionInput label="メモ" icon={{ ios: 'note.text', android: 'notes' }} optional
+            value={memo} onChangeText={setMemo} placeholder="補足があれば入力" />
         </Group>
 
         {type !== 'transfer' ? (
@@ -350,28 +355,47 @@ export default function AddScreen() {
                   const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((x) => ({ id: x, label: x })));
                   if (choice) setSubject(choice);
                 })}
-                {input(ratio, (t) => setRatio(t.replace(/[^0-9]/g, '')), '事業で使った割合（%）')}
+                <TransactionInput label="事業で使った割合" icon={{ ios: 'percent', android: 'percent' }} unit="%"
+                  value={ratio} onChangeText={(value) => setRatio(value.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
               </>
             ) : null}
             {type === 'income' ? (
               <>
-                {fieldRow('所得区分', taxCat ? INCOME_TAX_CATEGORY_LABELS[taxCat] : scope === 'business' ? INCOME_TAX_CATEGORY_LABELS.business : '選択', async () => {
-                  const entries = Object.entries(INCOME_TAX_CATEGORY_LABELS) as [IncomeTaxCategory, string][];
-                  const choice = await pickOne('所得区分', entries.map(([id, label]) => ({ id, label })));
-                  if (choice) setTaxCat(choice as IncomeTaxCategory);
-                })}
-                <TextInput
-                  value={withholding}
-                  onChangeText={(t) => setWithholding(t.replace(/[^0-9]/g, ''))}
-                  placeholder="源泉徴収された税額（任意）"
-                  placeholderTextColor={p.textSecondary}
-                  keyboardType="number-pad"
-                  inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
-                  style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
-                />
+                <Pressable accessibilityRole="button"
+                  accessibilityLabel={`所得区分 ${taxSelection ? INCOME_TAX_CATEGORY_LABELS[taxSelection] : '未設定'}`}
+                  onPress={async () => {
+                    const entries = Object.entries(INCOME_TAX_CATEGORY_LABELS) as [IncomeTaxCategory, string][];
+                    tick();
+                    const choice = await pickOne('所得区分', entries.map(([id, label]) => ({
+                      id, label, subtitle: TAX_CATEGORY_GUIDE[id], selected: id === taxSelection,
+                    })), '税務集計に使う区分です。副業の所得区分などは、収入の実態に応じて確認してください。');
+                    if (choice) setTaxCat(choice as IncomeTaxCategory);
+                  }}
+                  style={({ pressed }) => ({
+                    marginHorizontal: 12, marginVertical: 8, padding: 10, gap: 4, borderWidth: 1,
+                    borderColor: p.tint, borderRadius: metrics.controlRadius, backgroundColor: pressed ? p.fill : p.card,
+                  })}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ color: p.textSecondary, fontSize: 14, flexBasis: '30%' }}>所得区分</Text>
+                    <Text style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: '600' }}>
+                      {taxSelection ? INCOME_TAX_CATEGORY_LABELS[taxSelection] : '選択する'}
+                    </Text>
+                    <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={p.tint} />
+                  </View>
+                  <Text style={{ color: p.textSecondary, fontSize: 12, lineHeight: 17 }}>
+                    {taxSelection ? TAX_CATEGORY_GUIDE[taxSelection] : '税務集計に使う区分を選べます'}
+                  </Text>
+                </Pressable>
+                <TransactionInput label="源泉徴収税額" icon={{ ios: 'doc.plaintext', android: 'description' }} optional unit="円"
+                  value={withholding} onChangeText={(value) => setWithholding(value.replace(/[^0-9]/g, ''))}
+                  placeholder="明細に記載の税額" keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
               </>
             ) : null}
-            {scope === 'business' ? input(counterparty, setCounterparty, '取引先（任意）') : null}
+            {scope === 'business' ? (
+              <TransactionInput label="取引先" icon={{ ios: 'person.crop.rectangle', android: 'badge' }} optional
+                value={counterparty} onChangeText={setCounterparty} placeholder="会社名など" />
+            ) : null}
           </Group>
         ) : null}
 
@@ -387,7 +411,10 @@ export default function AddScreen() {
                   borderWidth: advanceOn ? 0 : 1, borderColor: p.separator }} />
               </View>
             </Pressable>
-            {advanceOn ? input(advanceFor, setAdvanceFor, '誰の分？（例: 田中さん）') : null}
+            {advanceOn ? (
+              <TransactionInput label="立て替えた相手" icon={{ ios: 'person', android: 'person' }} optional
+                value={advanceFor} onChangeText={setAdvanceFor} placeholder="例：田中さん" />
+            ) : null}
           </Group>
         ) : null}
 

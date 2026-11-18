@@ -19,6 +19,7 @@ export interface PickOption {
 }
 
 interface Request {
+  description?: string;
   title?: string;
   options: PickOption[];
   resolve: (id: string | null) => void;
@@ -26,11 +27,11 @@ interface Request {
 
 let listener: ((r: Request | null) => void) | null = null;
 
-export function pickOne(title: string | undefined, options: PickOption[]): Promise<string | null> {
+export function pickOne(title: string | undefined, options: PickOption[], description?: string): Promise<string | null> {
   return new Promise((resolve) => {
     if (!listener) return resolve(null);
     Keyboard.dismiss();
-    listener({ title, options, resolve });
+    listener({ title, options, description, resolve });
   });
 }
 
@@ -110,6 +111,11 @@ export function PickerHost() {
           </View>
         </View>
       </GestureDetector>
+      {req.description ? (
+        <Text style={{ marginHorizontal: 20, marginBottom: 12, lineHeight: 19, color: p.textSecondary, fontSize: 13 }}>
+          {req.description}
+        </Text>
+      ) : null}
       {searchable ? (
         <TextInput accessibilityLabel="候補を検索" placeholder="候補を検索" placeholderTextColor={p.textSecondary}
           value={query} onChangeText={setQuery} clearButtonMode="while-editing"
@@ -124,6 +130,8 @@ export function PickerHost() {
             style={({ pressed }) => ({
               paddingHorizontal: 10, minHeight: 52, paddingVertical: 8, flexDirection: 'row',
               alignItems: 'center', gap: 12, borderRadius: 12, backgroundColor: pressed || option.selected ? p.fill : 'transparent',
+              borderWidth: req.description ? 1 : 0, borderColor: option.selected ? p.tint : 'transparent',
+              marginBottom: req.description ? 6 : 0,
             })}>
             {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} /> : null}
             <View style={{ flex: 1, gap: 2 }}>
