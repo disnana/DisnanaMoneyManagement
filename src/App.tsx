@@ -17,6 +17,8 @@ import {
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { enterTab, leaveTabs, setTabBackHandler } from './utils/navHistory';
 import { useViewportVars } from './hooks/useViewportVars';
+import { useNativeKeyboard } from './hooks/useNativeKeyboard';
+import { KeyboardAccessory } from './components/KeyboardAccessory';
 import { MobileMenuSheet } from './components/mobile/MobileMenuSheet';
 import { SectionTabs, groupOf } from './components/mobile/SectionTabs';
 import { NavSection, Transaction } from './types/finance';
@@ -173,6 +175,7 @@ export default function App() {
   } = useFinanceStore();
 
   useViewportVars();
+  useNativeKeyboard();
   const isDesktop = useIsDesktop();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -619,6 +622,7 @@ export default function App() {
             }}
           />
 
+          <KeyboardAccessory />
           <OfflineIndicator />
           <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
         </div>
