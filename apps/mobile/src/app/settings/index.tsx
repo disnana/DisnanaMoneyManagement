@@ -9,11 +9,14 @@ import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
+import { Alert, Platform } from 'react-native';
+import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
 
 export default function Settings() {
   const p = usePalette();
   const [pref, setPref] = useThemePref();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
+  const lockOn = useLockEnabled();
   const { state } = useFinance();
   const pendingTotal = getPendingAdvances(state.transactions).reduce((n, t) => n + t.amount, 0);
   return (
@@ -47,6 +50,26 @@ export default function Settings() {
               <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: haptics ? p.onTint : p.card }} />
             </View>
           </Pressable>
+          {Platform.OS !== 'web' ? (
+            <Pressable accessibilityRole="switch" accessibilityLabel="アプリのロック" accessibilityState={{ checked: lockOn }}
+              onPress={async () => {
+                if (!lockOn && !(await canAuthenticate())) {
+                  Alert.alert('ロックを使えません', 'この端末で顔認証・指紋認証・パスコードのいずれかを設定してください。');
+                  return;
+                }
+                await setLockEnabled(!lockOn);
+              }}
+              style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>アプリのロック</Text>
+                <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: 2 }}>起動時に顔認証・パスコードで開く</Text>
+              </View>
+              <View style={{ width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center',
+                alignItems: lockOn ? 'flex-end' : 'flex-start', backgroundColor: lockOn ? p.tint : p.fill }}>
+                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: lockOn ? p.onTint : p.card }} />
+              </View>
+            </Pressable>
+          ) : null}
         </Group>
 
         <SectionTitle>事業・精算</SectionTitle>

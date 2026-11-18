@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FinanceProvider } from '@/lib/store';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
+import { LockGate } from '@/ui/LockGate';
 import { usePalette } from '@/lib/theme';
 import '@/lib/themePref';
 
@@ -22,6 +23,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <LockGate>
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <FinanceProvider>
         <Stack screenOptions={{ headerShown: false }}>
@@ -61,6 +63,7 @@ export default function RootLayout() {
         <KeyboardDone />
       </FinanceProvider>
     </ThemeProvider>
+    </LockGate>
     </GestureHandlerRootView>
   );
 }
