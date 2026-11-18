@@ -120,6 +120,7 @@ export interface AdvanceInfo {
 export interface Budget {
   categoryId: string;
   monthlyLimit: number;
+  ledgerId?: string;
 }
 
 export interface RecurringItem {
@@ -141,7 +142,26 @@ export interface SavingsGoal {
   targetAmount: number;
   currentAmount: number;
   targetDate?: string;
+  monthlyContribution?: number;
+  ledgerId?: string;
   note?: string;
+}
+
+export interface PurchaseCandidate {
+  id: string;
+  title: string;
+  categoryId: string;
+  amount: number;
+  foreignPrice?: ForeignPurchasePrice;
+  month: string;
+  ledgerId?: string;
+}
+
+export interface ForeignPurchasePrice {
+  currency: Exclude<CurrencyCode, 'JPY'>;
+  amount: number;
+  yenPerUnit: number;
+  feeJPY: number;
 }
 
 export interface FinanceState {
@@ -151,6 +171,7 @@ export interface FinanceState {
   budgets: Budget[];
   recurringItems: RecurringItem[];
   savingsGoals: SavingsGoal[];
+  purchaseCandidates?: PurchaseCandidate[];
 }
 
 export type NavSection =

@@ -1,4 +1,4 @@
-import type { Account, FinanceState, Ledger, Transaction } from '../types/finance';
+import type { Account, Budget, FinanceState, Ledger, Transaction } from '../types/finance';
 
 const DEFAULT_LEDGERS: readonly Ledger[] = [
   { id: 'personal', name: '個人', kind: 'personal' },
@@ -63,9 +63,26 @@ export function removeLedger(state: FinanceState, id: string, destinationId: str
   }
   const accounts = new Map(state.accounts.map((account) => [account.id, account]));
   const move = (ledger: Ledger) => ledger.id === id ? destinationId : ledger.id;
+  const budgets = state.budgets.filter((budget) => budget.ledgerId !== id);
+  const movedBudgets = new Map<string, Budget>(
+    budgets.filter((budget) => budget.ledgerId === destinationId).map((budget) => [budget.categoryId, budget])
+  );
+  for (const budget of state.budgets) {
+    if (budget.ledgerId !== id) continue;
+    const destination = movedBudgets.get(budget.categoryId);
+    const merged = {
+      ...budget, ledgerId: destinationId, monthlyLimit: budget.monthlyLimit + (destination?.monthlyLimit ?? 0),
+    };
+    if (destination) budgets[budgets.indexOf(destination)] = merged;
+    else budgets.push(merged);
+    movedBudgets.set(budget.categoryId, merged);
+  }
   return {
     ...state,
     ledgers: remaining,
+    budgets,
+    savingsGoals: state.savingsGoals.map((goal) => goal.ledgerId === id ? { ...goal, ledgerId: destinationId } : goal),
+    purchaseCandidates: state.purchaseCandidates?.map((item) => item.ledgerId === id ? { ...item, ledgerId: destinationId } : item),
     accounts: state.accounts.map((account) => ({ ...account, ledgerId: move(getAccountLedger(account, ledgers)) })),
     transactions: state.transactions.map((transaction) => ({
       ...transaction,

@@ -3,6 +3,7 @@ import {
   Budget,
   FinanceState,
   Ledger,
+  PurchaseCandidate,
   RecurringItem,
   SavingsGoal,
   Transaction,
@@ -14,6 +15,7 @@ import {
   getTransferTotalFees,
 } from '../utils/format';
 import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
+import { estimatePurchaseJPY } from '../utils/planning';
 
 export const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
@@ -93,9 +95,21 @@ export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | nul
       typeof ledger.id === 'string' && typeof ledger.name === 'string' &&
       (ledger.kind === 'personal' || ledger.kind === 'household' || ledger.kind === 'business')))
     : undefined;
+  const purchaseCandidates = Array.isArray(parsed.purchaseCandidates)
+    ? parsed.purchaseCandidates.filter((item) => item && typeof item.id === 'string' &&
+      typeof item.title === 'string' && typeof item.categoryId === 'string' &&
+      typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) &&
+      Number.isSafeInteger(item.amount) && item.amount > 0)
+      .map((item) => {
+        if (!item.foreignPrice) return item;
+        const amount = estimatePurchaseJPY(item.foreignPrice);
+        return amount === undefined ? { ...item, foreignPrice: undefined } : { ...item, amount };
+      })
+    : undefined;
 
   return {
     ...(ledgers?.length ? { ledgers } : {}),
+    ...(purchaseCandidates?.length ? { purchaseCandidates } : {}),
     accounts,
     transactions,
     budgets,
@@ -323,20 +337,19 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const upsertBudget = useCallback((budget: Budget) => {
     setState((prev) => {
-      const exists = prev.budgets.some((b) => b.categoryId === budget.categoryId);
+      const matches = (b: Budget) => b.categoryId === budget.categoryId && b.ledgerId === budget.ledgerId;
+      const exists = prev.budgets.some(matches);
       const nextBudgets = exists
-        ? prev.budgets.map((b) =>
-            b.categoryId === budget.categoryId ? budget : b
-          )
+        ? prev.budgets.map((b) => matches(b) ? budget : b)
         : [...prev.budgets, budget];
       return { ...prev, budgets: nextBudgets };
     });
   }, []);
 
-  const removeBudget = useCallback((categoryId: string) => {
+  const removeBudget = useCallback((categoryId: string, ledgerId?: string) => {
     setState((prev) => ({
       ...prev,
-      budgets: prev.budgets.filter((b) => b.categoryId !== categoryId),
+      budgets: prev.budgets.filter((b) => b.categoryId !== categoryId || b.ledgerId !== ledgerId),
     }));
   }, []);
 
@@ -401,6 +414,33 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const updateSavingsGoal = useCallback((id: string, patch: Partial<Omit<SavingsGoal, 'id' | 'currentAmount'>>) => {
+    setState((prev) => ({
+      ...prev,
+      savingsGoals: prev.savingsGoals.map((goal) => goal.id === id ? { ...goal, ...patch } : goal),
+    }));
+  }, []);
+
+  const savePurchaseCandidate = useCallback((item: Omit<PurchaseCandidate, 'id'>, existingId?: string) => {
+    const id = existingId ?? `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => {
+      const items = prev.purchaseCandidates ?? [];
+      return {
+        ...prev,
+        purchaseCandidates: existingId
+          ? items.map((candidate) => candidate.id === existingId ? { ...item, id } : candidate)
+          : [...items, { ...item, id }],
+      };
+    });
+  }, []);
+
+  const removePurchaseCandidate = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      purchaseCandidates: prev.purchaseCandidates?.filter((item) => item.id !== id),
+    }));
+  }, []);
+
   const contributeToGoal = useCallback((id: string, delta: number) => {
     setState((prev) => ({
       ...prev,
@@ -461,8 +501,11 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     deleteRecurringItem,
     recordRecurringForMonth,
     addSavingsGoal,
+    updateSavingsGoal,
     deleteSavingsGoal,
     contributeToGoal,
+    savePurchaseCandidate,
+    removePurchaseCandidate,
     importState,
     resetToSampleData,
     clearAllData,

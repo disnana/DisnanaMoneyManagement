@@ -29,7 +29,7 @@ function AnalyticsMonth({ month }: { month: string }) {
         centerValue={formatJPY(m.expense)}
       />
 
-      <SectionTitle>カテゴリ別</SectionTitle>
+      <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
       {m.categoryBreakdown.length === 0 ? (
         <Group>
           <View style={{ padding: 28, alignItems: 'center' }}>

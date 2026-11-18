@@ -67,9 +67,9 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
                   onPress={() => { tick(); setPicked(date); }}
                   style={({ pressed }) => ({
                     ...cell, paddingHorizontal: 3, paddingVertical: 3, justifyContent: 'space-between',
-                    backgroundColor: active ? p.fill : pressed ? p.bg : p.card,
+                    backgroundColor: pressed ? p.fill : p.card,
                   })}>
-                  <View style={{ width: 23, height: 23, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+                  <View style={{ width: 24, height: 24, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
                     backgroundColor: active ? p.tint : 'transparent' }}>
                     <Text style={{ color: active ? p.onTint : date === today ? p.tint : col >= 5 ? weekdayColor(col) : p.text,
                       fontSize: 13, fontWeight: date === today || active ? '800' : '600' }}>{n}</Text>
