@@ -161,9 +161,14 @@ jobs:
           docker build -t dmm-server:ci .
           docker run -d --name dmm -p 8080:8080 \
             -e DMM_RP_ID=localhost -e DMM_RP_ORIGINS=http://localhost:3000 dmm-server:ci
-          curl -sf --retry 50 --retry-delay 0 --retry-connrefused --retry-all-errors localhost:8080/healthz
-          curl -sf localhost:8080/readyz
+          ok=0
+          for _ in $(seq 1 50); do
+            if curl -sf --max-time 2 localhost:8080/healthz; then ok=1; break; fi
+            sleep 0.2
+          done
           docker logs dmm
+          if [ "$ok" != 1 ]; then echo "server did not become healthy"; docker rm -f dmm; exit 1; fi
+          curl -sf --max-time 5 localhost:8080/readyz
           docker rm -f dmm
 
   audit:
