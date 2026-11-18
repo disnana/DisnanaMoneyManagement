@@ -73,6 +73,7 @@ export function Row({
   iconColor,
   title,
   subtitle,
+  detail,
   right,
   rightColor,
   onPress,
@@ -84,6 +85,7 @@ export function Row({
   iconColor?: string;
   title: string;
   subtitle?: string;
+  detail?: string;
   right?: string;
   rightColor?: string;
   onPress?: PressableProps['onPress'];
@@ -114,6 +116,11 @@ export function Row({
         {subtitle ? (
           <Text numberOfLines={1} style={{ color: p.textSecondary, fontSize: 13, marginTop: 2 }}>
             {subtitle}
+          </Text>
+        ) : null}
+        {detail ? (
+          <Text numberOfLines={3} style={{ color: p.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 4 }}>
+            {detail}
           </Text>
         ) : null}
       </View>

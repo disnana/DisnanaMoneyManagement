@@ -69,7 +69,7 @@ function TransactionsMonth({ month, calendar, isPreview }: { month: string; cale
       </Group>
       {calendar
         ? <TransactionCalendar month={month} transactions={monthTransactions} isPreview={isPreview} />
-        : <TxGroups transactions={isPreview ? transactions.slice(0, 18) : transactions}
+        : <TxGroups dayCards transactions={isPreview ? transactions.slice(0, 18) : transactions}
           empty={`${formatMonthLabel(month)}の該当する取引はありません`} />}
     </>
   );

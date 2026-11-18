@@ -2,7 +2,7 @@ import { Text, TextInput, View, type TextInputProps } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { metrics, usePalette } from '@/lib/theme';
 
-export function TransactionInput({ label, icon, optional, unit, ...props }: TextInputProps & {
+export function TransactionInput({ label, icon, optional, unit, style, ...props }: TextInputProps & {
   label: string;
   icon: SymbolViewProps['name'];
   optional?: boolean;
@@ -20,7 +20,7 @@ export function TransactionInput({ label, icon, optional, unit, ...props }: Text
           {label}{optional ? '（任意）' : ''}
         </Text>
         <TextInput {...props} accessibilityLabel={label} placeholderTextColor={p.textSecondary}
-          underlineColorAndroid="transparent" style={{ minHeight: 29, padding: 0, color: p.text, fontSize: 16 }} />
+          underlineColorAndroid="transparent" style={[{ minHeight: 29, padding: 0, color: p.text, fontSize: 16 }, style]} />
       </View>
       {unit ? <Text style={{ color: p.textSecondary, fontSize: 13 }}>{unit}</Text> : null}
     </View>

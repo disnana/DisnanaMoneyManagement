@@ -1,15 +1,16 @@
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { Transaction } from '@dmm/core/types/finance';
 import { groupTransactionsByDate } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
-import { usePalette } from '@/lib/theme';
+import { metrics, usePalette } from '@/lib/theme';
 import { Group } from '@/ui/kit';
 import { TxRow } from '@/ui/TxRow';
 
 /** Transactions grouped by day, each day an inset group. */
-export function TxGroups({ transactions, empty }: { transactions: Transaction[]; empty: string }) {
+export function TxGroups({ transactions, empty, dayCards }: { transactions: Transaction[]; empty: string; dayCards?: boolean }) {
   const p = usePalette();
   const groups = groupTransactionsByDate(transactions);
+  const divider = p.separator === 'transparent' ? p.fill : p.separator;
   if (groups.length === 0) {
     return (
       <View style={{ padding: 40, alignItems: 'center' }}>
@@ -22,6 +23,36 @@ export function TxGroups({ transactions, empty }: { transactions: Transaction[];
       {groups.map((g) => {
         const d = new Date(`${g.date}T00:00:00`);
         const weekday = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
+        if (dayCards) {
+          const total = `${g.net > 0 ? '+' : ''}${formatJPY(g.net)}`;
+          return (
+            <View key={g.date} style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
+              borderWidth: StyleSheet.hairlineWidth, borderColor: divider, overflow: 'hidden' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                paddingHorizontal: 14, paddingVertical: 9, backgroundColor: p.fill,
+                borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text accessibilityRole="header" accessibilityLabel={`${d.getMonth() + 1}月${d.getDate()}日 ${weekday}曜日`}
+                    style={{ color: p.text, fontSize: 19, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                    {d.getDate()}<Text style={{ fontSize: 13 }}>日</Text>
+                  </Text>
+                  <Text accessible={false} aria-hidden style={{ color: p.textSecondary, fontSize: 13 }}>{weekday}曜日</Text>
+                </View>
+                <View style={{ flexShrink: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                  <Text style={{ color: p.textSecondary, fontSize: 11 }}>日計</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, color: p.text, fontSize: 14,
+                    fontWeight: '600', fontVariant: ['tabular-nums'] }}>{total}</Text>
+                </View>
+              </View>
+              {g.items.map((tx, index) => (
+                <View key={tx.id}>
+                  {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginHorizontal: 16, backgroundColor: divider }} /> : null}
+                  <TxRow tx={tx} showMemo />
+                </View>
+              ))}
+            </View>
+          );
+        }
         return (
           <View key={g.date} style={{ gap: 8 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>

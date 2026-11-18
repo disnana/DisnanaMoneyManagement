@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -315,22 +315,12 @@ export default function AddScreen() {
         </Group>
 
         <Group>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 }}>
-            <Text style={{ color: p.textSecondary, fontSize: 22, fontWeight: '700' }}>¥</Text>
-            <View style={{ flex: 1, minHeight: 64, justifyContent: 'center' }}>
-              <Text style={{ color: p.textSecondary, fontSize: 12 }}>金額</Text>
-              <TextInput
-                accessibilityLabel="金額"
-                value={amount}
-                onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
-                placeholder="金額"
-                placeholderTextColor={p.textSecondary}
-                keyboardType="number-pad"
-                inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
-                style={{ flex: 1, minHeight: 38, color: type === 'income' ? p.income : p.text, fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }}
-              />
-            </View>
-          </View>
+          <TransactionInput label="金額" icon={{ ios: 'yensign', android: 'currency_yen' }}
+            accessibilityHint="円単位で入力" value={amount}
+            onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
+            keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+            style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
+              fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
           <TransactionInput label="取引内容" icon={{ ios: 'text.alignleft', android: 'subject' }} optional
             value={title} onChangeText={setTitle} placeholder="取引の名前" />
           <TransactionInput label="メモ" icon={{ ios: 'note.text', android: 'notes' }} optional

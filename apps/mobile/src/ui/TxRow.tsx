@@ -11,7 +11,7 @@ import { useFinance } from '@/lib/store';
 import { Row } from '@/ui/kit';
 
 /** One transaction row. Tap = edit, long-press = action list (native action sheet on iOS). */
-export function TxRow({ tx, showDate }: { tx: Transaction; showDate?: boolean }) {
+export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: boolean; showMemo?: boolean }) {
   const p = usePalette();
   const { state, accountNameMap, deleteTransaction } = useFinance();
   const cat = getCategoryById(tx.categoryId, state.customCategories);
@@ -39,12 +39,16 @@ export function TxRow({ tx, showDate }: { tx: Transaction; showDate?: boolean })
     }
   };
 
+  const accounts = tx.type === 'transfer' ? `${acc} → ${to}`
+    : showMemo ? `${acc} · ${cat.name}` : `${cat.name} · ${acc}`;
+
   return (
     <Row
       icon={categoryIcon(cat.icon ?? tx.categoryId)}
       iconColor={cat.color}
       title={tx.title}
-      subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${tx.type === 'transfer' ? `${acc} → ${to}` : `${cat.name} · ${acc}`}`}
+      subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${accounts}`}
+      detail={showMemo ? tx.memo?.trim() : undefined}
       right={tx.amount === 0 ? formatJPY(0) : formatSignedJPY(tx.amount, tx.type)}
       rightColor={tx.amount === 0 || tx.type === 'income' ? p.income : tx.type === 'expense' ? p.danger : p.text}
       onPress={() => router.push({ pathname: '/add', params: { id: tx.id } })}
