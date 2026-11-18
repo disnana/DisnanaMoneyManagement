@@ -21,12 +21,12 @@ import {
   formatForeignCurrency,
   formatFullDate,
   formatJPY,
-  formatMonthLabel,
   formatSignedJPY,
   getEffectiveOutflow,
   getTransferTotalFees,
 } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
+import { MonthSwitcherBar } from './MonthSwitcherBar';
 
 interface TransactionsViewProps {
   transactions: Transaction[];
@@ -90,15 +90,6 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
   >('date_desc');
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
-
-  const availableMonths = useMemo(() => {
-    const set = new Set<string>();
-    set.add(selectedMonth);
-    for (const tx of transactions) {
-      set.add(tx.date.slice(0, 7));
-    }
-    return Array.from(set).sort((a, b) => b.localeCompare(a));
-  }, [transactions, selectedMonth]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -273,20 +264,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
 
         <div className="flex flex-col gap-3 border-t border-slate-100 pt-3.5 lg:flex-row lg:flex-wrap lg:items-center">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-center">
-            <select
-              aria-label="月で絞り込む"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:border-teal-600 focus:outline-none lg:w-auto"
-            >
-              <option value="all">全期間</option>
-              {availableMonths.map((m) => (
-                <option key={m} value={m}>
-                  {formatMonthLabel(m)}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+            <MonthSwitcherBar
+              selectedMonth={monthFilter}
+              onChangeMonth={setMonthFilter}
+              allowAll={true}
+              className="w-full lg:w-auto"
+            />
 
             <select
               aria-label="カテゴリで絞り込む"

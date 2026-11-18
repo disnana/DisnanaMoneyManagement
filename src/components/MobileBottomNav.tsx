@@ -69,6 +69,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onOpenDataModal,
 }) => {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [instantCloseMore, setInstantCloseMore] = useState(false);
 
   const isMoreSection =
     activeSection === 'budgets' ||
@@ -90,6 +91,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => {
+                  setInstantCloseMore(true);
                   setMoreOpen(false);
                   onSelectSection(tab.id);
                 }}
@@ -113,7 +115,10 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
           <button
             type="button"
-            onClick={() => setMoreOpen(true)}
+            onClick={() => {
+              setInstantCloseMore(false);
+              setMoreOpen(true);
+            }}
             className={`relative flex min-h-[44px] flex-col items-center justify-center gap-0.5 px-1 transition-colors active:scale-95 ${
               isMoreSection || moreOpen
                 ? 'text-teal-700'
@@ -137,7 +142,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
       <ResponsiveSheet
         open={moreOpen}
-        onClose={() => setMoreOpen(false)}
+        instantClose={instantCloseMore}
+        onClose={() => {
+          setInstantCloseMore(false);
+          setMoreOpen(false);
+        }}
         title="メニュー・ツール"
         titleId="mobile-more-sheet-title"
       >
@@ -165,8 +174,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    onSelectSection(item.id);
+                    setInstantCloseMore(true);
                     setMoreOpen(false);
+                    onSelectSection(item.id);
                   }}
                   className={`flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors active:bg-slate-100 ${
                     isActive ? 'bg-teal-50/70' : 'hover:bg-slate-50'
@@ -206,6 +216,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             <button
               type="button"
               onClick={() => {
+                setInstantCloseMore(true);
                 setMoreOpen(false);
                 onOpenDataModal();
               }}

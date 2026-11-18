@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AnimatePresence,
+  Variants,
   animate,
   motion,
   useMotionValue,
@@ -15,9 +16,36 @@ interface ResponsiveSheetProps {
   title: string;
   titleId?: string;
   maxWidthClass?: string;
+  instantClose?: boolean;
   footer?: React.ReactNode;
   children: React.ReactNode;
 }
+
+const scrimVariants: Variants = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: { duration: 0.14, ease: 'easeOut' },
+  },
+  exit: (skip: boolean) => ({
+    opacity: 0,
+    transition: { duration: skip ? 0 : 0.08, ease: 'easeOut' },
+  }),
+};
+
+const sheetTransitionVariants: Variants = {
+  initial: { y: 36, opacity: 0 },
+  animate: {
+    y: 0,
+    opacity: 1,
+    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
+  },
+  exit: (skip: boolean) => ({
+    y: skip ? 0 : 48,
+    opacity: 0,
+    transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
+  }),
+};
 
 export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   open,
@@ -25,18 +53,21 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   title,
   titleId,
   maxWidthClass = 'sm:max-w-lg',
+  instantClose = false,
   footer,
   children,
 }) => {
   const sheetY = useMotionValue(0);
-  const backdropDragOpacity = useTransform(sheetY, [0, 320], [1, 0.15]);
+  const backdropDragOpacity = useTransform(sheetY, [0, 320], [1, 0]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const isDismissingRef = useRef(false);
+  const [dragDismissed, setDragDismissed] = useState(false);
 
   useEffect(() => {
     if (open) {
       isDismissingRef.current = false;
+      setDragDismissed(false);
       sheetY.set(0);
     }
   }, [open, sheetY]);
@@ -59,9 +90,10 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
         isDismissingRef.current = true;
         const target = typeof window !== 'undefined' ? window.innerHeight : 700;
         animate(sheetY, target, {
-          duration: 0.16,
+          duration: 0.14,
           ease: [0.32, 0.72, 0, 1],
           onComplete: () => {
+            setDragDismissed(true);
             onClose();
           },
         });
@@ -178,37 +210,45 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     };
   }, [open, finishPull, sheetY]);
 
+  const skipExit = instantClose || dragDismissed;
+
   const sheetTree = (
-    <AnimatePresence>
+    <AnimatePresence custom={skipExit}>
       {open && (
-        <motion.div
+        <div
           key="responsive-sheet-root"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.14 }}
           className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
         >
-          {/* Scrim layer: drag dimming isolated from AnimatePresence fade */}
+          {/* Scrim layer: fades out faster than the sheet and clears to 0 during drag */}
           <motion.div
             aria-hidden="true"
-            style={{ opacity: backdropDragOpacity }}
+            variants={scrimVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            custom={skipExit}
             onClick={onClose}
-            className="absolute inset-0 bg-slate-900/45"
-          />
+            className="absolute inset-0"
+          >
+            <motion.div
+              style={{ opacity: backdropDragOpacity }}
+              className="h-full w-full bg-slate-900/35"
+            />
+          </motion.div>
 
-          {/* Enter/Exit transition wrapper */}
+          {/* Enter/Exit transition wrapper (opaque sheet card never alpha-blends with scrim) */}
           <motion.div
-            initial={{ y: 36 }}
-            animate={{ y: 0 }}
-            exit={{ y: 28 }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            variants={sheetTransitionVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            custom={skipExit}
             className={`relative z-10 w-full ${maxWidthClass}`}
           >
-            {/* Interactive pull-down layer (never conflicts with AnimatePresence exit y) */}
+            {/* Interactive pull-down layer */}
             <motion.div
               style={{ y: sheetY }}
               className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
@@ -259,7 +299,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
               )}
             </motion.div>
           </motion.div>
-        </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );

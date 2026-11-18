@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
 
@@ -36,7 +37,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onCancel]);
 
-  return (
+  const dialogTree = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -44,11 +45,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.14 }}
+          transition={{ duration: 0.12 }}
           onClick={(e) => {
             if (e.target === e.currentTarget) onCancel();
           }}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 backdrop-blur-[2px] sm:items-center sm:p-4"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/40 sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-title"
@@ -57,7 +58,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
             className="w-full rounded-t-3xl border border-slate-200 bg-white p-5 pb-safe shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6"
           >
             <div className="mb-3 flex justify-center sm:hidden" aria-hidden="true">
@@ -124,4 +125,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(dialogTree, document.body);
 };
