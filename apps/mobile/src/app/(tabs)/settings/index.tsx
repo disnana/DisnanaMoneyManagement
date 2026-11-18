@@ -1,4 +1,8 @@
 import { Text } from 'react-native';
+import { router } from 'expo-router';
+import { getPendingAdvances } from '@dmm/core/utils/advances';
+import { formatJPY } from '@dmm/core/utils/format';
+import { useFinance } from '@/lib/store';
 import Constants from 'expo-constants';
 import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
@@ -7,6 +11,8 @@ import { usePalette } from '@/lib/theme';
 export default function Settings() {
   const p = usePalette();
   const [pref, setPref] = useThemePref();
+  const { state } = useFinance();
+  const pendingTotal = getPendingAdvances(state.transactions).reduce((n, t) => n + t.amount, 0);
   return (
     <>
       <Screen>
@@ -23,6 +29,25 @@ export default function Settings() {
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           「自動」は端末の設定に合わせます。
         </Text>
+
+        <SectionTitle>事業・精算</SectionTitle>
+        <Group>
+          <Row
+            icon={{ ios: 'arrow.uturn.backward.circle', android: 'undo' }}
+            title="立て替え"
+            subtitle="あとで回収する支払い"
+            right={pendingTotal > 0 ? formatJPY(pendingTotal) : undefined}
+            onPress={() => router.push('/settings/advances')}
+            chevron
+          />
+          <Row
+            icon={{ ios: 'doc.text', android: 'description' }}
+            title="確定申告の準備"
+            subtitle="収入・経費・源泉徴収・CSV"
+            onPress={() => router.push('/settings/tax')}
+            chevron
+          />
+        </Group>
 
         <SectionTitle>アカウント</SectionTitle>
         <Group>

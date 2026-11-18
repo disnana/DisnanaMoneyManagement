@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Alert, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, useColorScheme, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { Transaction, TransactionType } from '@dmm/core/types/finance';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryById } from '@dmm/core/data/categories';
+import type { IncomeTaxCategory, TransactionScope } from '@dmm/core/types/finance';
+import { ACCOUNTING_SUBJECTS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INCOME_TAX_CATEGORY_LABELS, getCategoryById } from '@dmm/core/data/categories';
 import { getTodayString } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import { usePalette, metrics } from '@/lib/theme';
@@ -38,6 +39,15 @@ export default function AddScreen() {
   const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? state.accounts[1]?.id ?? state.accounts[0]?.id ?? '');
   const [title, setTitle] = useState(editing?.title ?? '');
   const [memo, setMemo] = useState(editing?.memo ?? '');
+  const [scope, setScope] = useState<TransactionScope>(editing?.scope ?? 'personal');
+  const [ratio, setRatio] = useState(String(editing?.businessRatio ?? 100));
+  const [subject, setSubject] = useState(editing?.accountingSubject ?? '');
+  const [counterparty, setCounterparty] = useState(editing?.counterparty ?? '');
+  const [taxCat, setTaxCat] = useState<IncomeTaxCategory | undefined>(editing?.incomeTaxCategory);
+  const [withholding, setWithholding] = useState(editing?.withholdingTax ? String(editing.withholdingTax) : '');
+  const [advanceOn, setAdvanceOn] = useState(Boolean(editing?.advance));
+  const [advanceFor, setAdvanceFor] = useState(editing?.advance?.for ?? '');
+  const isBusiness = scope === 'business' && !advanceOn;
 
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const accountName = (aid: string) => state.accounts.find((a) => a.id === aid)?.name ?? '選択';
@@ -74,7 +84,21 @@ export default function AddScreen() {
       toAccountId: type === 'transfer' ? toAccountId : undefined,
       title: title.trim() || (type === 'transfer' ? '口座振替' : cat.name),
       memo: memo.trim() || undefined,
-      scope: editing?.scope ?? 'personal',
+      scope: advanceOn ? 'personal' : scope,
+      ...(isBusiness && type === 'expense'
+        ? {
+            businessRatio: Math.min(100, Math.max(0, Math.round(Number(ratio) || 0))),
+            accountingSubject: subject || getCategoryById(categoryId).defaultAccountingSubject,
+          }
+        : {}),
+      counterparty: counterparty.trim() || undefined,
+      ...(type === 'income'
+        ? { incomeTaxCategory: taxCat ?? (scope === 'business' ? 'business' : undefined), withholdingTax: Math.round(Number(withholding.replace(/,/g, ''))) || undefined }
+        : {}),
+      advance:
+        type === 'expense' && advanceOn
+          ? { ...(editing?.advance ?? {}), for: advanceFor.trim() || '未設定' }
+          : undefined,
     };
     if (editing) updateTransaction(editing.id, payload);
     else addTransaction(payload);
@@ -175,6 +199,59 @@ export default function AddScreen() {
           {fieldRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法', accountName(accountId), () => pickAccount(setAccountId, type === 'transfer' ? '出金元' : '口座'))}
           {type === 'transfer' ? fieldRow('入金先', accountName(toAccountId), () => pickAccount(setToAccountId, '入金先')) : null}
         </Group>
+
+        {type !== 'transfer' ? (
+          <Group>
+            <View style={{ padding: 8 }}>
+              <Segmented<TransactionScope>
+                value={scope}
+                onChange={setScope}
+                options={[
+                  { id: 'personal', label: '個人' },
+                  { id: 'business', label: '事業' },
+                ]}
+              />
+            </View>
+            {isBusiness && type === 'expense' ? (
+              <>
+                {fieldRow('勘定科目', subject || category.defaultAccountingSubject || '選択', async () => {
+                  const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((x) => ({ id: x, label: x })));
+                  if (choice) setSubject(choice);
+                })}
+                {input(ratio, (t) => setRatio(t.replace(/[^0-9]/g, '')), '事業で使った割合（%）')}
+              </>
+            ) : null}
+            {type === 'income' ? (
+              <>
+                {fieldRow('所得区分', taxCat ? INCOME_TAX_CATEGORY_LABELS[taxCat] : scope === 'business' ? INCOME_TAX_CATEGORY_LABELS.business : '選択', async () => {
+                  const entries = Object.entries(INCOME_TAX_CATEGORY_LABELS) as [IncomeTaxCategory, string][];
+                  const choice = await pickOne('所得区分', entries.map(([id, label]) => ({ id, label })));
+                  if (choice) setTaxCat(choice as IncomeTaxCategory);
+                })}
+                <TextInput
+                  value={withholding}
+                  onChangeText={(t) => setWithholding(t.replace(/[^0-9]/g, ''))}
+                  placeholder="源泉徴収された税額（任意）"
+                  placeholderTextColor={p.textSecondary}
+                  keyboardType="number-pad"
+                  inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+                  style={{ minHeight: metrics.rowMinHeight - 8, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
+                />
+              </>
+            ) : null}
+            {scope === 'business' ? input(counterparty, setCounterparty, '取引先（任意）') : null}
+          </Group>
+        ) : null}
+
+        {type === 'expense' ? (
+          <Group>
+            <View style={{ minHeight: metrics.rowMinHeight - 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
+              <Text style={{ color: p.text, fontSize: 16 }}>立て替え（あとで回収）</Text>
+              <Switch value={advanceOn} onValueChange={(v) => { tick(); setAdvanceOn(v); }} trackColor={{ true: p.tint }} />
+            </View>
+            {advanceOn ? input(advanceFor, setAdvanceFor, '誰の分？（例: 田中さん）') : null}
+          </Group>
+        ) : null}
 
         <Group>
           {input(title, setTitle, '内容（任意）')}

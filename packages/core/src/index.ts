@@ -5,3 +5,5 @@ export * from './utils/format';
 export * from './utils/creditCard';
 export * from './store/finance';
 export * from './utils/metrics';
+export * from './utils/advances';
+export * from './utils/tax';

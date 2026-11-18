@@ -92,6 +92,19 @@ export interface Transaction {
   fxConversionFee?: number; // 第2段階: Stripe為替・出金手数料(円)
   netJpyAmount?: number; // 銀行最終純入金額(円)
   settlementGroupId?: string; // 一括入金バッチ識別子
+  /** 立替: 自分が支払い、後で相手から回収する支出（回収待ちの間は自分の支出として集計しない） */
+  advance?: AdvanceInfo;
+  /** この収入は立替の回収（元の取引 id）。収支・税務の集計から除外する */
+  reimbursementOf?: string;
+}
+
+export interface AdvanceInfo {
+  /** 立て替えた相手（誰の分か） */
+  for: string;
+  /** 回収した日 (YYYY-MM-DD) */
+  reimbursedAt?: string;
+  /** 回収として記録した入金取引の id */
+  reimbursementTxId?: string;
 }
 
 export interface Budget {

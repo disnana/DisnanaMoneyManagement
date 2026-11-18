@@ -5,7 +5,8 @@ import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import type { AccountType } from '@dmm/core/types/finance';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
+import { HeroCard } from '@/ui/HeroCard';
+import { Group, MonthBar, Row, Screen, SectionTitle } from '@/ui/kit';
 
 const ICONS: Record<AccountType, SymbolViewProps['name']> = {
   bank: { ios: 'building.columns.fill', android: 'account_balance' },
@@ -20,7 +21,7 @@ const ICONS: Record<AccountType, SymbolViewProps['name']> = {
 
 export default function Accounts() {
   const p = usePalette();
-  const { state, accountBalances, totalAssets } = useFinance();
+  const { state, accountBalances, month, setMonth } = useFinance();
   const cards = state.accounts.filter((a) => a.type === 'credit' || a.type === 'debit');
   const others = state.accounts.filter((a) => a.type !== 'credit' && a.type !== 'debit');
 
@@ -42,9 +43,8 @@ export default function Accounts() {
 
   return (
     <Screen>
-      <Group>
-        <Row title="正味総資産" right={formatJPY(totalAssets)} />
-      </Group>
+      <MonthBar month={month} onChange={setMonth} />
+      <HeroCard />
       {others.length > 0 ? (
         <>
           <SectionTitle>口座</SectionTitle>

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { useState } from 'react';
-import { Modal, Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -183,6 +183,7 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
     </Pressable>
   );
   return (
+    <View style={{ gap: 8 }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
       {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
       <View style={{ minWidth: 150, alignItems: 'center', justifyContent: 'center', height: 44 }}>
@@ -192,69 +193,58 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
           style={{ position: 'absolute', inset: 0 }}
           onPress={() => {
             tick();
-            setOpen(true);
+            setOpen((v) => !v);
           }}
         />
       </View>
       {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
-      <MonthPickerSheet visible={open} month={month} onClose={() => setOpen(false)} onPick={onChange} />
+      </View>
+      {open ? <MonthPanel month={month} onPick={(m) => { onChange(m); setOpen(false); }} /> : null}
     </View>
   );
 }
 
-/** Year + month only: a year stepper over a 3x4 month grid (no day selection). */
-function MonthPickerSheet({ visible, month, onClose, onPick }: { visible: boolean; month: string; onClose: () => void; onPick: (m: string) => void }) {
+/** Year + month only, expanded in place under the bar: no modal, no animation, instant to open and re-open. */
+function MonthPanel({ month, onPick }: { month: string; onPick: (m: string) => void }) {
   const p = usePalette();
   const [selYear, selMonth] = month.split('-').map(Number);
   const [year, setYear] = useState(selYear);
+  const stepper = (delta: number, name: SymbolViewProps['name']) => (
+    <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y + delta); }} style={{ width: 48, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      <SymbolView name={name} size={18} tintColor={p.tint} />
+    </Pressable>
+  );
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onShow={() => setYear(selYear)}
-      onRequestClose={onClose}
-      supportedOrientations={['portrait', 'landscape']}>
-      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 24 }}>
-        <Pressable
-          onPress={() => {}}
-          style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius + 6, padding: 16, gap: 12, maxWidth: 420, width: '100%', alignSelf: 'center' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y - 1); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={18} tintColor={p.tint} />
+    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius + 4, padding: 12, gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        {stepper(-1, { ios: 'chevron.left', android: 'chevron_left' })}
+        <Text style={{ color: p.text, fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{year}年</Text>
+        {stepper(1, { ios: 'chevron.right', android: 'chevron_right' })}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+          const active = year === selYear && m === selMonth;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => {
+                tick();
+                onPick(`${year}-${String(m).padStart(2, '0')}`);
+              }}
+              style={{
+                width: '23%',
+                flexGrow: 1,
+                minHeight: 46,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: metrics.controlRadius + 2,
+                backgroundColor: active ? p.tint : p.fill,
+              }}>
+              <Text style={{ color: active ? p.onTint : p.text, fontSize: 16, fontWeight: active ? '700' : '500' }}>{m}月</Text>
             </Pressable>
-            <Text style={{ color: p.text, fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{year}年</Text>
-            <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y + 1); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={18} tintColor={p.tint} />
-            </Pressable>
-          </View>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-              const active = year === selYear && m === selMonth;
-              return (
-                <Pressable
-                  key={m}
-                  onPress={() => {
-                    tick();
-                    onPick(`${year}-${String(m).padStart(2, '0')}`);
-                    onClose();
-                  }}
-                  style={{
-                    width: '23%',
-                    flexGrow: 1,
-                    minHeight: 48,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: metrics.controlRadius + 2,
-                    backgroundColor: active ? p.tint : p.fill,
-                  }}>
-                  <Text style={{ color: active ? p.onTint : p.text, fontSize: 16, fontWeight: active ? '700' : '500' }}>{m}月</Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          );
+        })}
+      </View>
+    </View>
   );
 }

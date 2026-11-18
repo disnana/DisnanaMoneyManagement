@@ -1,6 +1,7 @@
 import type { FinanceState, Transaction } from '../types/finance';
 import { getCategoryById } from '../data/categories';
 import { getTransferTotalFees } from './format';
+import { isOwnFlow } from './advances';
 
 export interface MonthMetrics {
   income: number;
@@ -16,6 +17,7 @@ export function computeMonthMetrics(state: FinanceState, monthKey: string): Mont
   const byCat: Record<string, number> = {};
   for (const tx of state.transactions) {
     if (tx.date.slice(0, 7) !== monthKey) continue;
+    if (!isOwnFlow(tx)) continue; // 立替とその回収は自分の収支ではない
     if (tx.type === 'income') income += tx.amount;
     else if (tx.type === 'expense') {
       expense += tx.amount;
