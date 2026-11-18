@@ -27,6 +27,8 @@ import {
 } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
+import { MobileLedger } from './mobile/MobileLedger';
+import { useIsDesktop } from '../hooks/useMediaQuery';
 
 interface TransactionsViewProps {
   transactions: Transaction[];
@@ -90,6 +92,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
   >('date_desc');
   const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+  const isDesktop = useIsDesktop();
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -169,6 +172,89 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const toggleAmountSort = () => {
     setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
   };
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setTypeFilter('all');
+    setScopeFilter('all');
+    setMonthFilter(selectedMonth);
+    setCategoryFilter('all');
+    setAccountFilter('all');
+    setSortBy('date_desc');
+  };
+
+  if (!isDesktop) {
+    return (
+      <div className="mx-auto w-full max-w-2xl">
+        <MobileLedger
+          filtered={filtered}
+          accounts={accounts}
+          accountNameMap={accountNameMap}
+          summary={summary}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
+          scopeFilter={scopeFilter}
+          setScopeFilter={setScopeFilter}
+          monthFilter={monthFilter}
+          setMonthFilter={setMonthFilter}
+          categoryFilter={categoryFilter}
+          setCategoryFilter={setCategoryFilter}
+          accountFilter={accountFilter}
+          setAccountFilter={setAccountFilter}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+          hasActiveFilters={hasActiveFilters || sortBy !== 'date_desc'}
+          onReset={resetFilters}
+          onEdit={onEditTransaction}
+          onAskDelete={setDeletingTx}
+          onAdd={onOpenAddTransaction}
+        />
+      <ConfirmDialog
+        open={Boolean(deletingTx)}
+        title="この取引を削除しますか？"
+        description={
+          deletingTx
+            ? deletingTx.settlementGroupId
+              ? `「${deletingTx.title}」（${formatJPY(
+                  deletingTx.amount
+                )} / ${formatFullDate(
+                  deletingTx.date
+                )}）を削除します。この取引は外貨・Stripe一括入金の連動レコードです。`
+              : `「${deletingTx.title}」（${formatJPY(
+                  deletingTx.amount
+                )} / ${formatFullDate(
+                  deletingTx.date
+                )}）を削除します。口座残高も自動で再計算されます。`
+            : ''
+        }
+        confirmLabel={deletingTx?.settlementGroupId ? 'この1件のみ削除' : '削除する'}
+        secondaryLabel={
+          deletingTx?.settlementGroupId && onDeleteSettlementGroup
+            ? '連動セットごと削除'
+            : undefined
+        }
+        onSecondaryConfirm={
+          deletingTx?.settlementGroupId && onDeleteSettlementGroup
+            ? () => {
+                onDeleteSettlementGroup(deletingTx.settlementGroupId!);
+                setDeletingTx(null);
+              }
+            : undefined
+        }
+        danger={true}
+        onConfirm={() => {
+          if (deletingTx) {
+            onDeleteTransaction(deletingTx.id);
+            setDeletingTx(null);
+          }
+        }}
+        onCancel={() => setDeletingTx(null)}
+      />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
