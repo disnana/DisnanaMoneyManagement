@@ -1,5 +1,4 @@
 import React, { useEffect, useRef } from 'react';
-import { animate, motion, useMotionValue } from 'motion/react';
 import {
   ArrowDownLeft,
   ArrowLeftRight,
@@ -164,7 +163,11 @@ export const TxRowBody: React.FC<{
 
 const ACTION_W = 76;
 
-/** Swipe-left-to-reveal row (edit / delete). Only one row open at a time via `open`. */
+/**
+ * Swipe-left-to-reveal row (edit / delete). Dependency-free: pointer events + direct style
+ * writes (no React state per frame, no layout measuring) so long lists stay cheap.
+ * Only one row is open at a time via `open`.
+ */
 export const SwipeRow: React.FC<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -173,22 +176,126 @@ export const SwipeRow: React.FC<{
   onDelete: () => void;
   children: React.ReactNode;
 }> = ({ open, onOpenChange, onTap, onEdit, onDelete, children }) => {
-  const x = useMotionValue(0);
   const total = ACTION_W * 2;
-  const draggedRef = useRef(false);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const g = useRef({ id: -1, x0: 0, y0: 0, t0: 0, base: 0, dx: 0, locked: false, dragging: false, cancelled: false });
+  // true once the finger moved noticeably: the click that follows must NOT count as a tap
+  const movedRef = useRef(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const setX = (v: number, withTransition: boolean) => {
+    const el = surfaceRef.current;
+    if (!el) return;
+    el.style.transition = withTransition ? 'transform 0.22s cubic-bezier(0.32,0.72,0,1)' : 'none';
+    el.style.transform = v === 0 ? '' : `translate3d(${v}px,0,0)`;
+  };
 
   const firstRun = useRef(true);
   useEffect(() => {
-    // Skip on mount: no animation work for the (many) rows that never move
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
-    animate(x, open ? -total : 0, { type: 'spring', stiffness: 640, damping: 46 });
-  }, [open, x, total]);
+    setX(open ? -total : 0, true);
+  }, [open, total]);
+
+  // An open row closes when you touch elsewhere or scroll (iOS Mail behaviour)
+  useEffect(() => {
+    if (!open) return;
+    const close = () => onOpenChange(false);
+    const onDown = (ev: PointerEvent) => {
+      if (rootRef.current && ev.target instanceof Node && rootRef.current.contains(ev.target)) return;
+      // Touching elsewhere only closes the row: swallow the click that follows this touch
+      const swallow = (c: Event) => {
+        c.stopPropagation();
+        c.preventDefault();
+      };
+      document.addEventListener('click', swallow, { capture: true, once: true });
+      window.setTimeout(() => document.removeEventListener('click', swallow, true), 500);
+      close();
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [open, onOpenChange]);
+
+  // Native click: iOS withholds it when the touch merely stopped momentum scrolling or began a scroll,
+  // so a stray touch can never open the editor.
+  const onClick = () => {
+    if (movedRef.current || g.current.dragging) {
+      movedRef.current = false;
+      return;
+    }
+    if (openRef.current) onOpenChange(false);
+    else onTap();
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    g.current = {
+      id: e.pointerId,
+      x0: e.clientX,
+      y0: e.clientY,
+      t0: performance.now(),
+      base: openRef.current ? -total : 0,
+      dx: 0,
+      locked: false,
+      dragging: false,
+      cancelled: false,
+    };
+    movedRef.current = false;
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = g.current;
+    if (e.pointerId !== s.id || s.cancelled) return;
+    const dx = e.clientX - s.x0;
+    const dy = e.clientY - s.y0;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) movedRef.current = true;
+    if (!s.locked) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        s.locked = true;
+        s.dragging = true;
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+          // ignore
+        }
+      } else if (Math.abs(dy) > 8) {
+        s.cancelled = true;
+        return;
+      } else return;
+    }
+    s.dx = dx;
+    let x = s.base + dx;
+    if (x > 0) x = x * 0.2; // rubber band to the right
+    if (x < -total) x = -total + (x + total) * 0.2; // rubber band past the buttons
+    setX(x, false);
+  };
+
+  const finish = (e: React.PointerEvent, cancelled: boolean) => {
+    const s = g.current;
+    if (e.pointerId !== s.id) return;
+    s.id = -1;
+    if (s.dragging) {
+      const dt = Math.max(16, performance.now() - s.t0);
+      const v = s.dx / dt; // px/ms
+      const pos = s.base + s.dx;
+      const shouldOpen = cancelled ? openRef.current : v < -0.45 ? true : v > 0.45 ? false : pos < -total * 0.45;
+      if (shouldOpen && !openRef.current) haptic(8);
+      setX(shouldOpen ? -total : 0, true);
+      onOpenChange(shouldOpen);
+      return;
+    }
+  };
 
   return (
-    <div data-no-tab-swipe="true" className="relative overflow-hidden bg-white">
+    <div ref={rootRef} data-no-tab-swipe="true" className="relative overflow-hidden bg-white">
       <div className="absolute inset-y-0 right-0 flex" style={{ width: total }}>
         <button
           type="button"
@@ -218,87 +325,66 @@ export const SwipeRow: React.FC<{
         </button>
       </div>
 
-      <motion.div
-        style={{ x }}
-        drag="x"
-        dragDirectionLock
-        dragConstraints={{ left: -total, right: 0 }}
-        dragElastic={{ left: 0.08, right: 0 }}
-        dragMomentum={false}
-        onTapStart={() => {
-          draggedRef.current = false;
-        }}
-        onDragStart={() => {
-          draggedRef.current = true;
-        }}
-        onDragEnd={(_, info) => {
-          const shouldOpen = open
-            ? info.offset.x > -total * 0.35 && info.velocity.x < 300
-              ? false
-              : true
-            : info.offset.x < -total * 0.3 || info.velocity.x < -450;
-          if (shouldOpen && !open) haptic(8);
-          if (shouldOpen === open) {
-            animate(x, open ? -total : 0, { type: 'spring', stiffness: 520, damping: 42 });
-          }
-          onOpenChange(shouldOpen);
-        }}
-        onTap={() => {
-          if (draggedRef.current) return;
-          if (open) onOpenChange(false);
-          else onTap();
-        }}
+      <div
+        ref={surfaceRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={(e) => finish(e, false)}
+        onPointerCancel={(e) => finish(e, true)}
+        onClick={onClick}
+        style={{ touchAction: 'pan-y' }}
         className="relative bg-white active:bg-slate-50"
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 };
 
-/** iOS-style segmented control with a sliding thumb */
+/** iOS-style segmented control. The thumb slides with a pure-CSS transform (no layout measuring). */
 export const Segmented = <T extends string>({
   value,
   options,
   onChange,
-  layoutId,
 }: {
   value: T;
   options: readonly { id: T; label: string }[];
   onChange: (v: T) => void;
-  layoutId: string;
-}) => (
-  <div
-    role="tablist"
-    className="grid rounded-[10px] bg-slate-200/70 p-0.5"
-    style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
-  >
-    {options.map((o) => {
-      const active = value === o.id;
-      return (
-        <button
-          key={o.id}
-          role="tab"
-          aria-selected={active}
-          type="button"
-          onClick={() => {
-            if (!active) haptic(5);
-            onChange(o.id);
-          }}
-          className={`relative min-h-[34px] rounded-[8px] px-2 text-[13px] font-semibold transition-colors ${
-            active ? 'text-slate-900' : 'text-slate-500'
-          }`}
-        >
-          {active && (
-            <motion.span
-              layoutId={layoutId}
-              className="absolute inset-0 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)] dark:bg-[#636366]"
-              transition={{ type: 'spring', stiffness: 700, damping: 46 }}
-            />
-          )}
-          <span className="relative whitespace-nowrap">{o.label}</span>
-        </button>
-      );
-    })}
-  </div>
-);
+  /** kept for call-site compatibility */
+  layoutId?: string;
+}) => {
+  const n = options.length;
+  const index = Math.max(
+    0,
+    options.findIndex((o) => o.id === value)
+  );
+  return (
+    <div role="tablist" className="relative grid rounded-[10px] bg-slate-200/70 p-0.5" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0.5 left-0.5 top-0.5 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)] transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] dark:bg-[#636366]"
+        style={{ width: `calc((100% - 4px) / ${n})`, transform: `translateX(${index * 100}%)` }}
+      />
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            role="tab"
+            aria-selected={active}
+            type="button"
+            onClick={() => {
+              if (!active) haptic(5);
+              onChange(o.id);
+            }}
+            className={`relative z-10 min-h-[34px] rounded-[8px] px-2 text-[13px] font-semibold transition-colors ${
+              active ? 'text-slate-900' : 'text-slate-500'
+            }`}
+          >
+            <span className="whitespace-nowrap">{o.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+};

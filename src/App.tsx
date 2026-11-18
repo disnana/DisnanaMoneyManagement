@@ -4,6 +4,7 @@
  */
 
 import {
+  Activity,
   Component,
   ErrorInfo,
   ReactNode,
@@ -43,6 +44,11 @@ import {
 import { DataModal } from './components/DataModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast } from './components/Toast';
+
+const IS_IOS =
+  typeof navigator !== 'undefined' &&
+  (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
 const LARGE_TITLES: Record<NavSection, string> = {
   dashboard: 'ホーム',
@@ -180,6 +186,8 @@ export default function App() {
   const isDesktop = useIsDesktop();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // Phones: every visited (and idle-preloaded) tab stays mounted, hidden via <Activity> -> switching is just show/hide
+  const [warm, setWarm] = useState<NavSection[]>(['dashboard']);
   // navSection updates instantly (tab highlight); activeSection (heavy content) follows in a low-priority transition
   const [navSection, setNavSection] = useState<NavSection>('dashboard');
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
@@ -215,10 +223,43 @@ export default function App() {
       const prev = prevSectionRef.current;
       if (prev === 'dashboard') return;
       if (mainScrollRef.current) scrollPositionsRef.current[prev] = mainScrollRef.current.scrollTop;
-      setNavSection('dashboard');
-      startTransition(() => setActiveSection('dashboard'));
+      // iOS edge-swipe-back mirrors our swipe direction (previous tab); Android back goes Home
+      const idx = MOBILE_TAB_ORDER.indexOf(prev);
+      const target: NavSection =
+        IS_IOS && idx > 0 ? MOBILE_TAB_ORDER[idx - 1] : 'dashboard';
+      if (target !== 'dashboard') enterTab();
+      setNavSection(target);
+      startTransition(() => setActiveSection(target));
     });
   }, []);
+
+  useEffect(() => {
+    if (isDesktop) return;
+    setWarm((w) => (w.includes(activeSection) ? w : [...w, activeSection]));
+  }, [activeSection, isDesktop]);
+
+  // Preload the remaining tabs one by one while the main thread is idle
+  useEffect(() => {
+    if (isDesktop) return;
+    const order: NavSection[] = ['transactions', 'analytics', 'accounts', 'budgets', 'planning'];
+    const idle: (cb: () => void) => number =
+      typeof window.requestIdleCallback === 'function'
+        ? (cb) => window.requestIdleCallback(cb, { timeout: 2500 })
+        : (cb) => window.setTimeout(cb, 600);
+    let cancelled = false;
+    let i = 0;
+    const next = () => {
+      if (cancelled || i >= order.length) return;
+      const sec = order[i++];
+      startTransition(() => setWarm((w) => (w.includes(sec) ? w : [...w, sec])));
+      idle(next);
+    };
+    const first = window.setTimeout(() => idle(next), 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(first);
+    };
+  }, [isDesktop]);
 
   // Restore each tab's scroll position (top for first visit)
   useLayoutEffect(() => {
@@ -323,6 +364,11 @@ export default function App() {
       return;
     }
     const touch = e.touches[0];
+    // Leave the screen edge to the OS back gesture (iOS/Android) so the two never double-fire
+    if (touch.clientX < 28 || touch.clientX > window.innerWidth - 28) {
+      tabSwipeRef.current = null;
+      return;
+    }
     tabSwipeRef.current = {
       startX: touch.clientX,
       startY: touch.clientY,
@@ -365,7 +411,7 @@ export default function App() {
     }
   };
 
-  const renderActiveView = () => (
+  const renderView = (activeSection: NavSection) => (
     <>
       {activeSection === 'dashboard' && (
         <DashboardView
@@ -502,6 +548,7 @@ export default function App() {
       )}
     </>
   );
+  const renderActiveView = () => renderView(activeSection);
 
   return (
     <AppErrorBoundary>
@@ -552,12 +599,7 @@ export default function App() {
                     </motion.div>
                   </AnimatePresence>
                 ) : (
-                  <motion.div
-                    key={groupOf(activeSection) ?? activeSection}
-                    initial={{ opacity: 0.4 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.12, ease: 'easeOut' }}
-                  >
+                  <>
                     <h2 className="mx-auto mb-3 w-full max-w-2xl px-1 text-[32px] font-bold leading-tight tracking-tight text-slate-900">
                       {LARGE_TITLES[activeSection]}
                     </h2>
@@ -568,8 +610,14 @@ export default function App() {
                         onSelect={handleSelectSection}
                       />
                     )}
-                    {renderActiveView()}
-                  </motion.div>
+                    {MOBILE_TAB_ORDER.filter((sec) => sec === activeSection || warm.includes(sec)).map(
+                      (sec) => (
+                        <Activity key={sec} mode={sec === activeSection ? 'visible' : 'hidden'}>
+                          <div className="tab-pane">{renderView(sec)}</div>
+                        </Activity>
+                      )
+                    )}
+                  </>
                 )}
               </div>
             </main>

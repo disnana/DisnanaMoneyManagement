@@ -285,12 +285,12 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             animate="animate"
             exit="exit"
             custom={custom}
-            className={`relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}
+            className={`sheet-wrap relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}
           >
             {/* Interactive pull-down layer */}
             <motion.div
               style={{ y: sheetY }}
-              className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90%] sm:rounded-2xl sm:border sm:border-slate-200 ${
+              className={`sheet-card flex w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90%] sm:rounded-2xl sm:border sm:border-slate-200 ${
                 fs
                   ? 'h-full sm:h-auto'
                   : 'max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] rounded-t-3xl border border-slate-200'
