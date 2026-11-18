@@ -7,6 +7,7 @@ import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/forma
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { filterLedger } from '@dmm/core/utils/ledgers';
 import { assessPurchase, isPlanningDate, planSavings } from '@dmm/core/utils/planning';
+import { PRIORITY_LABELS, sortCandidates } from '@dmm/core/utils/purchasePlan';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -167,7 +168,7 @@ function Purchases() {
   const p = usePalette();
   const [deletion, setDeletion] = useState<{ id: string; anchor: PopoverAnchor }>();
   const ledgerId = activeLedger?.id;
-  const candidates = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
+  const candidates = sortCandidates((state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month));
   const pendingDelete = candidates.find((item) => item.id === deletion?.id);
   const spendingByGroup = useMemo(() => {
     const groups = new Set((state.purchaseCandidates ?? []).filter((item) => item.month === month).map((item) => item.ledgerId));
@@ -198,7 +199,7 @@ function Purchases() {
         const budget = estimate(item.ledgerId, item.categoryId, item.amount);
         return (
           <Group key={item.id}>
-            <Row title={item.title} subtitle={ledgerId ? category.name : `${category.name} · ${groupName(item.ledgerId)}`} right={formatJPY(item.amount)}
+            <Row title={item.title} subtitle={`${item.priority ? `${PRIORITY_LABELS[item.priority]} · ` : ''}${ledgerId ? category.name : `${category.name} · ${groupName(item.ledgerId)}`}${item.installment && item.installment.count > 1 ? ` · ${item.installment.count}回払い` : ''}`} right={formatJPY(item.amount)}
               icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
             <Row title="購入後のカテゴリ予算" right={formatPurchaseBudget(budget)} rightColor={budget?.shortfall ? p.danger : undefined} />
             <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>

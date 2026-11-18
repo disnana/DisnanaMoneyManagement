@@ -160,6 +160,12 @@ export interface PurchaseCandidate {
   foreignPrice?: ForeignPurchasePrice;
   month: string;
   ledgerId?: string;
+  /** 1 = 今すぐ / 2 = そのうち / 3 = いつか */
+  priority?: 1 | 2 | 3;
+  note?: string;
+  url?: string;
+  /** 分割・ローンで払う場合の回数と年率(%) */
+  installment?: { count: number; annualRatePct: number };
 }
 
 export interface ForeignPurchasePrice {
