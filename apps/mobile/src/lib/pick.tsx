@@ -150,9 +150,9 @@ export function PickerHost() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' }}>
           <Pressable accessibilityLabel="選択を閉じる" onPress={() => close(null)} style={{ flex: 1 }} />
-          <Animated.View style={sheetStyle}>
+          <Animated.View style={[{ height: height * 0.76, flexShrink: 1 }, sheetStyle]}>
             <SafeAreaView edges={['bottom', 'left', 'right']} accessibilityViewIsModal
-              style={{ backgroundColor: p.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.76 }}>
+              style={{ flex: 1, backgroundColor: p.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
               {content}
             </SafeAreaView>
           </Animated.View>
