@@ -41,7 +41,7 @@ const NavIcon: React.FC<{ active: boolean; children: React.ReactNode }> = ({
         layoutId="mobile-nav-pill"
         aria-hidden="true"
         className="absolute inset-0 rounded-full bg-teal-100/80"
-        transition={{ type: 'spring', stiffness: 520, damping: 38, mass: 0.8 }}
+        transition={{ type: 'spring', stiffness: 760, damping: 48, mass: 0.7 }}
       />
     )}
     <span className="relative">{children}</span>

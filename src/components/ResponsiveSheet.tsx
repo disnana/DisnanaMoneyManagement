@@ -53,7 +53,7 @@ const sheetTransitionVariants: Variants = {
     mobile
       ? {
           y: 0,
-          transition: { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 },
+          transition: { duration: 0.32, ease: [0.32, 0.72, 0, 1] },
         }
       : {
           y: 0,
@@ -66,7 +66,7 @@ const sheetTransitionVariants: Variants = {
       ? {
           y: skip ? 0 : '100%',
           opacity: skip ? 0 : 1,
-          transition: { duration: skip ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] },
+          transition: { duration: skip ? 0 : 0.2, ease: [0.32, 0.72, 0, 1] },
         }
       : {
           y: skip ? 0 : 8,
