@@ -2,6 +2,8 @@ module github.com/disnana/dmm/server
 
 go 1.26.0
 
+toolchain go1.26.11
+
 require (
 	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/go-webauthn/webauthn v0.18.2
