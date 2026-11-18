@@ -59,6 +59,7 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, onReo
 
   return (
     <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous' }}>
+      <LandingSlot active={active} hover={hover} outside={outside} heights={heights} />
       {items.map((item, index) => (
         <DragRow key={item.id} index={index} count={items.length} active={active} hover={hover} dragY={dragY} outside={outside}
           heights={heights} onHeight={setHeight} onDrop={finish} onStep={(delta) => finish(index, index + delta)}>
@@ -66,6 +67,27 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, onReo
         </DragRow>
       ))}
     </View>
+  );
+}
+
+/** Tinted placeholder showing exactly where the dragged row will land (it sits in the gap the other rows open). */
+function LandingSlot({ active, hover, outside, heights }: {
+  active: SharedValue<number>; hover: SharedValue<number>; outside: SharedValue<boolean>; heights: SharedValue<number[]>;
+}) {
+  const p = usePalette();
+  const style = useAnimatedStyle(() => {
+    const a = active.value;
+    if (a < 0 || outside.value) return { opacity: 0, height: 0 };
+    const hs = heights.value;
+    const to = hover.value;
+    let top = 0;
+    for (let i = 0; i < to; i++) top += hs[i] ?? 0;
+    if (to > a) top += (hs[to] ?? 0) - (hs[a] ?? 0);
+    return { opacity: 1, height: hs[a] ?? 0, transform: [{ translateY: withTiming(top, { duration: 120 }) }] };
+  });
+  return (
+    <Animated.View pointerEvents="none"
+      style={[{ position: 'absolute', left: 0, right: 0, top: 0, backgroundColor: p.tint + '22', borderLeftWidth: 4, borderLeftColor: p.tint }, style]} />
   );
 }
 
@@ -91,14 +113,19 @@ function DragRow({ index, count, active, hover, dragY, outside, heights, onHeigh
   }, [index, count, indexSv, countSv]);
 
   const pan = usePanGesture({
-    activateAfterLongPress: 170,
+    // No long-press delay (like the system reorder control): the page stops scrolling the moment the handle is
+    // touched, so a quick drag can never turn into a scroll.
+    minDistance: 3,
+    onBegin: () => {
+      'worklet';
+      scheduleOnRN(setDragging, true);
+    },
     onActivate: () => {
       'worklet';
       active.value = indexSv.value;
       hover.value = indexSv.value;
       dragY.value = 0;
       outside.value = false;
-      scheduleOnRN(setDragging, true);
       scheduleOnRN(tick);
     },
     onUpdate: ({ translationY }) => {
