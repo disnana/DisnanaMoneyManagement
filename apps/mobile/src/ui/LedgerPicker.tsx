@@ -7,7 +7,7 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 
 /**
- * Household-group switcher as a compact chip (the setting rarely changes, so it shouldn't cost a full card of
+ * Household-group switcher as a compact chip, right-aligned (the setting rarely changes, so it shouldn't cost a full card of
  * screen height). The chip is 36pt tall with a 44pt hit area.
  */
 export function LedgerPicker() {
@@ -27,7 +27,7 @@ export function LedgerPicker() {
         if (choice !== null) setActiveLedgerId(choice || null);
       }}
       style={({ pressed }) => ({
-        alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingHorizontal: 14,
+        alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingHorizontal: 14,
         borderRadius: 18, backgroundColor: pressed ? p.separator : p.fill,
       })}>
       <SymbolView name={activeLedger ? ledgerIcon(activeLedger) : ALL_LEDGER_ICON} size={14} tintColor={color} />

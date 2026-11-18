@@ -4,6 +4,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { formatDayLabel } from '@dmm/core/utils/format';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
+import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
 import { pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -18,7 +19,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => ({
 
 export default function CardSettings() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { state, activeLedger, addAccount, updateAccount } = useFinance();
+  const { state, ledgers, activeLedger, addAccount, updateAccount } = useFinance();
   const p = usePalette();
   const existing = state.accounts.find((account) => account.id === id);
   const card = existing?.type === 'credit' || existing?.type === 'debit' ? existing : undefined;
@@ -32,6 +33,8 @@ export default function CardSettings() {
   const [offset, setOffset] = useState<1 | 2>(card?.paymentMonthOffset ?? 1);
   const [limit, setLimit] = useState(card?.creditLimit ? String(card.creditLimit) : '');
   const [warningDays, setWarningDays] = useState(card?.paymentWarningDays ?? 0);
+  const [ledgerId, setLedgerId] = useState<string | undefined>(card?.ledgerId ?? activeLedger?.id ?? ledgers[0]?.id);
+  const ledger = ledgers.find((l) => l.id === ledgerId);
   const bank = banks.find((account) => account.id === bankId);
   const fixedBank = card?.type === 'debit' && Boolean(bank) &&
     state.transactions.some((tx) => tx.accountId === card.id);
@@ -54,12 +57,13 @@ export default function CardSettings() {
       name: name.trim(),
       institution: institution.trim() || undefined,
       linkedBankAccountId: bank?.id,
+      ledgerId,
       ...(type === 'credit' ? {
         closingDay, paymentDay, paymentMonthOffset: offset, creditLimit, paymentWarningDays: warningDays || undefined,
       } : {}),
     } satisfies Partial<Account>;
     if (card) updateAccount(card.id, details);
-    else addAccount({ ...details, type, initialBalance: 0, ledgerId: activeLedger?.id });
+    else addAccount({ ...details, type, initialBalance: 0 });
     router.back();
   };
 
@@ -107,6 +111,11 @@ export default function CardSettings() {
                 onChangeText={setInstitution}
                 style={inputStyle}
               />
+              <Row title="家計グループ" right={ledger?.name ?? '選択'} chevron icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)}
+                onPress={async () => {
+                  const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledgerId));
+                  if (choice) setLedgerId(choice);
+                }} />
               <Row title="引落口座" right={bank?.name ?? '未選択'} chevron={!fixedBank}
                 onPress={fixedBank ? undefined : async () => {
                   const options: PickOption[] = banks.map((account) => ({
