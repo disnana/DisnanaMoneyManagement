@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Alert, KeyboardAvoidingView, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { Transaction, TransactionType } from '@dmm/core/types/finance';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryById } from '@dmm/core/data/categories';
@@ -118,17 +118,19 @@ export default function AddScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: p.bg }}>
-      {Platform.OS === 'ios' ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 14, height: 64 }}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-            <SymbolView name={{ ios: 'xmark', android: 'close' }} size={17} tintColor={p.textSecondary} />
-          </Pressable>
-          <Text numberOfLines={1} style={{ color: p.text, fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' }}>
-            {editing ? '取引を編集' : '収支を記録'}
-          </Text>
-          <View style={{ width: 44 }} />
-        </View>
-      ) : null}
+      <Stack.Screen
+        options={{
+          title: editing ? '取引を編集' : '収支を記録',
+          headerLeft:
+            Platform.OS === 'ios'
+              ? () => (
+                  <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="閉じる" style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+                    <SymbolView name={{ ios: 'xmark', android: 'close' }} size={16} tintColor={p.textSecondary} />
+                  </Pressable>
+                )
+              : undefined,
+        }}
+      />
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 24 }}>
         <Segmented<TransactionType>

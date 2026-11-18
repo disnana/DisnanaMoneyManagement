@@ -33,7 +33,12 @@ export default function RootLayout() {
                 presentation: 'formSheet',
                 sheetAllowedDetents: [1],
                 sheetGrabberVisible: true,
-                headerShown: false,
+                // Native navigation header inside the sheet (no hand-laid title that could collide with the grabber)
+                headerShown: true,
+                title: '収支を記録',
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: p.bg },
+                headerTintColor: p.text,
               },
               // Android: full-screen modal with a Material top app bar
               default: {
