@@ -11,7 +11,8 @@ import { TxGroups } from '@/ui/TxGroups';
 /** Everything in one category for the selected month. */
 export default function CategoryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const cat = getCategoryById(id);
+  const { state } = useFinance();
+  const cat = getCategoryById(id, state.customCategories);
   return (
     <>
       <Stack.Screen options={{ title: cat.name }} />

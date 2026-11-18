@@ -27,6 +27,12 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" />
+          {(['categories', 'category-editor', 'category-detail', 'purchase-editor', 'purchase-compare'] as const).map((name) => (
+            <Stack.Screen key={name} name={name} options={{
+              headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
+              headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
+            }} />
+          ))}
           <Stack.Screen name="planning" options={{
             headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
             headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },

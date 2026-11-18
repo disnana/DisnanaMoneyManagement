@@ -35,7 +35,7 @@ export function computeMonthMetrics(state: FinanceState, monthKey: string): Mont
       const cat =
         categoryId === 'transfer_fee'
           ? { name: '振替・振込手数料', color: '#64748B' }
-          : getCategoryById(categoryId);
+          : getCategoryById(categoryId, state.customCategories);
       return { categoryId, name: cat.name, color: cat.color, amount, share: expense > 0 ? amount / expense : 0 };
     })
     .sort((a, b) => b.amount - a.amount);

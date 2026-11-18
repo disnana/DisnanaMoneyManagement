@@ -56,15 +56,34 @@ export const ALL_CATEGORIES: CategoryDef[] = [
   TRANSFER_CATEGORY,
 ];
 
-export function getCategoryById(id: string): CategoryDef {
+export function getCategoryById(id: string, customCategories?: readonly CategoryDef[]): CategoryDef {
   return (
-    ALL_CATEGORIES.find((c) => c.id === id) ?? {
+    customCategories?.find((c) => c.id === id) ?? ALL_CATEGORIES.find((c) => c.id === id) ?? {
       id,
       name: '未分類',
       type: 'expense',
       color: '#64748B',
     }
   );
+}
+
+export function getOrderedCategories(
+  type: 'expense' | 'income',
+  custom?: readonly CategoryDef[],
+  order?: readonly string[],
+  hidden?: readonly string[]
+): CategoryDef[] {
+  const entries = new Map((type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((category) => [category.id, category]));
+  for (const category of custom ?? []) if (category.type === type) entries.set(category.id, category);
+  for (const id of hidden ?? []) entries.delete(id);
+  const result: CategoryDef[] = [];
+  for (const id of order ?? []) {
+    const category = entries.get(id);
+    if (!category) continue;
+    result.push(category);
+    entries.delete(id);
+  }
+  return [...result, ...entries.values()];
 }
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {

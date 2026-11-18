@@ -1,4 +1,6 @@
-import type { ForeignPurchasePrice, SavingsGoal } from '../types/finance';
+import type { FinanceState, ForeignPurchasePrice, SavingsGoal } from '../types/finance';
+import { filterLedger } from './ledgers';
+import { computeMonthMetrics } from './metrics';
 
 export const FOREIGN_PURCHASE_CURRENCIES = ['USD', 'EUR', 'GBP', 'AUD'] as const;
 
@@ -16,6 +18,31 @@ export function assessPurchase(limit: number | undefined, spent: number, amount:
   const available = Math.max(0, limit - spent);
   const remaining = limit - spent - amount;
   return { available, remaining, shortfall: Math.max(0, -remaining) };
+}
+
+export function assessPurchaseForMonth(state: FinanceState, month: string, categoryId: string, amount: number, ledgerId?: string) {
+  const budget = state.budgets.find((entry) => entry.ledgerId === ledgerId && entry.categoryId === categoryId);
+  if (!budget) return undefined;
+  const metrics = computeMonthMetrics(filterLedger(state, ledgerId ?? null), month);
+  return assessPurchase(budget.monthlyLimit, metrics.categoryBreakdown.find((item) => item.categoryId === categoryId)?.amount ?? 0, amount);
+}
+
+export function comparePurchaseCash(balance: number, cardWithdrawals: number, price: number,
+  contribution: number, savings: { available: number; sameAccount: boolean }) {
+  const bankRemaining = balance - cardWithdrawals - price;
+  const reserved = savings.sameAccount ? savings.available : 0;
+  const free = bankRemaining - contribution - reserved;
+  const gap = Math.max(0, -free);
+  const savingsUsed = Math.min(gap, savings.available);
+  const contributionCut = Math.min(gap, contribution);
+  return {
+    bankRemaining,
+    free,
+    savingsUsed,
+    afterSavings: free + savingsUsed,
+    contributionCut,
+    afterContributionCut: free + contributionCut,
+  };
 }
 
 export function isPlanningDate(date: string): boolean {

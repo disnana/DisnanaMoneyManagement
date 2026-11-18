@@ -32,6 +32,8 @@ export default function Settings() {
 
         <SectionTitle>事業・精算</SectionTitle>
         <Group>
+          <Row title="カテゴリ" icon={{ ios: 'tag', android: 'label' }} subtitle="名前・アイコン・色を設定"
+            onPress={() => router.push('/categories')} chevron />
           <Row
             icon={{ ios: 'folder', android: 'folder' }}
             title="家計グループ"

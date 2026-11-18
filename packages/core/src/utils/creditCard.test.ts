@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCreditCardSummary, getBillingMonthForDate, getCycleRangeLabel, getPaymentWarning } from './creditCard';
+import { computeCreditCardSummary, getBankCardWithdrawals, getBillingMonthForDate, getCycleRangeLabel, getPaymentWarning } from './creditCard';
 import type { Account, Transaction } from '../types/finance';
 
 describe('getBillingMonthForDate', () => {
@@ -77,5 +77,19 @@ describe('computeCreditCardSummary', () => {
     expect(getPaymentWarning(s, '2026-11-28')).toBe(3);
     expect(getPaymentWarning(s, '2026-11-27')).toBeNull();
     expect(getPaymentWarning({ ...s, nextMonthRemaining: 0 }, '2026-11-28')).toBeNull();
+  });
+
+  it('reserves confirmed unpaid amounts and separate estimates for the chosen bank', () => {
+    const linked = { ...card, linkedBankAccountId: 'bank', confirmedBillings: { '2026-12': 7000 } };
+    const paid: Transaction = {
+      ...spend('payment', '2026-12-10', 2000), type: 'transfer', accountId: 'bank',
+      toAccountId: card.id, targetBillingMonth: '2026-12',
+    };
+    const tx = [spend('confirmed', '2026-11-10', 9900), spend('estimated', '2026-11-20', 3000), paid];
+    expect(getBankCardWithdrawals([linked], tx, 'bank', '2026-12', '2026-12')).toEqual({ confirmed: 5000, estimated: 0 });
+    expect(getBankCardWithdrawals([linked], tx, 'bank', '2026-12', '2027-01')).toEqual({ confirmed: 5000, estimated: 3000 });
+    expect(getBankCardWithdrawals([linked], tx, 'other', '2026-12', '2027-01')).toEqual({ confirmed: 0, estimated: 0 });
+    expect(getBankCardWithdrawals([{ ...linked, confirmedBillings: { '2026-12': 0 } }], tx, 'bank', '2026-12', '2026-12'))
+      .toEqual({ confirmed: 0, estimated: 0 });
   });
 });

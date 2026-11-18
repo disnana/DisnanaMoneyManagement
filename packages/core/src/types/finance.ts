@@ -47,6 +47,8 @@ export interface CategoryDef {
   name: string;
   type: 'expense' | 'income' | 'transfer';
   color: string;
+  icon?: string;
+  memo?: string;
   defaultAccountingSubject?: string;
 }
 
@@ -66,6 +68,7 @@ export interface Account {
   paymentDay?: number; // 1..28 or 31 (月末)
   paymentMonthOffset?: 1 | 2; // 1: 翌月払い, 2: 翌々月払い
   paymentWarningDays?: number;
+  confirmedBillings?: Partial<Record<string, number>>;
   creditLimit?: number;
   // Linked bank account (type === 'credit' | 'debit', must reference a 'bank' account)
   linkedBankAccountId?: string;
@@ -165,6 +168,9 @@ export interface ForeignPurchasePrice {
 }
 
 export interface FinanceState {
+  customCategories?: CategoryDef[];
+  categoryOrder?: Partial<Record<'expense' | 'income', string[]>>;
+  hiddenCategoryIds?: string[];
   ledgers?: Ledger[];
   accounts: Account[];
   transactions: Transaction[];

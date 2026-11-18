@@ -10,6 +10,7 @@ export interface PickOption {
   label: string;
   subtitle?: string;
   icon?: SymbolViewProps['name'];
+  color?: string;
   selected?: boolean;
   destructive?: boolean;
 }
@@ -91,7 +92,7 @@ export function PickerHost() {
                   paddingHorizontal: 10, minHeight: 52, paddingVertical: 8, flexDirection: 'row',
                   alignItems: 'center', gap: 12, borderRadius: 12, backgroundColor: pressed || option.selected ? p.fill : 'transparent',
                 })}>
-                {option.icon ? <IconBadge name={option.icon} color={p.tint} size={36} /> : null}
+                {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} /> : null}
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={{ color: option.destructive ? p.danger : p.text, fontSize: 16, fontWeight: option.selected ? '700' : '500' }}>
                     {option.label}

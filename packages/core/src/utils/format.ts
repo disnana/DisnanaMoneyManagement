@@ -1,4 +1,4 @@
-import { CurrencyCode, Transaction } from '../types/finance';
+import { CategoryDef, CurrencyCode, Transaction } from '../types/finance';
 import {
   CURRENCY_META,
   getCategoryById,
@@ -118,7 +118,8 @@ export function getDeductibleBusinessAmount(tx: Transaction): number {
 /** Pure CSV text (UTF-8 BOM + CRLF) so any platform can save/share it its own way. */
 export function buildTransactionsCsv(
   transactions: Transaction[],
-  accountMap: Record<string, string>
+  accountMap: Record<string, string>,
+  customCategories?: readonly CategoryDef[]
 ): string {
   const header = [
     '日付',
@@ -169,7 +170,7 @@ export function buildTransactionsCsv(
       typeLabelMap[tx.type],
       tx.scope === 'business' ? '事業・経費' : 'プライベート',
       tx.title,
-      getCategoryById(tx.categoryId).name,
+      getCategoryById(tx.categoryId, customCategories).name,
       tx.accountingSubject ?? '',
       tx.counterparty ?? '',
       accountMap[tx.accountId] ?? '不明な口座',

@@ -1,6 +1,7 @@
 import {
   Account,
   Budget,
+  CategoryDef,
   FinanceState,
   Ledger,
   PurchaseCandidate,
@@ -9,6 +10,7 @@ import {
   Transaction,
 } from '../types/finance';
 import { createInitialSeedData } from '../data/seedData';
+import { ALL_CATEGORIES } from '../data/categories';
 import {
   getCurrentMonthKey,
   getEffectiveOutflow,
@@ -106,10 +108,22 @@ export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | nul
         return amount === undefined ? { ...item, foreignPrice: undefined } : { ...item, amount };
       })
     : undefined;
+  const readCategoryIds = (value: unknown): string[] | undefined =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : undefined;
+  const categoryOrder = { income: readCategoryIds(parsed.categoryOrder?.income), expense: readCategoryIds(parsed.categoryOrder?.expense) };
+  const hiddenCategoryIds = readCategoryIds(parsed.hiddenCategoryIds);
 
   return {
     ...(ledgers?.length ? { ledgers } : {}),
     ...(purchaseCandidates?.length ? { purchaseCandidates } : {}),
+    ...(Array.isArray(parsed.customCategories) ? {
+      customCategories: parsed.customCategories.filter((item) => item && typeof item.id === 'string' &&
+        (item.id.startsWith('custom_') || ALL_CATEGORIES.some((category) => category.id === item.id && category.type === item.type)) &&
+        typeof item.name === 'string' && item.name.trim() &&
+        (item.type === 'expense' || item.type === 'income') && typeof item.color === 'string' && /^#[0-9a-f]{6}$/i.test(item.color)),
+    } : {}),
+    ...(categoryOrder.income || categoryOrder.expense ? { categoryOrder } : {}),
+    ...(hiddenCategoryIds ? { hiddenCategoryIds } : {}),
     accounts,
     transactions,
     budgets,
@@ -303,6 +317,46 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const setConfirmedCardBilling = useCallback((id: string, month: string, amount?: number) => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
+    setState((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) => {
+        if (account.id !== id || account.type !== 'credit') return account;
+        const confirmedBillings = { ...account.confirmedBillings };
+        if (amount === undefined) delete confirmedBillings[month];
+        else confirmedBillings[month] = amount;
+        return { ...account, confirmedBillings };
+      }),
+    }));
+  }, []);
+
+  const saveCustomCategory = useCallback((category: Omit<CategoryDef, 'id'>, existingId?: string) => {
+    const id = existingId ?? `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => {
+      const categories = prev.customCategories ?? [];
+      return {
+        ...prev, customCategories: categories.some((item) => item.id === id)
+          ? categories.map((item) => item.id === id ? { ...category, id } : item)
+          : [...categories, { ...category, id }],
+      };
+    });
+  }, []);
+
+  const setCategoryOrder = useCallback((type: 'expense' | 'income', ids: string[]) => {
+    setState((prev) => ({ ...prev, categoryOrder: { ...prev.categoryOrder, [type]: [...new Set(ids)] } }));
+  }, []);
+
+  const setCategoryHidden = useCallback((id: string, hidden: boolean) => {
+    setState((prev) => {
+      const ids = new Set(prev.hiddenCategoryIds);
+      if (hidden) ids.add(id);
+      else ids.delete(id);
+      return { ...prev, hiddenCategoryIds: [...ids] };
+    });
+  }, []);
+
   const addLedger = useCallback((name: string, kind: Ledger['kind']) => {
     const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind }] }));
@@ -491,6 +545,10 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     addAccount,
     updateAccount,
     deleteAccount,
+    setConfirmedCardBilling,
+    saveCustomCategory,
+    setCategoryOrder,
+    setCategoryHidden,
     addLedger,
     renameLedger,
     deleteLedger,

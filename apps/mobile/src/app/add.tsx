@@ -4,12 +4,13 @@ import { Alert, Keyboard, useColorScheme, Platform, Pressable, ScrollView, Text,
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
-import { ACCOUNTING_SUBJECTS, ACCOUNT_TYPE_LABELS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, INCOME_TAX_CATEGORY_LABELS, getCategoryById } from '@dmm/core/data/categories';
+import { ACCOUNTING_SUBJECTS, ACCOUNT_TYPE_LABELS, INCOME_TAX_CATEGORY_LABELS, getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
 import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { getBillingMonthForDate } from '@dmm/core/utils/creditCard';
 import { getTransactionLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { categoryIcon } from '@/lib/categoryIcons';
+import { pickCategory } from '@/lib/categoryPicker';
 import { useFinance } from '@/lib/store';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
@@ -48,7 +49,8 @@ export default function AddScreen() {
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
   const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
-  const [categoryId, setCategoryId] = useState(editing?.categoryId ?? EXPENSE_CATEGORIES[0].id);
+  const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
+    getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds)[0]?.id ?? '');
   const [accountId, setAccountId] = useState(editing?.accountId ?? defaultAccount?.id ?? '');
   const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? paymentCard?.id ??
     transferAccounts.find((a) => a.id !== defaultAccount?.id)?.id ?? '');
@@ -70,7 +72,7 @@ export default function AddScreen() {
   const isBusiness = scope === 'business' && !advanceOn;
   const ledger = getTransactionLedger({ accountId, ledgerId, scope }, accountsById, ledgers);
 
-  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const customCategories = state.customCategories;
   const account = state.accounts.find((a) => a.id === accountId);
   const destination = state.accounts.find((a) => a.id === toAccountId);
   const linkedBank = account?.type === 'debit'
@@ -79,7 +81,7 @@ export default function AddScreen() {
     ? (destination.id === editing?.toAccountId ? editing?.targetBillingMonth
       : destination.id === paymentCard?.id ? paymentMonth : undefined)
     : undefined;
-  const category = getCategoryById(type === 'transfer' ? 'transfer' : categoryId);
+  const category = getCategoryById(type === 'transfer' ? 'transfer' : categoryId, customCategories);
   const calendarDate = new Date(`${date}T00:00:00`);
   const shiftDate = (days: number) => {
     const next = new Date(`${date}T00:00:00`);
@@ -90,8 +92,12 @@ export default function AddScreen() {
 
   const changeType = (t: TransactionType) => {
     setType(t);
-    if (t === 'expense') setCategoryId(EXPENSE_CATEGORIES.some((c) => c.id === categoryId) ? categoryId : EXPENSE_CATEGORIES[0].id);
-    if (t === 'income') setCategoryId(INCOME_CATEGORIES.some((c) => c.id === categoryId) ? categoryId : INCOME_CATEGORIES[0].id);
+    if (t !== 'transfer') {
+      const options = getOrderedCategories(t, customCategories, state.categoryOrder?.[t], state.hiddenCategoryIds);
+      if (!options.some((item) => item.id === categoryId)) {
+        setCategoryId(options[0]?.id ?? '');
+      }
+    }
     if (t === 'transfer') {
       const from = transferAccounts.find((a) => a.id === accountId) ?? linkedBank ?? transferAccounts[0];
       const to = transferAccounts.find((a) => a.id === toAccountId && a.id !== from?.id) ??
@@ -101,12 +107,6 @@ export default function AddScreen() {
     }
   };
 
-  const pickCategory = async () => {
-    const choice = await pickOne('カテゴリ', categories.map((c) => ({
-      id: c.id, label: c.name, icon: categoryIcon(c.id), selected: c.id === categoryId,
-    })));
-    if (choice) setCategoryId(choice);
-  };
   const pickAccount = async (setter: (v: string) => void, label: string, excludeId?: string) => {
     const choices = (type === 'transfer' ? transferAccounts : state.accounts).filter((a) => a.id !== excludeId);
     if (choices.length === 0) {
@@ -126,6 +126,10 @@ export default function AddScreen() {
       Alert.alert('取引が見つかりません');
       return;
     }
+    if (type !== 'transfer' && !categoryId) {
+      Alert.alert('カテゴリを選んでください');
+      return;
+    }
     const value = Number(amount);
     if (!Number.isSafeInteger(value) || value <= 0) {
       Alert.alert('金額を入力してください');
@@ -141,7 +145,6 @@ export default function AddScreen() {
       return;
     }
     if (!keepOpen || editing) closing.current = true;
-    const cat = getCategoryById(type === 'transfer' ? 'transfer' : categoryId);
     const payload: Omit<Transaction, 'id'> = {
       type,
       amount: value,
@@ -155,13 +158,13 @@ export default function AddScreen() {
         ? targetBillingMonth > date.slice(0, 7)
         : type === 'transfer' && destination?.type === 'credit' && destination.id === editing?.toAccountId
           ? editing?.isPrepayment : undefined,
-      title: title.trim() || (type === 'transfer' ? '口座振替' : cat.name),
+      title: title.trim() || (type === 'transfer' ? '口座振替' : category.name),
       memo: memo.trim() || undefined,
       scope: advanceOn ? 'personal' : scope,
       businessRatio: isBusiness && type === 'expense'
         ? Math.min(100, Math.max(0, Math.round(Number(ratio) || 0))) : undefined,
       accountingSubject: isBusiness && type === 'expense'
-        ? subject || getCategoryById(categoryId).defaultAccountingSubject : undefined,
+        ? subject || category.defaultAccountingSubject : undefined,
       counterparty: counterparty.trim() || undefined,
       incomeTaxCategory: type === 'income' ? taxCat ?? (scope === 'business' ? 'business' : undefined) : undefined,
       withholdingTax: type === 'income' ? Math.round(Number(withholding)) || undefined : undefined,
@@ -287,8 +290,9 @@ export default function AddScreen() {
           {dateStep(1, '次の日', { ios: 'chevron.right', android: 'chevron_right' })}
         </View>
         <Group>
-          {type !== 'transfer' ? fieldRow('カテゴリ', category.name, pickCategory,
-            { name: categoryIcon(category.id), color: category.color }) : null}
+          {type !== 'transfer' ? fieldRow('カテゴリ', categoryId ? category.name : '選択',
+            () => pickCategory(type, categoryId, state, setCategoryId),
+            { name: categoryIcon(category.icon ?? category.id), color: category.color }) : null}
           {accountRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法',
             account, setAccountId, type === 'transfer' ? toAccountId : undefined)}
           {type === 'transfer' ? accountRow('入金先', destination, setToAccountId, accountId) : null}

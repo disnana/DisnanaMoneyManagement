@@ -33,7 +33,8 @@ export default function Tax() {
   const exportCsv = async () => {
     const csv = buildTransactionsCsv(
       [...yearTx].sort((a, b) => a.date.localeCompare(b.date)),
-      accountNameMap
+      accountNameMap,
+      visibleState.customCategories
     );
     const suffix = activeLedger ? `-${activeLedger.id.replace(/[^a-zA-Z0-9_-]/g, '_')}` : '';
     const file = new File(Paths.cache, `kakeibo-${year}${suffix}.csv`);

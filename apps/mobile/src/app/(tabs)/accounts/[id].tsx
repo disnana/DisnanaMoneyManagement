@@ -74,7 +74,9 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
                 <Row title={`${formatMonthLabel(month)}の支払残額`}
                   subtitle={`${getCycleRangeLabel(month, account.closingDay, account.paymentMonthOffset)} · ${formatDayLabel(account.paymentDay ?? 27)}払い`}
                   right={formatJPY(summary.thisMonthRemaining)} />
-                <Row title="請求額" right={formatJPY(summary.thisMonthGross)} />
+                <Row title={summary.thisMonthConfirmed ? '請求額（確定）' : '請求額（見込み）'} right={formatJPY(summary.thisMonthGross)} />
+                <Row title={summary.thisMonthConfirmed ? '確定額を編集' : '確定額を入力'} chevron
+                  onPress={() => router.push({ pathname: '/accounts/billing', params: { id, month } })} />
                 <Row title="支払い記帳済み" right={formatJPY(summary.thisMonthSettled)} />
                 <Row title={`${formatMonthLabel(summary.nextMonthKey)}の支払残額`} right={formatJPY(summary.nextMonthRemaining)} />
                 <Row title={`${formatMonthLabel(month)}に使った額`} right={formatJPY(summary.thisMonthUsage)} />

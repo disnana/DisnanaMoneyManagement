@@ -24,11 +24,11 @@ export default function SearchTransactions() {
       (type === 'all' || tx.type === type) &&
       (!onlyMonth || tx.date.startsWith(month)) &&
       (!normalized || [
-        tx.title, tx.memo, tx.counterparty, tx.accountingSubject, getCategoryById(tx.categoryId).name,
+        tx.title, tx.memo, tx.counterparty, tx.accountingSubject, getCategoryById(tx.categoryId, visibleState.customCategories).name,
         accountNameMap[tx.accountId], tx.toAccountId ? accountNameMap[tx.toAccountId] : undefined,
       ].some((value) => value?.normalize('NFKC').toLocaleLowerCase().includes(normalized)))
     );
-  }, [visibleState.transactions, hasFilters, type, onlyMonth, month, normalized, accountNameMap]);
+  }, [visibleState.transactions, visibleState.customCategories, hasFilters, type, onlyMonth, month, normalized, accountNameMap]);
 
   return (
     <>

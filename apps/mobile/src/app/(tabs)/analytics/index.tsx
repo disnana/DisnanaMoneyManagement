@@ -43,7 +43,7 @@ function AnalyticsMonth({ month }: { month: string }) {
               key={c.categoryId}
               onPress={() => router.push({ pathname: '/analytics/category', params: { id: c.categoryId } })}
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: pressed ? p.fill : 'transparent' })}>
-              <IconBadge name={categoryIcon(c.categoryId)} color={c.color} />
+              <IconBadge name={categoryIcon(visibleState.customCategories?.find((item) => item.id === c.categoryId)?.icon ?? c.categoryId)} color={c.color} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>{c.name}</Text>
                 <View style={{ height: 6, borderRadius: 3, backgroundColor: p.fill, marginTop: 6, overflow: 'hidden' }}>
