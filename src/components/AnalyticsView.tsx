@@ -8,6 +8,7 @@ import {
 import {
   formatJPY,
   formatMonthLabel,
+  getCurrentMonthKey,
   getDeductibleBusinessAmount,
   getEffectiveOutflow,
   getRecentMonths,
@@ -184,8 +185,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onChangeMonth,
   accountNameMap,
 }) => {
+  const currentRealMonth = getCurrentMonthKey();
   const [periodMode, setPeriodMode] = useState<'month' | '6months' | 'year'>('month');
   const [scopeFilter, setScopeFilter] = useState<'all' | TransactionScope>('all');
+  const [trendPreviewMonth, setTrendPreviewMonth] = useState<string>(currentRealMonth);
 
   const selectedYear = selectedMonth.slice(0, 4);
 
@@ -324,9 +327,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     };
   }, [scopedTransactions, accountNameMap]);
 
-  // 6-Month savings / net flow curve
+  // 6-Month savings / net flow curve (locked to latest 6 months including current real month)
   const monthlyTrend = useMemo(() => {
-    const months = getRecentMonths(selectedMonth, 6);
+    const months = getRecentMonths(currentRealMonth, 6);
     const map: Record<string, { income: number; expense: number }> = {};
     for (const m of months) map[m] = { income: 0, expense: 0 };
 
@@ -350,7 +353,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       expense: map[m].expense,
       net: map[m].income - map[m].expense,
     }));
-  }, [state.transactions, selectedMonth, scopeFilter]);
+  }, [state.transactions, currentRealMonth, scopeFilter]);
 
   const maxTrendValue = Math.max(
     100000,
@@ -358,7 +361,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   );
 
   const activeTrendMonth =
-    monthlyTrend.find((d) => d.monthKey === selectedMonth) ??
+    monthlyTrend.find((d) => d.monthKey === trendPreviewMonth) ??
     monthlyTrend[monthlyTrend.length - 1];
 
   const periodTitle =
@@ -517,7 +520,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 月次純収支（黒字・赤字）トレンド
               </h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                直近6ヶ月の収入 − 支出の推移
+                今月を含む直近6ヶ月の収入 − 支出 · タップで詳細数値を確認
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-500">
@@ -610,12 +613,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 const x = 96 + i * ((554 - 96) / Math.max(1, monthlyTrend.length - 1));
                 const clamped = Math.max(0, d.net);
                 const y = 180 - (clamped / maxTrendValue) * 136;
-                const isSelected = d.monthKey === selectedMonth;
+                const isSelected = d.monthKey === trendPreviewMonth;
                 return (
                   <g
                     key={d.monthKey}
                     className="cursor-pointer"
-                    onClick={() => onChangeMonth(d.monthKey)}
+                    onClick={() => setTrendPreviewMonth(d.monthKey)}
                   >
                     <circle
                       cx={x}
@@ -653,12 +656,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
             {monthlyTrend.map((d) => {
-              const isSelected = d.monthKey === selectedMonth;
+              const isSelected = d.monthKey === trendPreviewMonth;
               return (
                 <button
                   key={d.monthKey}
                   type="button"
-                  onClick={() => onChangeMonth(d.monthKey)}
+                  aria-pressed={isSelected}
+                  onClick={() => setTrendPreviewMonth(d.monthKey)}
                   className={`flex min-h-[44px] flex-col items-center justify-center rounded-lg border px-1.5 py-1 text-center transition-all active:scale-95 ${
                     isSelected
                       ? 'border-teal-700 bg-teal-50 text-teal-900'

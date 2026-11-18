@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AnimatePresence,
   animate,
@@ -28,7 +29,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   children,
 }) => {
   const sheetY = useMotionValue(0);
-  const backdropOpacity = useTransform(sheetY, [0, 320], [1, 0.2]);
+  const backdropDragOpacity = useTransform(sheetY, [0, 320], [1, 0.15]);
   const bodyRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const isDismissingRef = useRef(false);
@@ -177,79 +178,92 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     };
   }, [open, finishPull, sheetY]);
 
-  return (
+  const sheetTree = (
     <AnimatePresence>
       {open && (
         <motion.div
-          key="responsive-sheet-backdrop"
+          key="responsive-sheet-root"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.16 }}
-          style={{ opacity: backdropOpacity }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 backdrop-blur-[2px] sm:items-center sm:p-4"
+          transition={{ duration: 0.14 }}
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
         >
+          {/* Scrim layer: drag dimming isolated from AnimatePresence fade */}
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 36 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            style={{ y: sheetY }}
-            className={`flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl ${maxWidthClass}`}
+            aria-hidden="true"
+            style={{ opacity: backdropDragOpacity }}
+            onClick={onClose}
+            className="absolute inset-0 bg-slate-900/45"
+          />
+
+          {/* Enter/Exit transition wrapper */}
+          <motion.div
+            initial={{ y: 36 }}
+            animate={{ y: 0 }}
+            exit={{ y: 28 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className={`relative z-10 w-full ${maxWidthClass}`}
           >
-            {/* Pull-to-dismiss handle + sticky header zone */}
-            <div
-              ref={headerRef}
-              onPointerDown={handleHeaderPointerDown}
-              className="shrink-0 touch-none select-none sm:touch-auto"
+            {/* Interactive pull-down layer (never conflicts with AnimatePresence exit y) */}
+            <motion.div
+              style={{ y: sheetY }}
+              className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
             >
-              {/* Mobile Drag Handle Indicator */}
-              <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
-                <span className="h-1.5 w-11 rounded-full bg-slate-300" />
+              {/* Pull-to-dismiss handle + sticky header zone */}
+              <div
+                ref={headerRef}
+                onPointerDown={handleHeaderPointerDown}
+                className="shrink-0 touch-none select-none sm:touch-auto"
+              >
+                {/* Mobile Drag Handle Indicator */}
+                <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
+                  <span className="h-1.5 w-11 rounded-full bg-slate-300" />
+                </div>
+
+                {/* Sticky Sheet Header */}
+                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 sm:px-6 sm:py-4">
+                  <h2
+                    id={titleId}
+                    className="text-base font-semibold leading-snug text-slate-900"
+                  >
+                    {title}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                    aria-label="閉じる"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
 
-              {/* Sticky Sheet Header */}
-              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 sm:px-6 sm:py-4">
-                <h2
-                  id={titleId}
-                  className="text-base font-semibold leading-snug text-slate-900"
-                >
-                  {title}
-                </h2>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95"
-                  aria-label="閉じる"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+              {/* Scrollable Body */}
+              <div
+                ref={bodyRef}
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5"
+              >
+                {children}
               </div>
-            </div>
 
-            {/* Scrollable Body */}
-            <div
-              ref={bodyRef}
-              className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5"
-            >
-              {children}
-            </div>
-
-            {/* Optional Sticky Footer */}
-            {footer && (
-              <div className="shrink-0 border-t border-slate-200 bg-white/95 px-5 py-3.5 pb-safe sm:px-6 sm:py-4">
-                {footer}
-              </div>
-            )}
+              {/* Optional Sticky Footer */}
+              {footer && (
+                <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3.5 pb-safe sm:px-6 sm:py-4">
+                  {footer}
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
   );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(sheetTree, document.body);
 };

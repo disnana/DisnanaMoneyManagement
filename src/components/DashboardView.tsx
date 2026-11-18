@@ -42,6 +42,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const currentRealMonth = getCurrentMonthKey();
   const prevMonth = shiftMonth(selectedMonth, -1);
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
+  const [chartPreviewMonth, setChartPreviewMonth] = useState<string>(currentRealMonth);
 
   const metrics = useMemo(() => {
     let income = 0;
@@ -106,7 +107,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [state.transactions, selectedMonth, prevMonth]);
 
   const trendData = useMemo(() => {
-    const months = getRecentMonths(selectedMonth, 6);
+    const months = getRecentMonths(currentRealMonth, 6);
     const map: Record<string, { income: number; expense: number }> = {};
     for (const m of months) {
       map[m] = { income: 0, expense: 0 };
@@ -135,7 +136,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       ...items.map((i) => Math.max(i.income, i.expense))
     );
     return { items, maxVal };
-  }, [state.transactions, selectedMonth]);
+  }, [state.transactions, currentRealMonth]);
 
   const cardSummaries = useMemo(() => {
     return state.accounts
@@ -182,7 +183,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const activeTrendPoint =
     trendData.items.find((i) => i.monthKey === hoveredMonth) ??
-    trendData.items.find((i) => i.monthKey === selectedMonth) ??
+    trendData.items.find((i) => i.monthKey === chartPreviewMonth) ??
     trendData.items[trendData.items.length - 1];
 
   return (
@@ -368,7 +369,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <div>
               <h3 className="text-base font-semibold text-slate-900">6ヶ月間の収支推移</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                棒グラフまたは下の月ボタンをタップして切り替えられます
+                今月を含む直近6ヶ月固定 · 棒や月ボタンをタップで詳細数値を確認
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-600">
@@ -462,7 +463,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   item.expense > 0 ? 3 : 0,
                   (item.expense / trendData.maxVal) * 158
                 );
-                const isSelected = item.monthKey === selectedMonth;
+                const isSelected = item.monthKey === chartPreviewMonth;
                 const isHovered = item.monthKey === hoveredMonth;
 
                 return (
@@ -471,7 +472,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     className="cursor-pointer"
                     onMouseEnter={() => setHoveredMonth(item.monthKey)}
                     onMouseLeave={() => setHoveredMonth(null)}
-                    onClick={() => onChangeMonth(item.monthKey)}
+                    onClick={() => setChartPreviewMonth(item.monthKey)}
                   >
                     <rect
                       x={centerX - groupWidth / 2 + 4}
@@ -518,12 +519,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Touch-friendly month selector buttons */}
           <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
             {trendData.items.map((item) => {
-              const isSelected = item.monthKey === selectedMonth;
+              const isSelected = item.monthKey === chartPreviewMonth;
               return (
                 <button
                   key={item.monthKey}
                   type="button"
-                  onClick={() => onChangeMonth(item.monthKey)}
+                  aria-pressed={isSelected}
+                  onClick={() => setChartPreviewMonth(item.monthKey)}
                   className={`flex min-h-[44px] flex-col items-center justify-center rounded-lg border px-1.5 py-1 text-center transition-all active:scale-95 ${
                     isSelected
                       ? 'border-teal-700 bg-teal-50 text-teal-900'
