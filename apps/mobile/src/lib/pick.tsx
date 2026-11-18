@@ -120,7 +120,7 @@ export function PickerHost() {
   };
   const optionContent = (option: PickOption) => (
     <>
-      {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} filled={divided} /> : null}
+      {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} filledInDark={divided} /> : null}
       <View style={{ flex: 1, gap: 2 }}>
         <Text numberOfLines={divided ? 2 : undefined} style={{ color: option.destructive ? p.danger : p.text, fontSize: 16, fontWeight: option.selected ? '700' : '500' }}>
           {option.label}

@@ -60,9 +60,11 @@ function iconOnColor(hex: string) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.179 ? '#000000' : '#FFFFFF';
 }
 
-export function IconBadge({ name, color, size = 40, filled = false }: {
-  name: SymbolViewProps['name']; color: string; size?: number; filled?: boolean;
+export function IconBadge({ name, color, size = 40, filledInDark = false }: {
+  name: SymbolViewProps['name']; color: string; size?: number; filledInDark?: boolean;
 }) {
+  const scheme = useColorScheme();
+  const filled = filledInDark && scheme === 'dark';
   return (
     <View
       style={{
@@ -81,7 +83,7 @@ export function IconBadge({ name, color, size = 40, filled = false }: {
 export function Row({
   icon,
   iconColor,
-  iconFilled,
+  iconFilledInDark,
   title,
   subtitle,
   detail,
@@ -94,7 +96,7 @@ export function Row({
 }: {
   icon?: SymbolViewProps['name'];
   iconColor?: string;
-  iconFilled?: boolean;
+  iconFilledInDark?: boolean;
   title: string;
   subtitle?: string;
   detail?: string;
@@ -120,7 +122,7 @@ export function Row({
         gap: compact ? 8 : 12,
         backgroundColor: pressed ? p.fill : 'transparent',
       })}>
-      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} filled={iconFilled} size={compact ? 32 : undefined} /> : null}
+      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} filledInDark={iconFilledInDark} size={compact ? 32 : undefined} /> : null}
       <View style={{ flex: 1 }}>
         <Text numberOfLines={2} style={{ color: p.text, fontSize: 16, fontWeight: '600', fontFamily }}>
           {title}
