@@ -137,6 +137,7 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
+        '@dmm/core': path.resolve(import.meta.dirname, 'packages/core/src'),
       },
     },
     server: {
