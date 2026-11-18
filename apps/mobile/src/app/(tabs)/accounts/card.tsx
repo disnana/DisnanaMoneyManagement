@@ -7,6 +7,7 @@ import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
 
 type CardType = 'credit' | 'debit';
@@ -71,7 +72,12 @@ export default function CardSettings() {
 
   return (
     <>
-      <Stack.Screen options={{ title: card ? 'カード設定' : 'カードを追加' }} />
+      <Stack.Screen options={{
+        title: card ? 'カード設定' : 'カードを追加',
+        headerRight: id && !card ? undefined : () => (
+          <HeaderAction name={{ ios: 'checkmark', android: 'check' }} label="保存" accent onPress={save} />
+        ),
+      }} />
       <Screen automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         {id && !card ? (
           <Text style={{ color: p.textSecondary }}>カードが見つかりません</Text>
@@ -146,7 +152,6 @@ export default function CardSettings() {
             {fixedBank ? (
               <Text style={{ color: p.textSecondary }}>記録済みの決済は現在の引落口座に紐づいています。</Text>
             ) : null}
-            <Group><Row title="保存" onPress={save} /></Group>
           </>
         )}
       </Screen>
