@@ -107,7 +107,9 @@ jobs:
       - name: Web · production dependencies (no exceptions)
         run: bun audit --production --audit-level=high
       - name: Web · all dependencies (high+, only documented exceptions)
-        run: bun audit --audit-level=high $(node scripts/audit-allowlist.mjs ids)
+        run: |
+          mapfile -t IGNORES < <(node scripts/audit-allowlist.mjs ids)
+          bun audit --audit-level=high "${IGNORES[@]}"
       - name: Web · full report (informational)
         run: bun audit || true
       - name: Mobile · install

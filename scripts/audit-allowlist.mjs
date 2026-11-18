@@ -29,7 +29,8 @@ const ignored = new Set(active.map((e) => e.id));
 const mode = process.argv[2];
 
 if (mode === 'ids') {
-  console.log(active.map((e) => `--ignore=${e.id}`).join(' '));
+  // one flag per line so shells can read them safely with `mapfile`
+  for (const e of active) console.log(`--ignore=${e.id}`);
 } else if (mode === 'npm') {
   const cwd = process.argv[3] ?? '.';
   let out;
