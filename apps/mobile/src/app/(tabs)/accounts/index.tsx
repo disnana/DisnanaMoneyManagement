@@ -38,14 +38,14 @@ export default function Accounts() {
         icon={ACCOUNT_ICONS[a.type]}
         title={a.name}
         subtitle={a.institution ? `${ACCOUNT_TYPE_LABELS[a.type]} · ${a.institution}` : ACCOUNT_TYPE_LABELS[a.type]}
-        right={sorting || a.type === 'debit' ? undefined : formatJPY(bal)}
+        right={a.type === 'debit' ? undefined : formatJPY(bal)}
         rightColor={bal < 0 ? p.danger : undefined}
       />
     );
   };
 
   const list = (section: typeof cards) => sorting
-    ? <ReorderList items={section} renderItem={rowFor} onReorder={(ids) => reorder(section, ids)} />
+    ? <ReorderList items={section} renderItem={rowFor} getLabel={(a) => a.name} onReorder={(ids) => reorder(section, ids)} />
     : <Group>{section.map((a) => <View key={a.id}>{rowFor(a)}</View>)}</Group>;
 
 

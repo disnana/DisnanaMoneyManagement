@@ -14,29 +14,45 @@ import { LedgerPicker } from '@/ui/LedgerPicker';
 import { Group, IconBadge, SectionTitle, Segmented } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 
+type Sort = 'amount' | 'custom';
+
 export default function Analytics() {
-  return <MonthScreen>{(month) => <AnalyticsMonth month={month} />}</MonthScreen>;
+  const [sort, setSort] = useState<Sort>(() => kv.getItem('dmm_analytics_sort') === 'custom' ? 'custom' : 'amount');
+  const changeSort = (value: Sort) => {
+    setSort(value);
+    kv.setItem('dmm_analytics_sort', value);
+  };
+  return (
+    <MonthScreen>{(month, isPreview) => (
+      <AnalyticsMonth month={month} isPreview={isPreview} sort={sort} onSortChange={changeSort} />
+    )}</MonthScreen>
+  );
 }
 
-function AnalyticsMonth({ month }: { month: string }) {
+function AnalyticsMonth({ month, isPreview, sort, onSortChange }: {
+  month: string;
+  isPreview: boolean;
+  sort: Sort;
+  onSortChange: (sort: Sort) => void;
+}) {
   const p = usePalette();
   const { visibleState, state, setCategoryOrder } = useFinance();
   const m = computeMonthMetrics(visibleState, month);
-  const [sort, setSortState] = useState<'amount' | 'custom'>(() => (kv.getItem('dmm_analytics_sort') === 'custom' ? 'custom' : 'amount'));
-  const setSort = (v: 'amount' | 'custom') => { setSortState(v); setBefore(undefined); kv.setItem('dmm_analytics_sort', v); };
   const [before, setBefore] = useState<string[]>(); // category order before the first drag in this session
 
   // "並び順" follows the category order from the settings (and what is changed here); the rest stay by amount
   const fullOrder = getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds).map((c) => c.id);
   const rank = (id: string) => { const i = fullOrder.indexOf(id); return i < 0 ? fullOrder.length : i; };
   const rows = sort === 'custom' ? [...m.categoryBreakdown].sort((a, b) => rank(a.categoryId) - rank(b.categoryId)) : m.categoryBreakdown;
-  const shown = new Set(rows.map((r) => r.categoryId));
+  const reorderable = rows.filter((r) => r.categoryId !== 'transfer_fee' && rank(r.categoryId) < fullOrder.length);
+  const canReorder = sort === 'custom' && !isPreview && reorderable.length > 1;
+  const shown = new Set(reorderable.map((r) => r.categoryId));
   const reorder = (ids: string[]) => {
     let next = 0;
     if (!before) setBefore(fullOrder);
     setCategoryOrder('expense', fullOrder.map((id) => (shown.has(id) ? ids[next++] : id)));
   };
-  const reorderable = sort === 'custom' ? rows.filter((r) => r.categoryId !== 'transfer_fee') : [];
+  const fixed = rows.filter((r) => !shown.has(r.categoryId));
 
   const categoryRow = (c: (typeof rows)[number]) => (
     <Pressable
@@ -69,12 +85,12 @@ function AnalyticsMonth({ month }: { month: string }) {
 
       <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
       {m.categoryBreakdown.length > 1 ? (
-        <Segmented<'amount' | 'custom'> value={sort} onChange={setSort} options={[{ id: 'amount', label: '金額順' }, { id: 'custom', label: '並び順' }]} />
+        <Segmented<Sort> value={sort} onChange={(value) => { setBefore(undefined); onSortChange(value); }} options={[{ id: 'amount', label: '金額順' }, { id: 'custom', label: '並び順' }]} />
       ) : null}
-      {sort === 'custom' && m.categoryBreakdown.length > 1 ? (
+      {canReorder ? (
         before
           ? <SortActions title="並び替え中" cancelLabel="元に戻す" onCancel={() => { setCategoryOrder('expense', before); setBefore(undefined); }} onDone={() => setBefore(undefined)} />
-          : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>右の ≡ を押したまま上下にドラッグ。リストの外で離すと取り消し。</Text>
+          : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>左のつまみを長押しして並び替え</Text>
       ) : null}
       {m.categoryBreakdown.length === 0 ? (
         <Group>
@@ -83,12 +99,10 @@ function AnalyticsMonth({ month }: { month: string }) {
           </View>
         </Group>
       ) : (
-        sort === 'custom' ? (
+        canReorder ? (
           <>
-            <ReorderList items={reorderable.map((c) => ({ ...c, id: c.categoryId }))} renderItem={(c) => categoryRow(c)} onReorder={reorder} />
-            {rows.some((r) => r.categoryId === 'transfer_fee') ? (
-              <Group>{rows.filter((r) => r.categoryId === 'transfer_fee').map((c) => categoryRow(c))}</Group>
-            ) : null}
+            <ReorderList items={reorderable.map((c) => ({ ...c, id: c.categoryId }))} renderItem={categoryRow} getLabel={(c) => c.name} onReorder={reorder} />
+            {fixed.length > 0 ? <Group>{fixed.map(categoryRow)}</Group> : null}
           </>
         ) : (
           <Group>{rows.map((c) => categoryRow(c))}</Group>

@@ -3,6 +3,7 @@ import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from 'ex
 import { Pressable, Text } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Screen as NativeScreen } from 'react-native-screens';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { tick } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
@@ -42,14 +43,18 @@ function TabButton({ label, icon, isFocused, ...props }: ComponentProps<typeof P
 export default function TabsLayout() {
   const p = usePalette();
   const tab = (name: Tab, label: string, icon: SymbolViewProps['name']) => (
-    <TabTrigger name={name} href={`/${name}`} asChild>
+    <TabTrigger name={name} href={`/${name}`} resetOnFocus asChild>
       <TabButton label={label} icon={icon} />
     </TabTrigger>
   );
 
   return (
     <Tabs style={{ flex: 1, backgroundColor: p.bg }} options={{ backBehavior: 'history' }}>
-      <TabSlot />
+      <TabSlot renderFn={(descriptor, { isFocused, detachInactiveScreens }) => isFocused ? (
+        <NativeScreen enabled={detachInactiveScreens} activityState={2} style={{ flex: 1 }}>
+          {descriptor.render()}
+        </NativeScreen>
+      ) : null} />
       <TabList asChild>
         <SafeAreaView edges={['left', 'right', 'bottom']} style={{
           backgroundColor: p.card, borderTopWidth: 1, borderTopColor: p.fill,

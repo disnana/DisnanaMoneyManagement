@@ -53,10 +53,12 @@ function Budgets() {
         <Row title="予算を設定したカテゴリの残額" right={formatJPY(limit - spent)} rightColor={spent > limit ? p.danger : p.tint}
           subtitle={`${formatJPY(spent)} 使用 / ${formatJPY(limit)}`} />
         {budgets.map((budget) => {
+          const category = getCategoryById(budget.categoryId, state.customCategories);
           const used = spending.get(budget.categoryId) ?? 0;
           const remaining = budget.monthlyLimit - used;
           return (
-            <Row key={budget.categoryId} title={getCategoryById(budget.categoryId, state.customCategories).name}
+            <Row key={budget.categoryId} title={category.name}
+              icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color}
               subtitle={`${formatJPY(used)} 使用 / ${formatJPY(budget.monthlyLimit)}`}
               right={remaining < 0 ? `${formatJPY(-remaining)}超過` : `残り ${formatJPY(remaining)}`}
               rightColor={remaining < 0 ? p.danger : undefined} chevron onPress={() => openEditor(budget.categoryId)} />

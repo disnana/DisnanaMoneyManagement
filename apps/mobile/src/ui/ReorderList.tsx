@@ -1,56 +1,125 @@
-import { type ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Sortable from 'react-native-sortables';
+import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
+import { tick } from '@/lib/haptics';
 import { metrics, usePalette } from '@/lib/theme';
-import { useScreenScrollRef } from '@/ui/kit';
 
-/**
- * A card of rows that can be reordered by dragging the ≡ handle (react-native-sortables: long-press drag,
- * animated reordering, drop indicator, auto-scroll near the screen edge). Rows may have different heights.
- */
-export function ReorderList<T extends { id: string }>({ items, renderItem, onReorder }: {
+const ROW_HEIGHT = 76;
+
+type DragState = {
+  from: SharedValue<number>;
+  target: SharedValue<number>;
+  offset: SharedValue<number>;
+};
+
+function ReorderRow({ label, index, count, drag, move, children }: {
+  label: string;
+  index: number;
+  count: number;
+  drag: DragState;
+  move: (from: number, to: number) => void;
+  children: ReactNode;
+}) {
+  const p = usePalette();
+  const { from, target, offset } = drag;
+  const gesture = usePanGesture({
+    enabled: count > 1,
+    activateAfterLongPress: 210,
+    maxPointers: 1,
+    onActivate: () => {
+      'worklet';
+      from.value = index;
+      target.value = index;
+      offset.value = 0;
+      scheduleOnRN(tick);
+    },
+    onUpdate: ({ translationY }) => {
+      'worklet';
+      offset.value = Math.max(-index * ROW_HEIGHT, Math.min((count - 1 - index) * ROW_HEIGHT, translationY));
+      target.value = index + Math.round(offset.value / ROW_HEIGHT);
+    },
+    onDeactivate: ({ canceled }) => {
+      'worklet';
+      if (!canceled && target.value !== index) {
+        offset.value = (target.value - index) * ROW_HEIGHT;
+        scheduleOnRN(move, index, target.value);
+      } else {
+        from.value = -1;
+        target.value = -1;
+        offset.value = 0;
+      }
+    },
+  });
+  const animation = useAnimatedStyle(() => {
+    const active = from.value === index;
+    const displacement = from.value >= 0 && index > from.value && index <= target.value ? -ROW_HEIGHT
+      : from.value >= 0 && index < from.value && index >= target.value ? ROW_HEIGHT : 0;
+    return {
+      transform: [{ translateY: active ? offset.value : from.value < 0 ? 0 : withTiming(displacement, { duration: 115 }) }],
+      zIndex: active ? 2 : 0,
+      backgroundColor: active ? p.fill : p.card,
+    };
+  });
+
+  return (
+    <Animated.View style={[{ height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center',
+      borderBottomColor: p.separator, borderBottomWidth: index < count - 1 ? StyleSheet.hairlineWidth : 0 }, animation]}>
+      {count > 1 ? (
+        <GestureDetector gesture={gesture} touchAction="none">
+          <View accessible accessibilityRole="adjustable" accessibilityLabel={`${label}の並び順`}
+            accessibilityValue={{ min: 1, max: count, now: index + 1 }} accessibilityHint="長押ししてドラッグ"
+            accessibilityActions={[{ name: 'increment', label: '後ろへ移動' }, { name: 'decrement', label: '前へ移動' }]}
+            onAccessibilityAction={({ nativeEvent }) => move(index, index + (nativeEvent.actionName === 'increment' ? 1 : -1))}
+            style={{ width: 44, height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 3 }}>
+              {Array.from({ length: 6 }, (_, dot) => (
+                <View key={dot} style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: p.textSecondary }} />
+              ))}
+            </View>
+          </View>
+        </GestureDetector>
+      ) : null}
+      <View style={{ flex: 1 }}>{children}</View>
+    </Animated.View>
+  );
+}
+
+export function ReorderList<T extends { id: string }>({ items, renderItem, getLabel, onReorder }: {
   items: T[];
-  renderItem: (item: T, index: number) => ReactNode;
+  renderItem: (item: T) => ReactNode;
+  getLabel: (item: T) => string;
   onReorder: (ids: string[]) => void;
 }) {
   const p = usePalette();
-  const scrollableRef = useScreenScrollRef();
+  const from = useSharedValue(-1);
+  const target = useSharedValue(-1);
+  const offset = useSharedValue(0);
+  const orderKey = JSON.stringify(items.map((item) => item.id));
+
+  useLayoutEffect(() => {
+    from.value = -1;
+    target.value = -1;
+    offset.value = 0;
+  }, [orderKey, from, target, offset]);
+
+  const move = (start: number, end: number) => {
+    if (start === end || !items[start] || !items[end]) return;
+    const ids = items.map((item) => item.id);
+    const [id] = ids.splice(start, 1);
+    ids.splice(end, 0, id);
+    onReorder(ids);
+  };
+
+  if (!items.length) return null;
   return (
     <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous', overflow: 'hidden' }}>
-      <Sortable.Grid
-        columns={1}
-        rowGap={0}
-        data={items}
-        keyExtractor={(item) => item.id}
-        customHandle
-        scrollableRef={scrollableRef}
-        hapticsEnabled
-        activeItemScale={1.03}
-        activeItemShadowOpacity={0.22}
-        inactiveItemOpacity={0.75}
-        showDropIndicator
-        dropIndicatorStyle={{ backgroundColor: p.tint + '26', borderLeftWidth: 4, borderLeftColor: p.tint }}
-        dragActivationDelay={120}
-        onDragEnd={({ indexToKey }) => {
-          // Only report a change; the list re-renders from the new order the caller saves
-          const same = indexToKey.length === items.length && indexToKey.every((id, i) => id === items[i].id);
-          if (!same) onReorder(indexToKey);
-        }}
-        renderItem={({ item, index }) => (
-          <View style={{ backgroundColor: p.card }}>
-            {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: p.separator }} /> : null}
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>{renderItem(item, index)}</View>
-              <Sortable.Handle>
-                <View accessibilityLabel="並び替え" accessibilityHint="押したまま上下に動かします"
-                  style={{ width: 52, height: 52, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ color: p.textSecondary, fontSize: 24, lineHeight: 26 }}>≡</Text>
-                </View>
-              </Sortable.Handle>
-            </View>
-          </View>
-        )}
-      />
+      {items.map((item, index) => (
+        <ReorderRow key={item.id} label={getLabel(item)} index={index} count={items.length} drag={{ from, target, offset }} move={move}>
+          {renderItem(item)}
+        </ReorderRow>
+      ))}
     </View>
   );
 }
