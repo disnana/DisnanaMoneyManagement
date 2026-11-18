@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
 import type { SavingsGoal } from '@dmm/core/types/finance';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
@@ -13,13 +14,14 @@ import { BudgetPie } from '@/ui/PurchaseInsights';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { Group, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
+import { Group, IconBadge, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { PlanningInput as Input, PlanningActions as Actions } from '@/ui/PlanningForm';
 import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
 import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { categoryIcon } from '@/lib/categoryIcons';
+import { PlanningProgress, PlanningSummary } from '@/ui/PlanningSummary';
 
 type Section = 'budget' | 'savings' | 'purchase';
 type PlanningData = Pick<ReturnType<typeof useFinance>, 'visibleState' | 'month'>;
@@ -49,27 +51,56 @@ function Budgets() {
   };
   const spent = budgets.reduce((sum, item) => sum + (spending.get(item.categoryId) ?? 0), 0);
   const limit = budgets.reduce((sum, item) => sum + item.monthlyLimit, 0);
+  const remaining = limit - spent;
+  const exceeded = budgets.filter((item) => (spending.get(item.categoryId) ?? 0) > item.monthlyLimit).length;
 
   return (
     <>
-      <SectionTitle action="追加" onAction={() => openEditor()}>月間予算</SectionTitle>
+      {budgets.length > 0 ? (
+        <PlanningSummary label={remaining < 0 ? '月間予算の超過' : '月間予算の残り'}
+          value={formatJPY(Math.abs(remaining))} color={remaining < 0 ? p.danger : p.income}
+          detail={`${formatJPY(spent)} 使用 / ${formatJPY(limit)}`}>
+          <PlanningProgress amount={spent} total={limit} color={remaining < 0 ? p.danger : p.tint} label="月間予算の使用率" />
+          {exceeded > 0 ? <Text style={{ color: p.danger, fontSize: 13, fontWeight: '600' }}>{exceeded}カテゴリが予算超過</Text> : null}
+        </PlanningSummary>
+      ) : null}
+
+      <SectionTitle action={budgets.length ? '追加' : undefined} onAction={() => openEditor()}>カテゴリ別の予算</SectionTitle>
       <Group>
-        <Row title="予算を設定したカテゴリの残額" right={formatJPY(limit - spent)} rightColor={spent > limit ? p.danger : p.tint}
-          subtitle={`${formatJPY(spent)} 使用 / ${formatJPY(limit)}`} />
-        {budgets.map((budget) => {
+        {budgets.length === 0 ? (
+          <Row title="予算を追加" subtitle="カテゴリごとに毎月の上限を設定"
+            icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => openEditor()} />
+        ) : budgets.map((budget) => {
           const category = getCategoryById(budget.categoryId, state.customCategories);
           const used = spending.get(budget.categoryId) ?? 0;
-          const remaining = budget.monthlyLimit - used;
+          const balance = budget.monthlyLimit - used;
+          const balanceLabel = balance < 0 ? '超過' : '残り';
           return (
-            <Row key={budget.categoryId} title={category.name}
-              icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color}
-              subtitle={`${formatJPY(used)} 使用 / ${formatJPY(budget.monthlyLimit)}`}
-              right={remaining < 0 ? `${formatJPY(-remaining)}超過` : `残り ${formatJPY(remaining)}`}
-              rightColor={remaining < 0 ? p.danger : undefined} chevron onPress={() => openEditor(budget.categoryId)} />
+            <Pressable key={budget.categoryId} accessibilityRole="button"
+              accessibilityLabel={`${category.name}、${balanceLabel} ${formatJPY(Math.abs(balance))}、${formatJPY(used)} 使用`}
+              onPress={() => openEditor(budget.categoryId)} style={({ pressed }) => ({
+                paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: pressed ? p.fill : p.card,
+              })}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <IconBadge name={categoryIcon(category.icon ?? category.id)} color={category.color} size={34} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text numberOfLines={2} style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>{category.name}</Text>
+                  <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatJPY(used)} / {formatJPY(budget.monthlyLimit)}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                  <Text style={{ color: balance < 0 ? p.danger : p.textSecondary, fontSize: 11 }}>{balanceLabel}</Text>
+                  <Text style={{ color: balance < 0 ? p.danger : p.text, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                    {formatJPY(Math.abs(balance))}
+                  </Text>
+                </View>
+                <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={12} tintColor={p.textSecondary} />
+              </View>
+              <PlanningProgress amount={used} total={budget.monthlyLimit} color={balance < 0 ? p.danger : category.color}
+                label={`${category.name}の予算使用率`} />
+            </Pressable>
           );
         })}
       </Group>
-      {budgets.length === 0 ? <Text style={{ color: p.textSecondary }}>カテゴリごとに毎月の上限を設定できます。</Text> : null}
     </>
   );
 }
@@ -95,13 +126,18 @@ function Savings() {
     setMonthly(goal === 'new' || !goal.monthlyContribution ? '' : String(goal.monthlyContribution));
   };
   const validDate = !date || isPlanningDate(date);
+  const saved = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
+  const achieved = goals.filter((goal) => goal.currentAmount >= goal.targetAmount).length;
 
   return (
     <>
-      <SectionTitle action="追加" onAction={() => edit('new')}>貯金目標</SectionTitle>
+      {goals.length > 0 ? <PlanningSummary label="貯めた金額" value={formatJPY(saved)} color={p.income}
+        detail={`達成 ${achieved} / ${goals.length} 件`} /> : null}
+      <SectionTitle action={goals.length ? '追加' : undefined} onAction={() => edit('new')}>貯金目標</SectionTitle>
       {editor ? (
         <>
           <Group>
+            <Row title={editor === 'new' ? '貯金目標を追加' : '貯金目標を編集'} />
             <Input label="目標名" value={title} onChange={setTitle} />
             <Input label="目標額（円）" value={target} onChange={setTarget} yen />
             <Input label="目標日（任意・YYYY-MM-DD）" value={date} onChange={setDate} />
@@ -131,18 +167,21 @@ function Savings() {
         return (
           <Group key={goal.id}>
             <Row title={goal.title} subtitle={goal.targetDate ? `目標日 ${formatFullDate(goal.targetDate)}` : undefined}
-              right={`${formatJPY(goal.currentAmount)} / ${formatJPY(goal.targetAmount)}`} chevron
+              chevron
               onPress={() => edit(goal)} onLongPress={() => void confirmRemoval('貯金目標を削除しますか？', () => {
                 deleteSavingsGoal(goal.id);
                 if (editor && editor !== 'new' && editor.id === goal.id) setEditor(undefined);
                 if (deposit?.id === goal.id) setDeposit(undefined);
               })} />
-            <View style={{ padding: 16, gap: 8 }}>
-              <View style={{ borderRadius: 5, height: 6, backgroundColor: p.fill, overflow: 'hidden' }}>
-                <View style={{ backgroundColor: p.tint, height: 6,
-                  width: `${Math.max(0, Math.min(100, goal.currentAmount / goal.targetAmount * 100))}%` }} />
+            <View style={{ padding: 14, gap: 9 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                <Text style={{ color: p.income, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+                  {formatJPY(goal.currentAmount)}
+                </Text>
+                <Text style={{ color: p.textSecondary, fontSize: 13 }}>目標 {formatJPY(goal.targetAmount)}</Text>
               </View>
-              <Text style={{ color: p.text }}>
+              <PlanningProgress amount={goal.currentAmount} total={goal.targetAmount} color={p.tint} label={`${goal.title}の達成率`} />
+              <Text style={{ color: plan.overdue ? p.danger : p.text, fontSize: 13, fontWeight: '600' }}>
                 {plan.remaining ? `残り ${formatJPY(plan.remaining)}` : '目標達成'}
                 {plan.overdue ? ' · 目標日を経過' : ''}
               </Text>
@@ -166,7 +205,10 @@ function Savings() {
           </Group>
         );
       })}
-      {goals.length === 0 ? <Text style={{ color: p.textSecondary }}>貯めたい金額を設定し、実際に貯めた額を記録できます。</Text> : null}
+      {goals.length === 0 && !editor ? (
+        <Group><Row title="貯金目標を追加" subtitle="目標額を決めて、積立を記録"
+          icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => edit('new')} /></Group>
+      ) : null}
     </>
   );
 }
@@ -178,6 +220,8 @@ function Purchases() {
   const ledgerId = activeLedger?.id;
   const inView = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
   const { candidates, confirmed, purchased } = groupPurchases(inView);
+  const planned = [...confirmed, ...candidates];
+  const plannedTotal = planned.reduce((sum, item) => sum + item.amount, 0);
   const pendingDelete = inView.find((item) => item.id === deletion?.id);
   const accountName = (id?: string) => state.accounts.find((a) => a.id === id)?.name ?? '口座未設定';
   const buy = (item: (typeof inView)[number]) => {
@@ -211,6 +255,10 @@ function Purchases() {
 
   return (
     <>
+      {planned.length > 0 ? (
+        <PlanningSummary label="購入候補・予定の合計" value={formatJPY(plannedTotal)}
+          detail={`候補 ${candidates.length} 件 · 確定 ${confirmed.length} 件`} />
+      ) : null}
       {confirmed.length > 0 ? (
         <>
           <SectionTitle>購入予定（確定済み）</SectionTitle>
@@ -222,7 +270,7 @@ function Purchases() {
                   subtitle={`${item.plannedDate ? formatFullDate(item.plannedDate) : ''} · ${accountName(item.accountId)}${item.installment && item.installment.count > 1 ? ` · ${item.installment.count}回払い` : ''}`}
                   right={formatJPY(item.amount)} icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
                 <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
-                  <PurchaseAction label="購入した" color={p.tint} onPress={() => buy(item)} />
+                  <PurchaseAction label="購入を記録" color={p.tint} primary onPress={() => buy(item)} />
                   <PurchaseAction label="調整" color={p.text} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
                   <PurchaseAction label="候補に戻す" color={p.text} onPress={() => {
                     const { id, ...rest } = item;
@@ -235,7 +283,7 @@ function Purchases() {
           })}
         </>
       ) : null}
-      <SectionTitle action="追加" onAction={() => router.push('/purchase-editor')}>購入候補</SectionTitle>
+      <SectionTitle action={candidates.length ? "追加" : undefined} onAction={() => router.push('/purchase-editor')}>購入候補</SectionTitle>
       {candidates.map((item) => {
         const category = getCategoryById(item.categoryId, state.customCategories);
         const budget = estimate(item.ledgerId, item.categoryId, item.amount);
@@ -245,8 +293,8 @@ function Purchases() {
               icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color} />
             <Row title="購入後のカテゴリ予算" right={formatPurchaseBudget(budget)} rightColor={budget?.shortfall ? p.danger : undefined} />
             <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
-              <PurchaseAction label="試算" color={p.tint} onPress={() => router.push({ pathname: '/purchase-compare', params: { id: item.id } })} />
-              <PurchaseAction label="確定" color={p.tint} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
+              <PurchaseAction label="試算を見る" color={p.tint} primary onPress={() => router.push({ pathname: '/purchase-compare', params: { id: item.id } })} />
+              <PurchaseAction label="予定にする" color={p.text} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
               <PurchaseAction label="編集" color={p.text} onPress={() => router.push({ pathname: '/purchase-editor', params: { id: item.id } })} />
               <PurchaseAction label="削除" color={p.danger}
                 onPress={({ nativeEvent }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />
@@ -256,7 +304,7 @@ function Purchases() {
       })}
       {candidates.length + confirmed.length > 0 ? (
         <BudgetPie month={month} ledgerId={ledgerId} title={candidates.length + confirmed.length > 1 ? '予定をすべて実行した場合の予算' : undefined}
-          extras={[...confirmed, ...candidates].map((item) => ({ categoryId: item.categoryId, amount: item.amount }))} />
+          extras={planned.map((item) => ({ categoryId: item.categoryId, amount: item.amount }))} />
       ) : null}
       {candidates.length > 1 ? (
         <>
@@ -282,7 +330,10 @@ function Purchases() {
           </Group>
         </>
       ) : null}
-      {candidates.length + confirmed.length + purchased.length === 0 ? <Text style={{ color: p.textSecondary }}>候補を追加すると、予算と購入後の残高を試算できます。</Text> : null}
+      {candidates.length === 0 ? (
+        <Group><Row title="購入候補を追加" subtitle="購入後の予算や残高を試算"
+          icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => router.push('/purchase-editor')} /></Group>
+      ) : null}
       <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
         if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
         setDeletion(undefined);
@@ -291,13 +342,13 @@ function Purchases() {
   );
 }
 
-function PurchaseAction({ label, color, onPress }: { label: string; color: string; onPress: NonNullable<PressableProps['onPress']> }) {
+function PurchaseAction({ label, color, primary, onPress }: { label: string; color: string; primary?: boolean; onPress: NonNullable<PressableProps['onPress']> }) {
   const p = usePalette();
   return (
     <Pressable accessibilityRole="button" onPress={onPress}
       style={({ pressed }) => ({ flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center',
-        borderRadius: 10, backgroundColor: pressed ? p.fill : 'transparent' })}>
-      <Text style={{ color, fontSize: 14, fontWeight: '700' }}>{label}</Text>
+        borderRadius: 10, backgroundColor: primary ? p.tint : pressed ? p.fill : 'transparent', opacity: primary && pressed ? 0.8 : 1 })}>
+      <Text style={{ color: primary ? p.onTint : color, fontSize: 14, fontWeight: '700' }}>{label}</Text>
     </Pressable>
   );
 }
