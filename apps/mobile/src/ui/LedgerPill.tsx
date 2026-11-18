@@ -19,7 +19,7 @@ export function LedgerPill() {
         if (choice !== null) setActiveLedgerId(choice || null);
       }}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16,
-        backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.2)' })}>
+        backgroundColor: pressed ? 'rgba(0,0,0,0.34)' : 'rgba(0,0,0,0.24)' })}>
       <SymbolView name={activeLedger ? ledgerIcon(activeLedger) : ALL_LEDGER_ICON} size={13} tintColor="#fff" />
       <Text numberOfLines={1} style={{ color: '#fff', fontSize: 13, fontWeight: '700', maxWidth: 120 }}>{activeLedger?.name ?? 'すべて'}</Text>
       <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={10} tintColor="#fff" />

@@ -11,7 +11,7 @@ export function HeroCard({ month, withLedger }: { month: string; withLedger?: bo
 
   const stat = (label: string, value: string, color?: string) => (
     <View style={{ flex: 1 }}>
-      <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' }}>{label}</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }}>{label}</Text>
       <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: color ?? '#fff', fontSize: 16, fontWeight: '700', marginTop: 2, fontVariant: ['tabular-nums'] }}>
         {value}
       </Text>
@@ -21,7 +21,7 @@ export function HeroCard({ month, withLedger }: { month: string; withLedger?: bo
   return (
     <View style={{ backgroundColor: '#0F766E', borderRadius: 22, borderCurve: 'continuous', padding: 16 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 32 }}>
-        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '500' }}>総資産残高</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: '500' }}>総資産残高</Text>
         {withLedger ? <LedgerPill /> : null}
       </View>
       <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: '#fff', fontSize: 32, fontWeight: '800', fontVariant: ['tabular-nums'] }}>

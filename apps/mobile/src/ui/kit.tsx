@@ -30,7 +30,7 @@ export function SectionTitle({ children, action, onAction }: { children: string;
     <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: -8 }}>
       <Text style={{ color: p.text, fontSize: 17, fontWeight: '700', fontFamily }}>{children}</Text>
       {action ? (
-        <Pressable onPress={onAction} hitSlop={10}>
+        <Pressable accessibilityRole="button" onPress={onAction} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}>
           <Text style={{ color: p.tint, fontSize: 15, fontWeight: '500' }}>{action}</Text>
         </Pressable>
       ) : null}

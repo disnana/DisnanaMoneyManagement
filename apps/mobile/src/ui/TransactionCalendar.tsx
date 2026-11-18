@@ -77,12 +77,12 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
                   <View>
                     {amountLines.map(({ key, amount, color, prefix }) => (
                       <Text key={key} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}
-                        style={{ color, textAlign: 'right', fontSize: 10, lineHeight: 12, fontVariant: ['tabular-nums'] }}>
+                        style={{ color, textAlign: 'right', fontSize: 11, lineHeight: 13, fontVariant: ['tabular-nums'] }}>
                         {prefix}{yen.format(amount)}
                       </Text>
                     ))}
                     {summary && amountLines.length === 0 ? (
-                      <Text style={{ color: p.textSecondary, textAlign: 'right', fontSize: 10 }}>{summary.items.length}件</Text>
+                      <Text style={{ color: p.textSecondary, textAlign: 'right', fontSize: 11 }}>{summary.items.length}件</Text>
                     ) : null}
                   </View>
                 </Pressable>

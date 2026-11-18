@@ -61,7 +61,7 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, onReo
     <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous' }}>
       {items.map((item, index) => (
         <DragRow key={item.id} index={index} count={items.length} active={active} hover={hover} dragY={dragY} outside={outside}
-          heights={heights} onHeight={setHeight} onDrop={finish}>
+          heights={heights} onHeight={setHeight} onDrop={finish} onStep={(delta) => finish(index, index + delta)}>
           {renderItem(item, index)}
         </DragRow>
       ))}
@@ -69,11 +69,11 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, onReo
   );
 }
 
-function DragRow({ index, count, active, hover, dragY, outside, heights, onHeight, onDrop, children }: {
+function DragRow({ index, count, active, hover, dragY, outside, heights, onHeight, onDrop, onStep, children }: {
   index: number; count: number;
   active: SharedValue<number>; hover: SharedValue<number>; dragY: SharedValue<number>; outside: SharedValue<boolean>;
   heights: SharedValue<number[]>;
-  onHeight: (index: number, h: number) => void; onDrop: (from: number, to: number) => void; children: ReactNode;
+  onHeight: (index: number, h: number) => void; onDrop: (from: number, to: number) => void; onStep: (delta: -1 | 1) => void; children: ReactNode;
 }) {
   const p = usePalette();
   // Heights are stored by position. When the order changes a row moves to another position without being
@@ -184,7 +184,13 @@ function DragRow({ index, count, active, hover, dragY, outside, heights, onHeigh
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <View style={{ flex: 1 }}>{children}</View>
         <GestureDetector gesture={pan}>
-          <View accessibilityRole="adjustable" accessibilityLabel="ドラッグして並び替え" hitSlop={6}
+          <View accessible accessibilityRole="adjustable" accessibilityLabel="並び替え" accessibilityHint="ドラッグ、または上下の操作で移動"
+            accessibilityActions={[{ name: 'increment', label: '1つ下へ' }, { name: 'decrement', label: '1つ上へ' }]}
+            onAccessibilityAction={(e) => {
+              // VoiceOver / Switch Control alternative to the drag gesture
+              if (e.nativeEvent.actionName === 'increment' && index < count - 1) onStep(1);
+              if (e.nativeEvent.actionName === 'decrement' && index > 0) onStep(-1);
+            }} hitSlop={6}
             style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}>
             <Text style={{ color: p.textSecondary, fontSize: 24, lineHeight: 26 }}>≡</Text>
           </View>
