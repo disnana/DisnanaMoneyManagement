@@ -18,6 +18,8 @@ interface ResponsiveSheetProps {
   titleId?: string;
   maxWidthClass?: string;
   instantClose?: boolean;
+  /** Phones: cover the whole screen like a native modal page (✕ left, centered title) */
+  fullScreenMobile?: boolean;
   footer?: React.ReactNode;
   children: React.ReactNode;
 }
@@ -81,6 +83,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   titleId,
   maxWidthClass = 'sm:max-w-lg',
   instantClose = false,
+  fullScreenMobile = false,
   footer,
   children,
 }) => {
@@ -143,6 +146,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
 
   // Pull-down gesture on handle & header (mobile & touch)
   const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (fullScreenMobile) return;
     if (typeof window !== 'undefined' && window.innerWidth >= 640) return;
     const targetEl = e.target as HTMLElement;
     if (targetEl.closest('button')) return;
@@ -172,7 +176,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
 
   // Pull-down gesture from inside scrollable body when scrolled to top (scrollTop <= 0)
   useEffect(() => {
-    if (!open) return;
+    if (!open || fullScreenMobile) return;
     const el = bodyRef.current;
     if (!el) return;
 
@@ -241,9 +245,10 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [open, finishPull, sheetY]);
+  }, [open, fullScreenMobile, finishPull, sheetY]);
 
   const skipExit = instantClose || dragDismissed;
+  const fs = fullScreenMobile;
   const custom: SheetCustom = { skip: skipExit, mobile: isMobileViewport() };
 
   const sheetTree = (
@@ -280,12 +285,16 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             animate="animate"
             exit="exit"
             custom={custom}
-            className={`relative z-10 w-full ${maxWidthClass}`}
+            className={`relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}
           >
             {/* Interactive pull-down layer */}
             <motion.div
               style={{ y: sheetY }}
-              className="flex max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
+              className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90%] sm:rounded-2xl sm:border sm:border-slate-200 ${
+                fs
+                  ? 'h-full sm:h-auto'
+                  : 'max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] rounded-t-3xl border border-slate-200'
+              }`}
             >
               {/* Pull-to-dismiss handle + sticky header zone */}
               <div
@@ -294,26 +303,42 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
                 className="shrink-0 touch-none select-none sm:touch-auto"
               >
                 {/* Mobile Drag Handle Indicator */}
-                <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
-                  <span className="h-1.5 w-11 rounded-full bg-slate-300" />
-                </div>
+                {!fs && (
+                  <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
+                    <span className="h-1.5 w-11 rounded-full bg-slate-300" />
+                  </div>
+                )}
 
                 {/* Sticky Sheet Header */}
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 sm:px-6 sm:py-4">
+                <div
+                  className={`flex items-center gap-1 border-b border-slate-200 sm:justify-between sm:gap-3 sm:px-6 sm:py-4 ${
+                    fs ? 'px-2 py-1.5 sm:py-4' : 'justify-between px-5 py-3'
+                  }`}
+                  style={
+                    fs
+                      ? { paddingTop: 'max(0.375rem, env(safe-area-inset-top, 0px))' }
+                      : undefined
+                  }
+                >
                   <h2
                     id={titleId}
-                    className="text-base font-semibold leading-snug text-slate-900"
+                    className={`text-base font-semibold leading-snug text-slate-900 ${
+                      fs ? 'flex-1 text-center sm:flex-none sm:text-left' : ''
+                    }`}
                   >
                     {title}
                   </h2>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                    className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95 ${
+                      fs ? 'order-first sm:order-last' : ''
+                    }`}
                     aria-label="閉じる"
                   >
                     <X className="h-5 w-5" />
                   </button>
+                  {fs && <span className="w-11 shrink-0 sm:hidden" aria-hidden="true" />}
                 </div>
               </div>
 

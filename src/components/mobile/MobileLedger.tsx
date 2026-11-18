@@ -50,6 +50,39 @@ const SORTS: { id: SortKey; label: string }[] = [
   { id: 'amount_asc', label: '金額が小さい順' },
 ];
 
+const DayHeader: React.FC<{
+  groupKey: string;
+  heading: string;
+  income: number;
+  expense: number;
+}> = ({ groupKey, heading, income, expense }) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(groupKey);
+  if (!m) {
+    return <div className="bg-slate-100 px-4 py-2 text-xs font-bold text-slate-500">{heading}</div>;
+  }
+  const dow = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getDay();
+  const label = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'][dow];
+  const chip =
+    dow === 0 ? 'bg-red-500 text-white' : dow === 6 ? 'bg-sky-500 text-white' : 'bg-slate-400 text-white';
+  const net = income - expense;
+  return (
+    <div className="flex items-center gap-2.5 bg-slate-100 px-4 py-2">
+      <span className="font-mono text-2xl font-medium leading-none text-slate-800 tabular-nums">
+        {Number(m[3])}
+      </span>
+      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${chip}`}>{label}</span>
+      <span
+        className={`ml-auto font-mono text-sm font-bold tabular-nums ${
+          net > 0 ? 'text-emerald-700' : 'text-slate-700'
+        }`}
+      >
+        {net > 0 ? '+' : net < 0 ? '-' : ''}
+        {formatJPY(Math.abs(net))}
+      </span>
+    </div>
+  );
+};
+
 export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
@@ -184,17 +217,8 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
       ) : (
         groups.map((g) => (
           <section key={g.key}>
-            <div className="mb-1.5 flex items-baseline justify-between px-1">
-              <h3 className="text-xs font-bold text-slate-500">{g.heading}</h3>
-              {(g.expense > 0 || g.income > 0) && (
-                <span className="font-mono text-[11px] text-slate-400 tabular-nums">
-                  {g.income > 0 && <span className="text-emerald-700">+{formatJPY(g.income)}</span>}
-                  {g.income > 0 && g.expense > 0 && ' '}
-                  {g.expense > 0 && <span>-{formatJPY(g.expense)}</span>}
-                </span>
-              )}
-            </div>
             <InsetGroup className="divide-y divide-slate-100">
+              <DayHeader groupKey={g.key} heading={g.heading} income={g.income} expense={g.expense} />
               {g.items.map((tx) => {
                 const cat = getCategoryById(tx.categoryId);
                 const acc = p.accountNameMap[tx.accountId] ?? '不明な口座';

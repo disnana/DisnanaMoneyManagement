@@ -36,6 +36,8 @@ import {
   shiftMonth,
 } from '../utils/format';
 import { ResponsiveSheet } from './ResponsiveSheet';
+import { ChevronLeft as StepPrev, ChevronRight as StepNext } from 'lucide-react';
+import { haptic } from '../utils/haptics';
 
 export interface TransactionModalPrefill {
   mode?: 'standard' | 'fx_payout';
@@ -60,6 +62,21 @@ interface TransactionModalProps {
 }
 
 type ModalTab = TransactionType | 'fx_payout';
+
+function shiftDay(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1, d + delta);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+function formatDateWithWeekday(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][new Date(y, m - 1, d).getDay()];
+  return `${y}年${m}月${d}日(${wd})`;
+}
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   open,
@@ -107,6 +124,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [fxTaxCategory, setFxTaxCategory] = useState<'business' | 'miscellaneous'>('business');
 
   const [error, setError] = useState<string | null>(null);
+  const continueRef = useRef(false);
 
   const bankAccounts = useMemo(
     () => accounts.filter((a) => a.type === 'bank' || a.type === 'psp'),
@@ -581,6 +599,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       },
       editingTransaction?.id
     );
+    if (continueRef.current && !editingTransaction) {
+      // Keep the page open for rapid consecutive entry
+      continueRef.current = false;
+      haptic(12);
+      setAmountStr('');
+      setTitle('');
+      setMemo('');
+      setPointUsedStr('');
+      setTransferFeeStr('');
+      setTransferFxFeeStr('');
+      setCounterparty('');
+      setError(null);
+      return;
+    }
+    continueRef.current = false;
     onClose();
   };
 
@@ -610,34 +643,75 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           ? '取引を編集'
           : activeTab === 'fx_payout'
           ? '外貨・Stripe 一括入金記帳'
-          : '新しい取引を記録'
+          : '収支を記録'
       }
       titleId="tx-modal-title"
       maxWidthClass="sm:max-w-xl"
+      fullScreenMobile
       footer={
-        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-center sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
+            className="hidden min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98] sm:block"
           >
             キャンセル
           </button>
+          {!editingTransaction && activeTab !== 'fx_payout' && (
+            <button
+              type="submit"
+              form="tx-modal-form"
+              onClick={() => {
+                continueRef.current = true;
+              }}
+              className="min-h-[48px] whitespace-nowrap rounded-xl border border-teal-700 bg-white px-4 py-2.5 text-sm font-semibold text-teal-800 transition-colors active:bg-teal-50 active:scale-[0.98] sm:min-h-[44px]"
+            >
+              続けて登録
+            </button>
+          )}
           <button
             type="submit"
             form="tx-modal-form"
-            className="min-h-[44px] whitespace-nowrap rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-800 active:scale-[0.98]"
+            onClick={() => {
+              continueRef.current = false;
+            }}
+            className={`min-h-[48px] whitespace-nowrap rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-800 active:scale-[0.98] sm:min-h-[44px] ${
+              !editingTransaction && activeTab !== 'fx_payout' ? '' : 'col-span-2'
+            }`}
           >
             {editingTransaction
               ? '変更を保存'
               : activeTab === 'fx_payout'
               ? '売上と手数料を一括記帳'
-              : '記録を追加'}
+              : '登録'}
           </button>
         </div>
       }
     >
       <form id="tx-modal-form" onSubmit={handleSubmit} className="space-y-5">
+        {/* Date stepper (phones) */}
+        <div className="flex items-center justify-between sm:hidden">
+          <button
+            type="button"
+            aria-label="前の日"
+            onClick={() => setDate((d) => shiftDay(d, -1))}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-600 active:bg-slate-100"
+          >
+            <StepPrev className="h-5 w-5" />
+          </button>
+          <span className="font-mono text-[15px] font-semibold text-teal-800 tabular-nums">
+            {formatDateWithWeekday(date)}
+          </span>
+          <button
+            type="button"
+            aria-label="次の日"
+            onClick={() => setDate((d) => shiftDay(d, 1))}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-600 active:bg-slate-100"
+          >
+            <StepNext className="h-5 w-5" />
+          </button>
+        </div>
+
         {/* Mode Switcher */}
         <div className="flex flex-col gap-2.5">
           <div
