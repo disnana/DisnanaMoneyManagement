@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { Capacitor } from '@capacitor/core';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
@@ -10,7 +11,7 @@ import './index.css';
  *  - A new version is applied immediately right after launch, or when the app returns from the
  *    background, or when the app goes to the background - never in the middle of an entry form.
  */
-if (import.meta.env.PROD) {
+if (import.meta.env.PROD && !Capacitor.isNativePlatform()) {
   const bootedAt = Date.now();
   let pending = false;
 
