@@ -13,7 +13,7 @@ export function Screen({ children, ...rest }: ScrollViewProps & { children: Reac
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       style={{ flex: 1, backgroundColor: p.bg }}
-      contentContainerStyle={{ padding: 16, paddingTop: 16 + metrics.screenPaddingTop, gap: 20, paddingBottom: 48 }}
+      contentContainerStyle={{ padding: 16, paddingTop: 8 + metrics.screenPaddingTop, gap: 20, paddingBottom: 48 }}
       {...rest}>
       {children}
     </ScrollView>

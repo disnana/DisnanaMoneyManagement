@@ -26,16 +26,6 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen
-            name="settings"
-            options={{
-              presentation: 'modal',
-              headerShown: true,
-              headerShadowVisible: false,
-              headerStyle: { backgroundColor: p.bg },
-              headerTintColor: p.text,
-            }}
-          />
-          <Stack.Screen
             name="add"
             options={Platform.select({
               // iOS: native form sheet (UISheetPresentationController) with grabber

@@ -1,6 +1,5 @@
 import { Text } from 'react-native';
 import Constants from 'expo-constants';
-import { Stack } from 'expo-router';
 import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
@@ -10,7 +9,6 @@ export default function Settings() {
   const [pref, setPref] = useThemePref();
   return (
     <>
-      <Stack.Screen options={{ title: '設定' }} />
       <Screen>
         <SectionTitle>外観</SectionTitle>
         <Segmented<ThemePref>
@@ -24,6 +22,14 @@ export default function Settings() {
         />
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           「自動」は端末の設定に合わせます。
+        </Text>
+
+        <SectionTitle>アカウント</SectionTitle>
+        <Group>
+          <Row title="サインイン" right="未設定（この端末のみ）" />
+        </Group>
+        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
+          アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
         </Text>
 
         <SectionTitle>情報</SectionTitle>

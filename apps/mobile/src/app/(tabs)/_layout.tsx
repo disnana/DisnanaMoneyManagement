@@ -26,6 +26,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>口座</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'creditcard', selected: 'creditcard.fill' }} md="account_balance_wallet" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="settings">
+        <NativeTabs.Trigger.Label>設定</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'gearshape', selected: 'gearshape.fill' }} md="settings" />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

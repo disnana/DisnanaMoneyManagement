@@ -4,6 +4,7 @@ import { formatJPY } from '@dmm/core/utils/format';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { DonutChart } from '@/ui/PieChart';
 import { Group, IconBadge, MonthBar, Screen, SectionTitle } from '@/ui/kit';
 
 export default function Analytics() {
@@ -15,19 +16,11 @@ export default function Analytics() {
     <Screen>
       <MonthBar month={month} onChange={setMonth} />
 
-      <View style={{ alignItems: 'center', gap: 2 }}>
-        <Text style={{ color: p.textSecondary, fontSize: 13 }}>今月の支出</Text>
-        <Text style={{ color: p.text, fontSize: 34, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{formatJPY(m.expense)}</Text>
-      </View>
-
-      {/* Stacked share bar */}
-      {m.categoryBreakdown.length > 0 ? (
-        <View style={{ flexDirection: 'row', height: 14, borderRadius: 7, overflow: 'hidden', gap: 2 }}>
-          {m.categoryBreakdown.map((c) => (
-            <View key={c.categoryId} style={{ flex: Math.max(c.share, 0.02), backgroundColor: c.color }} />
-          ))}
-        </View>
-      ) : null}
+      <DonutChart
+        slices={m.categoryBreakdown.map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
+        centerLabel="支出"
+        centerValue={formatJPY(m.expense)}
+      />
 
       <SectionTitle>カテゴリ別</SectionTitle>
       {m.categoryBreakdown.length === 0 ? (

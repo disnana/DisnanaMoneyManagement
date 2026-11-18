@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Alert, KeyboardAvoidingView, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { Transaction, TransactionType } from '@dmm/core/types/finance';
@@ -12,9 +13,7 @@ import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, Segmented } from '@/ui/kit';
 
-function shiftDay(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00`);
-  d.setDate(d.getDate() + delta);
+function toDateString(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
@@ -26,6 +25,7 @@ function dateLabel(date: string): string {
 
 export default function AddScreen() {
   const p = usePalette();
+  const scheme = useColorScheme();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, addTransaction, updateTransaction } = useFinance();
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
@@ -119,11 +119,13 @@ export default function AddScreen() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: p.bg }}>
       {Platform.OS === 'ios' ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 10, height: 56 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 14, height: 64 }}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
             <SymbolView name={{ ios: 'xmark', android: 'close' }} size={17} tintColor={p.textSecondary} />
           </Pressable>
-          <Text style={{ color: p.text, fontSize: 17, fontWeight: '600' }}>{editing ? '取引を編集' : '収支を記録'}</Text>
+          <Text numberOfLines={1} style={{ color: p.text, fontSize: 17, fontWeight: '600', flex: 1, textAlign: 'center' }}>
+            {editing ? '取引を編集' : '収支を記録'}
+          </Text>
           <View style={{ width: 44 }} />
         </View>
       ) : null}
@@ -156,14 +158,24 @@ export default function AddScreen() {
         </View>
 
         <Group>
-          <View style={{ minHeight: metrics.rowMinHeight - 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-            <Pressable hitSlop={8} onPress={() => { tick(); setDate((d) => shiftDay(d, -1)); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={16} tintColor={p.tint} />
-            </Pressable>
-            <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>{dateLabel(date)}</Text>
-            <Pressable hitSlop={8} onPress={() => { tick(); setDate((d) => shiftDay(d, 1)); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={16} tintColor={p.tint} />
-            </Pressable>
+          <View style={{ minHeight: metrics.rowMinHeight - 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16 }}>
+            <Text style={{ color: p.text, fontSize: 16 }}>日付</Text>
+            {Platform.OS === 'web' ? (
+              <Text style={{ color: p.textSecondary, fontSize: 16 }}>{dateLabel(date)}</Text>
+            ) : (
+              // Native system date picker: compact (tap -> calendar popover) on iOS, Material dialog on Android
+              <DateTimePicker
+                value={new Date(`${date}T00:00:00`)}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                locale="ja-JP"
+                accentColor={p.tint}
+                themeVariant={scheme === 'dark' ? 'dark' : 'light'}
+                onChange={(_, d) => {
+                  if (d) setDate(toDateString(d));
+                }}
+              />
+            )}
           </View>
           {type !== 'transfer' ? fieldRow('カテゴリ', category.name, pickCategory) : null}
           {fieldRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法', accountName(accountId), () => pickAccount(setAccountId, type === 'transfer' ? '出金元' : '口座'))}
