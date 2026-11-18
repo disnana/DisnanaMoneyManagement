@@ -1,26 +1,31 @@
-import { ReactNode } from 'react';
-import { useState } from 'react';
-import { Platform, Pressable, type PressableProps, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import { createContext, useContext, useState, type ReactNode } from 'react';
+import Animated, { useAnimatedRef, type AnimatedRef } from 'react-native-reanimated';
+import { Platform, Pressable, type PressableProps, useColorScheme, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
-import { useDragging } from '@/lib/dragState';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
+
+/** The screen's scroll view, so a list being reordered can scroll it when dragged near an edge. */
+export const ScreenScrollRef = createContext<AnimatedRef<any> | null>(null);
+export const useScreenScrollRef = () => useContext(ScreenScrollRef) ?? undefined;
 
 /** Scrollable screen. On iOS the transparent large-title bar insets content automatically. */
 export function Screen({ children, ...rest }: ScrollViewProps & { children: ReactNode }) {
   const p = usePalette();
-  const dragging = useDragging();
+  const ref = useAnimatedRef<Animated.ScrollView>();
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      keyboardDismissMode="on-drag"
-      style={{ flex: 1, backgroundColor: p.bg }}
-      contentContainerStyle={{ padding: 16, paddingTop: 8 + metrics.screenPaddingTop, gap: 16, paddingBottom: 48 }}
-      {...rest}
-      scrollEnabled={rest.scrollEnabled !== false && !dragging}>
-      {children}
-    </ScrollView>
+    <ScreenScrollRef.Provider value={ref}>
+      <Animated.ScrollView
+        ref={ref}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
+        style={{ flex: 1, backgroundColor: p.bg }}
+        contentContainerStyle={{ padding: 16, paddingTop: 8 + metrics.screenPaddingTop, gap: 16, paddingBottom: 48 }}
+        {...rest}>
+        {children}
+      </Animated.ScrollView>
+    </ScreenScrollRef.Provider>
   );
 }
 
