@@ -9,8 +9,12 @@ import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
-import { Alert, Platform } from 'react-native';
+import { Alert, Linking, Platform } from 'react-native';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
+
+function openLegalPage(page: 'terms' | 'privacy') {
+  void Linking.openURL(`https://dmm.disnana.com/${page}/`).catch(() => Alert.alert('ページを開けませんでした'));
+}
 
 export default function Settings() {
   const p = usePalette();
@@ -115,6 +119,8 @@ export default function Settings() {
 
         <SectionTitle>情報</SectionTitle>
         <Group>
+          <Row title="利用規約" chevron onPress={() => openLegalPage('terms')} />
+          <Row title="プライバシーポリシー" chevron onPress={() => openLegalPage('privacy')} />
           <Row title="バージョン" right={Constants.expoConfig?.version ?? '-'} />
         </Group>
       </Screen>

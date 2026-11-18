@@ -5,6 +5,7 @@ import { formatJPY } from '../../utils/format';
 import { ResponsiveSheet } from '../ResponsiveSheet';
 import { PWAInstallButton } from '../PWAInstallButton';
 import { ThemeSwitch } from '../ThemeSwitch';
+import { LegalLinks } from '../LegalLinks';
 
 interface Props {
   open: boolean;
@@ -84,6 +85,7 @@ export const MobileMenuSheet: React.FC<Props> = ({
       </div>
 
       <PWAInstallButton />
+      <LegalLinks />
 
       <p className="pt-1 text-center text-[11px] text-slate-400">ビルド {__BUILD_TIME__}</p>
     </div>

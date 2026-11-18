@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, type GestureResponderEvent } from 'react-native';
+import { Alert, Platform, Switch, Text, View, type GestureResponderEvent } from 'react-native';
+import { requireOptionalNativeModule } from 'expo';
 import { Stack } from 'expo-router';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import { success } from '@/lib/haptics';
@@ -11,11 +12,16 @@ import { Group, Row, Screen } from '@/ui/kit';
 
 type Mode = 'clear' | 'sample';
 
+const financeBackup = Platform.OS === 'android'
+  ? requireOptionalNativeModule<{ isEnabled(): boolean; setEnabled(enabled: boolean): boolean }>('FinanceBackup')
+  : null;
+
 export default function DataSettings() {
   const { state, clearAllData, resetToSampleData, setActiveLedgerId, setMonth, setTransactionFilter } = useFinance();
   const p = usePalette();
   const [pending, setPending] = useState<{ mode: Mode; anchor: PopoverAnchor }>();
   const [message, setMessage] = useState('');
+  const [backupEnabled, setBackupEnabled] = useState(() => financeBackup?.isEnabled() ?? false);
   const ask = (mode: Mode, { nativeEvent }: GestureResponderEvent) =>
     setPending({ mode, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } });
   const isSample = pending?.mode === 'sample';
@@ -24,6 +30,24 @@ export default function DataSettings() {
     <>
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
+        {financeBackup ? (
+          <Group>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 }}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>家計データの自動バックアップ</Text>
+                <Text style={{ color: p.textSecondary, fontSize: 13 }}>オンにするとAndroidのバックアップ対象に含まれます。端末側でもバックアップを有効にしてください。</Text>
+              </View>
+              <Switch accessibilityLabel="家計データの自動バックアップ" value={backupEnabled} onValueChange={(enabled) => {
+                try {
+                  if (!financeBackup.setEnabled(enabled)) throw new Error('Could not save backup preference');
+                  setBackupEnabled(enabled);
+                } catch {
+                  Alert.alert('設定を保存できませんでした');
+                }
+              }} />
+            </View>
+          </Group>
+        ) : null}
         <Group>
           <Row title="サンプルデータに置き換える" icon={{ ios: 'doc.text', android: 'description' }}
             subtitle="サンプルの口座と取引で試す" chevron onPress={(event) => ask('sample', event)} />

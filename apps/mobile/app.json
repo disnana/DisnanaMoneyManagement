@@ -40,7 +40,8 @@
         }
       ],
       "expo-sqlite",
-      "expo-local-authentication"
+      "expo-local-authentication",
+      "./plugins/with-finance-backup"
     ],
     "experiments": {
       "typedRoutes": true,

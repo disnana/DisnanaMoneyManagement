@@ -13,6 +13,7 @@ import { NavSection } from '../types/finance';
 import { formatJPY } from '../utils/format';
 import { PWAInstallButton } from './PWAInstallButton';
 import { ThemeSwitch } from './ThemeSwitch';
+import { LegalLinks } from './LegalLinks';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -114,6 +115,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Database className="h-4 w-4 shrink-0 text-slate-500" />
             <span>データ管理・バックアップ</span>
           </button>
+
+          <LegalLinks />
         </div>
       </div>
     </aside>
