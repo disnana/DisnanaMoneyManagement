@@ -55,14 +55,13 @@ jobs:
     name: iOS unsigned IPA
     # iOS is distributed through Expo Go for now: build the native IPA only on demand
     if: github.event_name == 'workflow_dispatch'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        # expo-modules-jsi needs Swift 6.2; Xcode 26.3's compiler rejects one data-race check in it
-        # (JavaScriptObject.swift: "sending 'slot' risks causing data races"), so also try older 26.x
-        xcode: ['26.2', '26.1']
+        # Expo SDK 58 requires Xcode 26.4+; macos-26 provides this pinned version.
+        xcode: ['26.4.1']
     steps:
       - uses: actions/checkout@v4
         with:
