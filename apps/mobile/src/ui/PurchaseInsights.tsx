@@ -30,20 +30,6 @@ export function PurchaseInsights({ amount, month, ledgerId, categoryId, installm
 
   return (
     <>
-      {plan && amount ? (
-        <>
-          <SectionTitle>分割払いの目安</SectionTitle>
-          <Group>
-            <Row title="毎月の支払い" subtitle={`${installment?.count}回・年率 ${installment?.annualRatePct ?? 0}%`} right={formatJPY(plan.monthly)} />
-            <Row title="支払総額" right={formatJPY(plan.total)} />
-            <Row title="利息・手数料の合計" right={formatJPY(plan.interest)} rightColor={plan.interest > 0 ? p.danger : undefined} />
-            <Row title={`毎月の収支（平均 ${formatJPY(surplus)}）に対して`}
-              right={`${surplus > 0 ? Math.round((plan.monthly / surplus) * 100) : '—'}${surplus > 0 ? '%' : ''}`}
-              rightColor={surplus > 0 && plan.monthly > surplus ? p.danger : undefined} />
-          </Group>
-        </>
-      ) : null}
-
       {amount && bank ? (
         <>
           <SectionTitle>いつ買える？</SectionTitle>
@@ -61,6 +47,20 @@ export function PurchaseInsights({ amount, month, ledgerId, categoryId, installm
           </View>
         </>
       ) : null}
+      {plan && amount ? (
+        <>
+          <SectionTitle>分割払いの目安</SectionTitle>
+          <Group>
+            <Row title="毎月の支払い" subtitle={`${installment?.count}回・年率 ${installment?.annualRatePct ?? 0}%`} right={formatJPY(plan.monthly)} />
+            <Row title="支払総額" right={formatJPY(plan.total)} />
+            <Row title="利息・手数料の合計" right={formatJPY(plan.interest)} rightColor={plan.interest > 0 ? p.danger : undefined} />
+            <Row title={`毎月の収支（平均 ${formatJPY(surplus)}）に対して`}
+              right={`${surplus > 0 ? Math.round((plan.monthly / surplus) * 100) : '—'}${surplus > 0 ? '%' : ''}`}
+              rightColor={surplus > 0 && plan.monthly > surplus ? p.danger : undefined} />
+          </Group>
+        </>
+      ) : null}
+
     </>
   );
 }

@@ -166,7 +166,17 @@ export interface PurchaseCandidate {
   url?: string;
   /** 分割・ローンで払う場合の回数と年率(%) */
   installment?: { count: number; annualRatePct: number };
+  /** candidate (default) -> confirmed (final check done, planned) -> purchased (recorded as an expense) */
+  status?: PurchaseStatus;
+  /** 購入予定日 (YYYY-MM-DD), set when confirmed */
+  plannedDate?: string;
+  /** 支払う口座, set when confirmed */
+  accountId?: string;
+  /** 実際に購入した日 */
+  purchasedAt?: string;
 }
+
+export type PurchaseStatus = 'candidate' | 'confirmed' | 'purchased';
 
 export interface ForeignPurchasePrice {
   currency: Exclude<CurrencyCode, 'JPY'>;

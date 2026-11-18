@@ -1,4 +1,4 @@
-import type { FinanceState, PurchaseCandidate, Transaction } from '../types/finance';
+import type { FinanceState, PurchaseCandidate, PurchaseStatus, Transaction } from '../types/finance';
 import { getCategoryById } from '../data/categories';
 import { shiftMonth } from './format';
 import { filterLedger } from './ledgers';
@@ -96,4 +96,34 @@ export function buildPurchaseTransaction(c: PurchaseCandidate, accountId: string
     memo: c.note || undefined,
     ledgerId: c.ledgerId,
   };
+}
+
+export function purchaseStatus(c: Pick<PurchaseCandidate, 'status'>): PurchaseStatus {
+  return c.status ?? 'candidate';
+}
+
+/** Split by stage; candidates by priority, confirmed by planned date, purchased newest first. */
+export function groupPurchases(items: PurchaseCandidate[]) {
+  const by = (s: PurchaseStatus) => items.filter((i) => purchaseStatus(i) === s);
+  return {
+    candidates: sortCandidates(by('candidate')),
+    confirmed: by('confirmed').sort((a, b) => (a.plannedDate ?? '9999').localeCompare(b.plannedDate ?? '9999')),
+    purchased: by('purchased').sort((a, b) => (b.purchasedAt ?? '').localeCompare(a.purchasedAt ?? '')),
+  };
+}
+
+const without = ({ id: _id, ...rest }: PurchaseCandidate): Omit<PurchaseCandidate, 'id'> => rest;
+
+/** Final check done: lock in price, date and paying account. */
+export function confirmPurchase(c: PurchaseCandidate, f: { amount: number; plannedDate: string; accountId: string; installment?: PurchaseCandidate['installment'] }): Omit<PurchaseCandidate, 'id'> {
+  return { ...without(c), status: 'confirmed', amount: f.amount, plannedDate: f.plannedDate, accountId: f.accountId, installment: f.installment, purchasedAt: undefined };
+}
+
+/** Back to the candidate list (the confirmation is dropped, the rest is kept). */
+export function revertToCandidate(c: PurchaseCandidate): Omit<PurchaseCandidate, 'id'> {
+  return { ...without(c), status: 'candidate', plannedDate: undefined, accountId: undefined, purchasedAt: undefined };
+}
+
+export function markPurchased(c: PurchaseCandidate, date: string): Omit<PurchaseCandidate, 'id'> {
+  return { ...without(c), status: 'purchased', purchasedAt: date };
 }

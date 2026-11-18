@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { averageMonthlyNet, budgetOverview, buildPurchaseTransaction, installmentPlan, monthsUntilAffordable, sortCandidates } from './purchasePlan';
+import { averageMonthlyNet, budgetOverview, buildPurchaseTransaction, confirmPurchase, groupPurchases, installmentPlan, markPurchased, monthsUntilAffordable, revertToCandidate, sortCandidates } from './purchasePlan';
 import type { FinanceState, Transaction } from '../types/finance';
 
 const tx = (o: Partial<Transaction>): Transaction => ({ id: Math.random().toString(36), type: 'expense', amount: 0, date: '2026-10-10', categoryId: 'food', accountId: 'a', title: 't', ...o });
@@ -68,5 +68,29 @@ describe('purchase helpers', () => {
     expect(sortCandidates(items).map((i) => i.amount)).toEqual([100, 900, 50, 1]);
     expect(buildPurchaseTransaction({ id: 'c', title: 'PC', categoryId: 'education', amount: 98000, month: '2026-11', ledgerId: 'personal', note: '' }, 'a', '2026-11-20'))
       .toMatchObject({ type: 'expense', amount: 98000, title: 'PC', accountId: 'a', ledgerId: 'personal', memo: undefined });
+  });
+});
+
+describe('purchase stages', () => {
+  const base = { id: 'c1', title: 'PC', categoryId: 'education', amount: 100000, month: '2026-11', priority: 1 as const };
+  it('confirms with the final price/date/account, reverts, and marks purchased', () => {
+    const confirmed = { id: 'c1', ...confirmPurchase(base, { amount: 95000, plannedDate: '2026-11-25', accountId: 'a', installment: { count: 3, annualRatePct: 0 } }) };
+    expect(confirmed).toMatchObject({ status: 'confirmed', amount: 95000, plannedDate: '2026-11-25', accountId: 'a', priority: 1 });
+    const back = revertToCandidate({ ...confirmed, id: 'c1' });
+    expect(back).toMatchObject({ status: 'candidate', plannedDate: undefined, accountId: undefined, amount: 95000 });
+    expect(markPurchased({ ...confirmed, id: 'c1' }, '2026-11-26')).toMatchObject({ status: 'purchased', purchasedAt: '2026-11-26' });
+  });
+  it('groups by stage with sensible ordering', () => {
+    const g = groupPurchases([
+      { ...base, id: 'a', priority: 3 },
+      { ...base, id: 'b', priority: 1 },
+      { ...base, id: 'c', status: 'confirmed', plannedDate: '2026-11-30' },
+      { ...base, id: 'd', status: 'confirmed', plannedDate: '2026-11-20' },
+      { ...base, id: 'e', status: 'purchased', purchasedAt: '2026-11-01' },
+      { ...base, id: 'f', status: 'purchased', purchasedAt: '2026-11-09' },
+    ]);
+    expect(g.candidates.map((i) => i.id)).toEqual(['b', 'a']);
+    expect(g.confirmed.map((i) => i.id)).toEqual(['d', 'c']);
+    expect(g.purchased.map((i) => i.id)).toEqual(['f', 'e']);
   });
 });

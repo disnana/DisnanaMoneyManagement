@@ -4,11 +4,12 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
 import { formatForeignCurrency, formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { assessPurchaseForMonth } from '@dmm/core/utils/planning';
-import { buildPurchaseTransaction, PRIORITY_LABELS } from '@dmm/core/utils/purchasePlan';
+import { buildPurchaseTransaction, markPurchased, PRIORITY_LABELS } from '@dmm/core/utils/purchasePlan';
 import { getTodayString } from '@dmm/core/utils/format';
 import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
 import { BudgetPie, PurchaseInsights } from '@/ui/PurchaseInsights';
+import { Disclosure } from '@/ui/Disclosure';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
@@ -19,7 +20,7 @@ import { Group, Screen } from '@/ui/kit';
 
 export default function PurchaseCompare() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { state, removePurchaseCandidate, addTransaction } = useFinance();
+  const { state, removePurchaseCandidate, addTransaction, savePurchaseCandidate } = useFinance();
   const p = usePalette();
   const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
   const candidate = state.purchaseCandidates?.find((item) => item.id === id);
@@ -54,20 +55,27 @@ export default function PurchaseCompare() {
             </View>
             <BudgetPie month={candidate.month} ledgerId={candidate.ledgerId} extras={[{ categoryId: candidate.categoryId, amount: candidate.amount }]} />
             <Group><PurchaseBankPicker {...payment} /></Group>
-            <PurchaseCashPreview amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId} bank={payment.bank} banks={payment.banks}
-              budget={assessPurchaseForMonth(state, candidate.month, candidate.categoryId, candidate.amount, candidate.ledgerId)}
-              nextBudget={assessPurchaseForMonth(state, shiftMonth(candidate.month, 1), candidate.categoryId, candidate.amount, candidate.ledgerId)} />
             <PurchaseInsights amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId} categoryId={candidate.categoryId}
               installment={candidate.installment} bank={payment.bank} />
+            <Disclosure title="くわしく見る（残高の内訳・貯金・積立）">
+              <PurchaseCashPreview amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId} bank={payment.bank} banks={payment.banks}
+              budget={assessPurchaseForMonth(state, candidate.month, candidate.categoryId, candidate.amount, candidate.ledgerId)}
+              nextBudget={assessPurchaseForMonth(state, shiftMonth(candidate.month, 1), candidate.categoryId, candidate.amount, candidate.ledgerId)} />
+            </Disclosure>
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: candidate.id } })}
+              style={({ pressed }) => ({ minHeight: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1 })}>
+              <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>最終確認して確定する</Text>
+            </Pressable>
             <Pressable accessibilityRole="button" onPress={async () => {
               const choice = await pickOne('支払った口座', state.accounts.map((a) => ({ id: a.id, label: a.name, selected: a.id === payment.bank?.id })));
               if (!choice) return;
-              addTransaction(buildPurchaseTransaction(candidate, choice, getTodayString()));
-              removePurchaseCandidate(candidate.id);
+              const today = getTodayString();
+              addTransaction(buildPurchaseTransaction(candidate, choice, today));
+              savePurchaseCandidate(markPurchased(candidate, today), candidate.id);
               success();
               router.back();
-            }} style={({ pressed }) => ({ minHeight: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1 })}>
-              <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>購入した（取引に記録）</Text>
+            }} style={({ pressed }) => ({ minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: p.tint, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 })}>
+              <Text style={{ color: p.tint, fontSize: 16, fontWeight: '700' }}>確定せず購入した（取引に記録）</Text>
             </Pressable>
           </>
         ) : <Text style={{ color: p.textSecondary }}>購入候補が見つかりません</Text>}

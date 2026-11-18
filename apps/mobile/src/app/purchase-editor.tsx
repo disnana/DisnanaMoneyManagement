@@ -16,6 +16,7 @@ import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
 import { PlanningInput } from '@/ui/PlanningForm';
 import { BudgetPie, PurchaseInsights } from '@/ui/PurchaseInsights';
+import { Disclosure } from '@/ui/Disclosure';
 import { PurchaseBankPicker, PurchaseCashPreview, usePurchaseBank } from '@/ui/PurchaseCashPreview';
 
 const CURRENCIES = ['JPY', ...FOREIGN_PURCHASE_CURRENCIES] as const;
@@ -119,6 +120,9 @@ export default function PurchaseEditor() {
               {foreignPrice ? <PlanningInput label="手数料（円・任意）" value={fee} onChange={setFee} yen /> : null}
               {foreignPrice && purchaseAmount ? <Row title="円換算（手数料込み）" right={formatJPY(purchaseAmount)} /> : null}
             </Group>
+            {category && purchaseAmount
+              ? <BudgetPie month={targetMonth} ledgerId={ledgerId} extras={[{ categoryId: category, amount: purchaseAmount }]} />
+              : <Text style={{ color: p.textSecondary, fontSize: 13 }}>カテゴリと価格を入れると、予算への影響を円グラフで確認できます。</Text>}
             <Group>
               <View style={{ padding: 8 }}>
                 <Segmented<'1' | '2' | '3'> value={String(priority) as '1' | '2' | '3'} onChange={(v) => setPriority(Number(v) as 1 | 2 | 3)}
@@ -147,10 +151,12 @@ export default function PurchaseEditor() {
               <PurchaseBankPicker {...payment} />
               {purchaseAmount ? <Row title="購入予定額" right={formatJPY(purchaseAmount)} /> : null}
             </Group>
-            <PurchaseCashPreview key={ledgerId ?? 'none'} amount={purchaseAmount} month={targetMonth} ledgerId={ledgerId} bank={payment.bank} banks={payment.banks}
-              budget={budget} nextBudget={nextBudget} categorySelected={Boolean(category)} />
             <PurchaseInsights amount={purchaseAmount} month={targetMonth} ledgerId={ledgerId} categoryId={category || undefined}
               installment={count > 1 ? { count, annualRatePct: Number(ratePct) || 0 } : undefined} bank={payment.bank} />
+            <Disclosure title="くわしく見る（残高の内訳・貯金・積立）">
+              <PurchaseCashPreview key={ledgerId ?? 'none'} amount={purchaseAmount} month={targetMonth} ledgerId={ledgerId} bank={payment.bank} banks={payment.banks}
+              budget={budget} nextBudget={nextBudget} categorySelected={Boolean(category)} />
+            </Disclosure>
           </Screen>
         </>
       )}

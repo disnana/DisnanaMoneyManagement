@@ -348,6 +348,15 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     setState((prev) => ({ ...prev, categoryOrder: { ...prev.categoryOrder, [type]: [...new Set(ids)] } }));
   }, []);
 
+  /** Reorder accounts: the given ids first in that order, anything not listed keeps its relative order after them. */
+  const reorderAccounts = useCallback((ids: string[]) => {
+    setState((prev) => {
+      const rank = new Map(ids.map((id, i) => [id, i]));
+      const accounts = [...prev.accounts].sort((a, b) => (rank.get(a.id) ?? ids.length) - (rank.get(b.id) ?? ids.length));
+      return { ...prev, accounts };
+    });
+  }, []);
+
   const setCategoryHidden = useCallback((id: string, hidden: boolean) => {
     setState((prev) => {
       const ids = new Set(prev.hiddenCategoryIds);
@@ -548,6 +557,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     setConfirmedCardBilling,
     saveCustomCategory,
     setCategoryOrder,
+    reorderAccounts,
     setCategoryHidden,
     addLedger,
     updateLedger,
