@@ -78,6 +78,8 @@ export const MobileMenuSheet: React.FC<Props> = ({
       </div>
 
       <PWAInstallButton />
+
+      <p className="pt-1 text-center text-[11px] text-slate-400">ビルド {__BUILD_TIME__}</p>
     </div>
   </ResponsiveSheet>
 );

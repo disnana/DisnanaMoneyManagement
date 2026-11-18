@@ -216,7 +216,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-        <div>
+        <div className="hidden lg:block">
           <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             経費・所得・確定申告サポート
           </h2>

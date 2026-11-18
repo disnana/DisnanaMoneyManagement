@@ -15,6 +15,8 @@ import {
   getTransferTotalFees,
 } from '../utils/format';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
+import { Segmented } from './mobile/MobileKit';
+import { useIsDesktop } from '../hooks/useMediaQuery';
 
 interface AnalyticsViewProps {
   state: FinanceState;
@@ -186,6 +188,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   accountNameMap,
 }) => {
   const currentRealMonth = getCurrentMonthKey();
+  const isDesktop = useIsDesktop();
   const [periodMode, setPeriodMode] = useState<'month' | '6months' | 'year'>('month');
   const [scopeFilter, setScopeFilter] = useState<'all' | TransactionScope>('all');
   const [trendPreviewMonth, setTrendPreviewMonth] = useState<string>(currentRealMonth);
@@ -375,7 +378,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
+        <div className="hidden lg:block">
           <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             収支分析・ポートフォリオ
           </h2>
@@ -384,6 +387,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </p>
         </div>
 
+        {isDesktop ? (
         <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 sm:inline-flex">
             {(
@@ -437,13 +441,45 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             className="w-full sm:w-auto"
           />
         </div>
+        ) : (
+        <div className="space-y-2">
+          <Segmented
+            layoutId="analytics-period-seg"
+            value={periodMode}
+            options={[
+              { id: 'month', label: '単月' },
+              { id: '6months', label: '6ヶ月' },
+              { id: 'year', label: '年間' },
+            ] as const}
+            onChange={setPeriodMode}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <MonthSwitcherBar
+              plain
+              selectedMonth={selectedMonth}
+              onChangeMonth={onChangeMonth}
+              className="flex-1"
+            />
+            <select
+              aria-label="区分"
+              value={scopeFilter}
+              onChange={(e) => setScopeFilter(e.target.value as 'all' | TransactionScope)}
+              className="h-10 shrink-0 rounded-lg bg-transparent pl-2 pr-1 text-[15px] font-medium text-teal-700"
+            >
+              <option value="all">すべて</option>
+              <option value="personal">個人</option>
+              <option value="business">事業</option>
+            </select>
+          </div>
+        </div>
+        )}
       </div>
 
       {/* Summary Strip */}
       <section className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4">
         <div className="p-4 sm:p-5">
           <div className="text-xs font-medium text-slate-500">総売上・収入 ({periodTitle})</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl max-sm:text-xl font-bold text-emerald-700 tabular-nums">
             {formatJPY(analyticsSummary.totalIncome)}
           </div>
           <div className="mt-1 text-xs text-slate-500 tabular-nums">
@@ -461,7 +497,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
         <div className="p-4 sm:p-5">
           <div className="text-xs font-medium text-slate-500">総支出（手数料含む）</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl max-sm:text-xl font-bold text-slate-900 tabular-nums">
             {formatJPY(analyticsSummary.totalOutflow)}
           </div>
           {analyticsSummary.transferFees > 0 && (
@@ -472,14 +508,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
         <div className="p-4 sm:border-t sm:border-slate-200 sm:p-5 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">ポイント充当による節約</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-teal-700 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl max-sm:text-xl font-bold text-teal-700 tabular-nums">
             {formatJPY(analyticsSummary.pointSaved)}
           </div>
           <div className="mt-1 text-xs text-slate-500">実請求から控除された額</div>
         </div>
         <div className="p-4 sm:border-t sm:border-slate-200 sm:p-5 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">事業経費算入額（按分後）</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl max-sm:text-xl font-bold text-slate-900 tabular-nums">
             {formatJPY(analyticsSummary.businessDeductible)}
           </div>
         </div>

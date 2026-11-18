@@ -136,7 +136,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
             <h2 className="text-xl font-bold tracking-tight text-slate-900">
               毎月の固定費・定期収入
             </h2>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 hidden text-sm text-slate-500 lg:block">
               家賃やサブスク、給与を登録しておくと、{formatMonthLabel(selectedMonth)}分をワンクリックで記帳できます
             </p>
           </div>
@@ -276,7 +276,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-slate-900">貯蓄目標</h2>
-            <p className="mt-0.5 text-sm text-slate-500">
+            <p className="mt-0.5 hidden text-sm text-slate-500 lg:block">
               ライフイベントや予備資金ごとの達成状況を管理できます
             </p>
           </div>
