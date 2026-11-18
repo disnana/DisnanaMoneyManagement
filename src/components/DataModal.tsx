@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Download, Upload, FileSpreadsheet, RotateCcw, Trash2, CheckCircle2 } from 'lucide-react';
 import { FinanceState } from '../types/finance';
 import { exportTransactionsToCSV } from '../utils/format';
+import { saveFile } from '../utils/saveFile';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ResponsiveSheet } from './ResponsiveSheet';
 
@@ -33,14 +34,7 @@ export const DataModal: React.FC<DataModalProps> = ({
   const handleExportJson = () => {
     const json = JSON.stringify(state, null, 2);
     const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dmm-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    void saveFile(blob, `dmm-backup-${new Date().toISOString().slice(0, 10)}.json`);
     setFeedback({ type: 'success', message: 'JSONバックアップファイルを書き出しました。' });
   };
 

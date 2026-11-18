@@ -7,6 +7,8 @@ interface TopBarProps {
   onOpenAddTransaction: () => void;
   onOpenMenu: () => void;
   onBack: () => void;
+  /** main content has scrolled past the large title */
+  scrolled?: boolean;
 }
 
 const SECTION_LABELS: Record<NavSection, string> = {
@@ -33,33 +35,38 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAddTransaction,
   onOpenMenu,
   onBack,
+  scrolled = false,
 }) => {
   const showBack = activeSection === 'tax';
   return (
     <header
-      className="z-30 flex shrink-0 items-center justify-between gap-2 border-b border-teal-800/30 bg-teal-700 text-white lg:h-16 lg:border-slate-200/80 lg:bg-white lg:text-slate-900 lg:px-8"
+      className={`glass-bar relative z-30 flex shrink-0 items-center justify-between gap-2 border-b text-slate-900 transition-[border-color] duration-200 lg:h-16 lg:px-8 ${
+        scrolled ? 'border-slate-200/80' : 'border-transparent lg:border-slate-200/80'
+      }`}
       style={{
         paddingTop: 'env(safe-area-inset-top, 0px)',
-        paddingLeft: 'max(0.5rem, env(safe-area-inset-left, 0px))',
+        paddingLeft: 'max(0.25rem, env(safe-area-inset-left, 0px))',
         paddingRight: 'max(0.5rem, env(safe-area-inset-right, 0px))',
-        minHeight: 'calc(3rem + env(safe-area-inset-top, 0px))',
+        minHeight: 'calc(2.75rem + env(safe-area-inset-top, 0px))',
       }}
     >
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         {showBack && (
           <button
             type="button"
             onClick={onBack}
-            aria-label="ホームに戻る"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-full active:bg-white/15 lg:hidden"
+            aria-label="戻る"
+            className="inline-flex h-11 items-center gap-0.5 rounded-full pl-1 pr-3 text-[17px] text-teal-700 active:opacity-50 lg:hidden"
           >
-            <ChevronLeft className="h-6 w-6" />
+            <ChevronLeft className="h-6 w-6" strokeWidth={2.4} />
+            ホーム
           </button>
         )}
+        {/* iOS: compact title fades in once the large title scrolls away */}
         <h1
-          className={`truncate text-[17px] font-bold tracking-tight lg:text-lg ${
-            showBack ? '' : 'pl-2'
-          }`}
+          className={`truncate text-[17px] font-semibold tracking-tight transition-opacity duration-150 lg:text-lg lg:font-bold lg:opacity-100 ${
+            showBack ? 'absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0' : 'pl-3 lg:pl-0'
+          } ${scrolled ? 'opacity-100' : 'opacity-0'}`}
         >
           <span className="lg:hidden">{MOBILE_LABELS[activeSection] ?? SECTION_LABELS[activeSection]}</span>
           <span className="hidden lg:inline">{SECTION_LABELS[activeSection]}</span>
@@ -71,9 +78,9 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={onOpenMenu}
           aria-label="メニュー"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full transition-transform active:scale-90 active:bg-white/15 lg:hidden"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-teal-700 transition-opacity active:opacity-50 lg:hidden"
         >
-          <Menu className="h-6 w-6" />
+          <Menu className="h-[22px] w-[22px]" strokeWidth={2.2} />
         </button>
         <button
           type="button"

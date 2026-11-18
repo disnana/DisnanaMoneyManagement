@@ -274,7 +274,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
           >
             <motion.div
               style={{ opacity: backdropDragOpacity }}
-              className="h-full w-full bg-slate-900/35"
+              className="h-full w-full bg-black/35"
             />
           </motion.div>
 

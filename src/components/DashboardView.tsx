@@ -452,6 +452,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Month bar */}
         <div className="flex items-center gap-2">
           <MonthSwitcherBar
+            plain
             selectedMonth={selectedMonth}
             onChangeMonth={onChangeMonth}
             className="flex-1"
@@ -460,9 +461,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => onChangeMonth(currentRealMonth)}
-              className="inline-flex min-h-[44px] items-center rounded-xl bg-teal-50 px-3.5 text-xs font-bold text-teal-800 active:scale-95"
+              className="inline-flex min-h-[44px] items-center px-2 text-[15px] font-medium text-teal-700 active:opacity-50"
             >
-              今月へ
+              今月
             </button>
           )}
         </div>
@@ -470,7 +471,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Hero */}
         <section
           aria-label="主要財務指標"
-          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 via-teal-700 to-teal-900 p-5 text-white shadow-lg shadow-teal-900/20"
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0d9488] via-[#0f766e] to-[#134e4a] p-5 text-white shadow-lg shadow-teal-900/20"
         >
           <div
             aria-hidden="true"

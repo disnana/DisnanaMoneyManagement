@@ -115,7 +115,7 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
   return (
     <div className="space-y-4">
       {/* Sticky search + type segmented control */}
-      <div className="glass-bar sticky top-0 z-20 -mx-4 space-y-2 border-b border-slate-200/70 px-4 pt-2.5 pb-2.5 -mt-5">
+      <div className="glass-bar sticky top-0 z-20 -mx-4 space-y-2 border-b border-slate-200/70 px-4 pt-2 pb-2.5">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-[17px] w-[17px] -translate-y-1/2 text-slate-400" />
@@ -161,6 +161,7 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
       </div>
 
       <MonthSwitcherBar
+        plain
         selectedMonth={p.monthFilter}
         onChangeMonth={p.setMonthFilter}
         allowAll={true}
@@ -246,11 +247,6 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
         ))
       )}
 
-      {p.filtered.length > 0 && (
-        <p className="pb-2 text-center text-[11px] text-slate-400">
-          行を左にスワイプで編集・削除
-        </p>
-      )}
 
       <ResponsiveSheet
         open={filterOpen}

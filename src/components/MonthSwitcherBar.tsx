@@ -7,6 +7,8 @@ interface MonthSwitcherBarProps {
   selectedMonth: string;
   onChangeMonth: (monthKey: string) => void;
   allowAll?: boolean;
+  /** iOS-style: no box, tinted chevrons, centered title */
+  plain?: boolean;
   className?: string;
 }
 
@@ -16,6 +18,7 @@ export const MonthSwitcherBar: React.FC<MonthSwitcherBarProps> = ({
   selectedMonth,
   onChangeMonth,
   allowAll = false,
+  plain = false,
   className = '',
 }) => {
   const currentRealMonth = getCurrentMonthKey();
@@ -68,13 +71,19 @@ export const MonthSwitcherBar: React.FC<MonthSwitcherBarProps> = ({
         data-no-tab-swipe="true"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className={`inline-flex select-none items-center justify-between rounded-xl border border-slate-200 bg-white touch-pan-y ${className}`}
+        className={`inline-flex select-none items-center justify-between touch-pan-y ${
+          plain ? 'justify-center gap-3' : 'rounded-xl border border-slate-200 bg-white'
+        } ${className}`}
         title="左右スワイプ、または中央タップで年月を選択できます"
       >
         <button
           type="button"
           onClick={() => stepMonth(-1)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
+          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center transition-colors active:scale-95 ${
+            plain
+              ? 'rounded-full text-teal-700 active:bg-teal-700/10'
+              : 'rounded-l-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
           aria-label="前の月"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -83,17 +92,23 @@ export const MonthSwitcherBar: React.FC<MonthSwitcherBarProps> = ({
         <button
           type="button"
           onClick={openPicker}
-          className="inline-flex min-h-[44px] min-w-[126px] flex-1 items-center justify-center gap-1.5 px-3 text-center font-mono text-sm font-semibold text-slate-900 tabular-nums transition-colors hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+          className={`inline-flex min-h-[44px] min-w-[126px] ${plain ? 'flex-none' : 'flex-1'} items-center justify-center gap-1.5 px-3 text-center font-mono font-semibold text-slate-900 tabular-nums transition-colors active:scale-[0.98] whitespace-nowrap ${
+            plain ? 'text-[17px]' : 'text-sm hover:bg-slate-50'
+          }`}
           aria-label={`年月を選択（現在: ${centerLabel}）`}
         >
-          <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-700" aria-hidden="true" />
+          {!plain && <Calendar className="h-3.5 w-3.5 shrink-0 text-teal-700" aria-hidden="true" />}
           <span>{centerLabel}</span>
         </button>
 
         <button
           type="button"
           onClick={() => stepMonth(1)}
-          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
+          className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center transition-colors active:scale-95 ${
+            plain
+              ? 'rounded-full text-teal-700 active:bg-teal-700/10'
+              : 'rounded-r-xl text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
           aria-label="次の月"
         >
           <ChevronRight className="h-4 w-4" />

@@ -41,6 +41,16 @@ import { DataModal } from './components/DataModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast } from './components/Toast';
 
+const LARGE_TITLES: Record<NavSection, string> = {
+  dashboard: 'ホーム',
+  transactions: '取引',
+  analytics: '分析・予算',
+  budgets: '分析・予算',
+  accounts: '口座・固定費',
+  planning: '口座・固定費',
+  tax: '経費・税務',
+};
+
 const MOBILE_TAB_ORDER: NavSection[] = [
   'dashboard',
   'transactions',
@@ -165,6 +175,7 @@ export default function App() {
   useViewportVars();
   const isDesktop = useIsDesktop();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey);
   const mainScrollRef = useRef<HTMLElement | null>(null);
@@ -211,6 +222,7 @@ export default function App() {
     prevSectionRef.current = activeSection;
     if (mainScrollRef.current) {
       mainScrollRef.current.scrollTop = scrollPositionsRef.current[activeSection] ?? 0;
+      setScrolled(mainScrollRef.current.scrollTop > 34);
     }
   }, [activeSection]);
 
@@ -229,6 +241,36 @@ export default function App() {
     const timer = setTimeout(() => setToastMessage(null), 2800);
     return () => clearTimeout(timer);
   }, [toastMessage]);
+
+  // PC: press N to record a new transaction (when not typing); PWA shortcuts: ?action=add / ?tab=
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as NavSection | null;
+    if (tab && MOBILE_TAB_ORDER.includes(tab)) setActiveSection(tab);
+    if (params.get('action') === 'add') {
+      setEditingTx(null);
+      setTxPrefill({ type: 'expense' });
+      setTxModalOpen(true);
+    }
+    if (params.has('action') || params.has('tab')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== 'n') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      setEditingTx(null);
+      setTxPrefill({ type: 'expense' });
+      setTxModalOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const openAddTransaction = (prefill: TransactionModalPrefill = { type: 'expense' }) => {
     setEditingTx(null);
@@ -460,7 +502,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <MotionConfig reducedMotion="user">
-        <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900">
+        <div className="flex h-full w-full overflow-hidden bg-[var(--app-bg)] text-slate-900 lg:bg-slate-50">
           <Sidebar
             activeSection={activeSection}
             onSelectSection={handleSelectSection}
@@ -475,10 +517,15 @@ export default function App() {
               onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
               onOpenMenu={() => setMenuOpen(true)}
               onBack={() => handleSelectSection('dashboard')}
+              scrolled={scrolled}
             />
 
             <main
               ref={mainScrollRef}
+              onScroll={(e) => {
+                const past = e.currentTarget.scrollTop > 34;
+                setScrolled((prev) => (prev === past ? prev : past));
+              }}
               onTouchStart={handleMainTouchStart}
               onTouchMove={handleMainTouchMove}
               onTouchEnd={handleMainTouchEnd}
@@ -511,6 +558,9 @@ export default function App() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
                   >
+                    <h2 className="mx-auto mb-3 w-full max-w-2xl px-1 text-[32px] font-bold leading-tight tracking-tight text-slate-900">
+                      {LARGE_TITLES[activeSection]}
+                    </h2>
                     {groupOf(activeSection) && (
                       <SectionTabs
                         group={groupOf(activeSection)!}

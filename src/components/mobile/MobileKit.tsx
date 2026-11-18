@@ -286,7 +286,7 @@ export const Segmented = <T extends string>({
           {active && (
             <motion.span
               layoutId={layoutId}
-              className="absolute inset-0 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)]"
+              className="absolute inset-0 rounded-[8px] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.15)] dark:bg-[#636366]"
               transition={{ type: 'spring', stiffness: 520, damping: 40 }}
             />
           )}
