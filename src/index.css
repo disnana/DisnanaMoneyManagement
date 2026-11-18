@@ -6,17 +6,94 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ---- iOS / touch platforms: use the system UI font (SF Pro / Hiragino) and sans numerals ---- */
+@supports (-webkit-touch-callout: none) {
+  :root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans",
+      "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+    --font-display: var(--font-sans);
+  }
+}
+
+@media (max-width: 1023px) {
+  :root {
+    --font-mono: var(--font-sans);
+  }
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+:root {
+  color-scheme: light dark;
+  --app-bg: #f2f3f7;
+}
+
+/* ---- Dark mode: re-map the palette so every existing utility adapts (iOS-style elevated greys) ---- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-bg: #000000;
+    --color-white: #1c1c1e;
+    --color-slate-50: #000000;
+    --color-slate-100: #2c2c2e;
+    --color-slate-200: #3a3a3c;
+    --color-slate-300: #48484a;
+    --color-slate-400: #8e8e93;
+    --color-slate-500: #9a9aa0;
+    --color-slate-600: #b0b0b6;
+    --color-slate-700: #c7c7cc;
+    --color-slate-800: #e5e5ea;
+    --color-slate-900: #f5f5f7;
+    --color-teal-50: #0d2b29;
+    --color-teal-100: #123a37;
+    --color-teal-200: #1a5a55;
+    --color-teal-600: #14a79b;
+    --color-teal-700: #12968b;
+    --color-teal-800: #5eead4;
+    --color-teal-900: #99f6e4;
+    --color-emerald-50: #0b2a1f;
+    --color-emerald-600: #34d399;
+    --color-emerald-700: #34d399;
+    --color-red-50: #3b1416;
+    --color-red-600: #f87171;
+    --color-red-700: #fca5a5;
+    --color-amber-50: #3a2a08;
+    --color-amber-500: #fbbf24;
+    --color-amber-700: #fbbf24;
+    --color-sky-500: #38bdf8;
+  }
+  body {
+    background-color: var(--app-bg);
+  }
+  svg [stroke="#E2E8F0"], svg [stroke="#F1F5F9"] {
+    stroke: #3a3a3c;
+  }
+  svg [stroke="#FFFFFF"] {
+    stroke: #1c1c1e;
+  }
+}
+
 @layer base {
   html,
-  body,
-  #root {
+  body {
     height: 100%;
     overflow: hidden;
     overscroll-behavior: none;
   }
 
+  /* Pin the app to the real screen: avoids the blank strip / dead zone that iOS standalone
+     leaves with 100% / 100dvh heights (status bar + home-indicator areas included). */
+  #root {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+
   html {
     font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     -webkit-tap-highlight-color: transparent;
@@ -28,6 +105,33 @@
 
   h1, h2, h3, h4 {
     text-wrap: balance;
+  }
+
+  /* Native-app feel: no accidental text selection / callouts on UI chrome */
+  button,
+  nav,
+  header,
+  [role="tab"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  /* iOS Safari zooms the page when a focused field is < 16px; prevent on touch layouts */
+  @media (max-width: 1023px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.keep-font),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 
   button,
@@ -47,6 +151,27 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+.pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Frosted translucent bars (header / bottom nav) */
+.glass-bar {
+  background-color: rgb(255 255 255 / 0.82);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-bar {
+    background-color: rgb(255 255 255);
+  }
+}
+
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }
@@ -56,5 +181,21 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Hide the tab bar while the soft keyboard is up (native behaviour, frees space) */
+html[data-kb="open"] .mobile-nav {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .glass-bar {
+    background-color: rgb(28 28 30 / 0.82);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass-bar {
+      background-color: rgb(28 28 30);
+    }
   }
 }

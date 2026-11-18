@@ -36,6 +36,8 @@ import {
   shiftMonth,
 } from '../utils/format';
 import { ResponsiveSheet } from './ResponsiveSheet';
+import { ChevronLeft as StepPrev, ChevronRight as StepNext } from 'lucide-react';
+import { haptic } from '../utils/haptics';
 
 export interface TransactionModalPrefill {
   mode?: 'standard' | 'fx_payout';
@@ -60,6 +62,21 @@ interface TransactionModalProps {
 }
 
 type ModalTab = TransactionType | 'fx_payout';
+
+function shiftDay(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1, d + delta);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+function formatDateWithWeekday(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const wd = ['日', '月', '火', '水', '木', '金', '土'][new Date(y, m - 1, d).getDay()];
+  return `${y}年${m}月${d}日(${wd})`;
+}
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   open,
@@ -107,6 +124,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [fxTaxCategory, setFxTaxCategory] = useState<'business' | 'miscellaneous'>('business');
 
   const [error, setError] = useState<string | null>(null);
+  const continueRef = useRef(false);
 
   const bankAccounts = useMemo(
     () => accounts.filter((a) => a.type === 'bank' || a.type === 'psp'),
@@ -581,6 +599,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       },
       editingTransaction?.id
     );
+    if (continueRef.current && !editingTransaction) {
+      // Keep the page open for rapid consecutive entry
+      continueRef.current = false;
+      haptic(12);
+      setAmountStr('');
+      setTitle('');
+      setMemo('');
+      setPointUsedStr('');
+      setTransferFeeStr('');
+      setTransferFxFeeStr('');
+      setCounterparty('');
+      setError(null);
+      return;
+    }
+    continueRef.current = false;
     onClose();
   };
 
@@ -610,39 +643,85 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           ? '取引を編集'
           : activeTab === 'fx_payout'
           ? '外貨・Stripe 一括入金記帳'
-          : '新しい取引を記録'
+          : '収支を記録'
       }
       titleId="tx-modal-title"
       maxWidthClass="sm:max-w-xl"
+      fullScreenMobile
       footer={
-        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
+            className="hidden min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98] sm:block"
           >
             キャンセル
           </button>
+          {!editingTransaction && activeTab !== 'fx_payout' && (
+            <button
+              type="submit"
+              form="tx-modal-form"
+              onClick={() => {
+                continueRef.current = true;
+              }}
+              className="order-2 min-h-[44px] whitespace-nowrap rounded-xl px-4 py-2 text-[15px] font-medium text-teal-700 transition-opacity active:opacity-50 sm:order-none sm:border sm:border-teal-700 sm:bg-white sm:text-sm sm:font-semibold sm:text-teal-800 sm:hover:bg-teal-50"
+            >
+              続けて登録
+            </button>
+          )}
           <button
             type="submit"
             form="tx-modal-form"
-            className="min-h-[44px] whitespace-nowrap rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-800 active:scale-[0.98]"
+            onClick={() => {
+              continueRef.current = false;
+            }}
+            className="min-h-[52px] whitespace-nowrap rounded-2xl bg-teal-700 px-6 py-2.5 text-[17px] font-semibold text-white transition-colors hover:bg-teal-800 active:scale-[0.98] sm:min-h-[44px] sm:rounded-xl sm:text-sm"
           >
             {editingTransaction
               ? '変更を保存'
               : activeTab === 'fx_payout'
               ? '売上と手数料を一括記帳'
-              : '記録を追加'}
+              : '登録'}
           </button>
         </div>
       }
     >
       <form id="tx-modal-form" onSubmit={handleSubmit} className="space-y-5">
+        {/* Date stepper (phones) */}
+        <div className="flex items-center justify-between sm:hidden">
+          <button
+            type="button"
+            aria-label="前の日"
+            onClick={() => setDate((d) => shiftDay(d, -1))}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-600 active:bg-slate-100"
+          >
+            <StepPrev className="h-5 w-5" />
+          </button>
+          <label className="relative flex min-h-[44px] flex-1 cursor-pointer items-center justify-center text-[17px] font-semibold text-slate-900 tabular-nums">
+            {formatDateWithWeekday(date)}
+            <input
+              type="date"
+              aria-label="日付を選択"
+              value={date}
+              onChange={(e) => e.target.value && setDate(e.target.value)}
+              className="keep-font absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+          </label>
+          <button
+            type="button"
+            aria-label="次の日"
+            onClick={() => setDate((d) => shiftDay(d, 1))}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-slate-600 active:bg-slate-100"
+          >
+            <StepNext className="h-5 w-5" />
+          </button>
+        </div>
+
         {/* Mode Switcher */}
         <div className="flex flex-col gap-2.5">
           <div
             className={`grid gap-1 rounded-xl bg-slate-100 p-1 ${
-              editingTransaction ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'
+              editingTransaction ? 'grid-cols-3' : 'grid-cols-3 sm:grid-cols-4'
             }`}
           >
             <button
@@ -685,7 +764,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <button
                 type="button"
                 onClick={() => handleTabChange('fx_payout')}
-                className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                className={`hidden min-h-[44px] items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors whitespace-nowrap sm:flex ${
                   activeTab === 'fx_payout'
                     ? 'bg-white text-teal-800 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -724,6 +803,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <span>事業・経費</span>
               </button>
             </div>
+          )}
+          {!editingTransaction && (
+            <button
+              type="button"
+              onClick={() => handleTabChange(activeTab === 'fx_payout' ? 'expense' : 'fx_payout')}
+              className="self-center py-1 text-[13px] font-medium text-teal-700 active:opacity-50 sm:hidden"
+            >
+              {activeTab === 'fx_payout' ? '通常の収支に戻る' : '外貨・Stripeの入金として記帳'}
+            </button>
           )}
         </div>
 
@@ -1057,7 +1145,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <>
             {/* Amount Input */}
             <div>
-              <label htmlFor="tx-amount" className="block text-xs font-medium text-slate-600">
+              <label htmlFor="tx-amount" className="block text-xs font-medium text-slate-600 max-sm:text-center">
                 {activeTab === 'expense'
                   ? '支払総額 (円)'
                   : activeTab === 'income'
@@ -1065,7 +1153,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   : '着金・振替金額 (円)'}
               </label>
               <div className="relative mt-1.5">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold text-slate-400">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold text-slate-400 max-sm:hidden">
                   ¥
                 </span>
                 <input
@@ -1079,10 +1167,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   value={amountStr}
                   onChange={(e) => setAmountStr(e.target.value)}
                   placeholder="0"
-                  className="min-h-[48px] w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 font-mono text-2xl font-semibold text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+                  className="min-h-[48px] w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 font-mono text-2xl font-semibold text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 keep-font max-sm:min-h-[72px] max-sm:border-0 max-sm:bg-transparent max-sm:pl-4 max-sm:text-center max-sm:!text-[40px] max-sm:focus:ring-0"
                 />
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              <div className="mt-2 hidden gap-2 sm:flex sm:flex-wrap">
                 {[1000, 3000, 5000, 10000].map((val) => (
                   <button
                     key={val}
@@ -1097,7 +1185,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+              <div className="max-sm:hidden">
                 <label htmlFor="tx-date" className="block text-xs font-medium text-slate-600">
                   日付
                 </label>

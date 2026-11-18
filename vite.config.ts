@@ -30,9 +30,24 @@ export default defineConfig(() => {
           short_name: 'DMM',
           description:
             '個人の家計管理からクレジットカード請求管理、事業経費・税務集計まで一元管理できる収支管理PWAアプリ。',
-          theme_color: '#0F766E',
+          theme_color: '#F2F3F7',
           background_color: '#F8FAFC',
           display: 'standalone',
+          display_override: ['standalone', 'minimal-ui'],
+          shortcuts: [
+            {
+              name: '収支を記録',
+              short_name: '記録',
+              url: `${base}?action=add`,
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: '取引履歴',
+              short_name: '取引',
+              url: `${base}?tab=transactions`,
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+          ],
           start_url: base,
           scope: base,
           lang: 'ja',

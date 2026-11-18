@@ -16,7 +16,7 @@ export const PWAInstallButton: React.FC = () => {
       <button
         type="button"
         onClick={install}
-        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-3.5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-slate-800 active:scale-[0.98]"
+        className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-neutral-900 px-3.5 py-2.5 text-xs font-semibold text-white transition-all hover:bg-slate-800 active:scale-[0.98]"
       >
         <Download className="h-4 w-4 shrink-0" />
         <span>アプリをインストール</span>

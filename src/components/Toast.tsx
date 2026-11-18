@@ -9,7 +9,7 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ message, onDismiss }) => {
   return (
-    <div className="pointer-events-none fixed bottom-20 right-4 left-4 z-50 flex flex-col items-center sm:left-auto sm:right-5 sm:items-end lg:bottom-5">
+    <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+5.25rem)] right-4 left-4 z-50 flex flex-col items-center sm:left-auto sm:right-5 sm:items-end lg:bottom-5">
       <AnimatePresence>
         {message && (
           <motion.div
@@ -19,7 +19,7 @@ export const Toast: React.FC<ToastProps> = ({ message, onDismiss }) => {
             exit={{ opacity: 0, y: 6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             role="status"
-            className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg"
+            className="pointer-events-auto flex items-center gap-2.5 rounded-xl border border-slate-200 bg-neutral-900 px-4 py-2.5 text-xs font-medium text-white shadow-lg"
           >
             <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
             <span>{message}</span>

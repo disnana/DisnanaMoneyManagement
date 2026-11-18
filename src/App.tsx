@@ -10,10 +10,17 @@ import {
   TouchEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
+import { enterTab, leaveTabs, setTabBackHandler } from './utils/navHistory';
+import { useViewportVars } from './hooks/useViewportVars';
+import { useNativeKeyboard } from './hooks/useNativeKeyboard';
+import { KeyboardAccessory } from './components/KeyboardAccessory';
+import { MobileMenuSheet } from './components/mobile/MobileMenuSheet';
+import { SectionTabs, groupOf } from './components/mobile/SectionTabs';
 import { NavSection, Transaction } from './types/finance';
 import { getCurrentMonthKey } from './utils/format';
 import { useFinanceStore } from './hooks/useFinanceStore';
@@ -36,12 +43,22 @@ import { DataModal } from './components/DataModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast } from './components/Toast';
 
+const LARGE_TITLES: Record<NavSection, string> = {
+  dashboard: 'ホーム',
+  transactions: '取引',
+  analytics: '分析・予算',
+  budgets: '分析・予算',
+  accounts: '口座・固定費',
+  planning: '口座・固定費',
+  tax: '経費・税務',
+};
+
 const MOBILE_TAB_ORDER: NavSection[] = [
   'dashboard',
   'transactions',
-  'accounts',
   'analytics',
   'budgets',
+  'accounts',
   'planning',
   'tax',
 ];
@@ -157,7 +174,11 @@ export default function App() {
     clearAllData,
   } = useFinanceStore();
 
+  useViewportVars();
+  useNativeKeyboard();
   const isDesktop = useIsDesktop();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey);
   const mainScrollRef = useRef<HTMLElement | null>(null);
@@ -167,12 +188,46 @@ export default function App() {
     locked: 'h' | 'v' | null;
   } | null>(null);
 
+  const scrollPositionsRef = useRef<Partial<Record<NavSection, number>>>({});
+  const prevSectionRef = useRef<NavSection>('dashboard');
+  const slideDirRef = useRef<1 | -1 | 0>(0);
+
   const handleSelectSection = useCallback((section: NavSection) => {
-    setActiveSection(section);
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTop = 0;
+    const prev = prevSectionRef.current;
+    const el = mainScrollRef.current;
+    if (prev === section) {
+      // Re-tap on the active tab: scroll back to top (native behaviour)
+      el?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
+    if (el) scrollPositionsRef.current[prev] = el.scrollTop;
+    slideDirRef.current =
+      MOBILE_TAB_ORDER.indexOf(section) > MOBILE_TAB_ORDER.indexOf(prev) ? 1 : -1;
+    if (section === 'dashboard') leaveTabs();
+    else enterTab();
+    setActiveSection(section);
   }, []);
+
+  useEffect(() => {
+    // System back from a non-home tab returns to Home
+    setTabBackHandler(() => {
+      const prev = prevSectionRef.current;
+      if (prev === 'dashboard') return;
+      if (mainScrollRef.current) scrollPositionsRef.current[prev] = mainScrollRef.current.scrollTop;
+      slideDirRef.current = -1;
+      setActiveSection('dashboard');
+    });
+  }, []);
+
+  // Restore each tab's scroll position (top for first visit)
+  useLayoutEffect(() => {
+    if (prevSectionRef.current === activeSection) return;
+    prevSectionRef.current = activeSection;
+    if (mainScrollRef.current) {
+      mainScrollRef.current.scrollTop = scrollPositionsRef.current[activeSection] ?? 0;
+      setScrolled(mainScrollRef.current.scrollTop > 34);
+    }
+  }, [activeSection]);
 
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txPrefill, setTxPrefill] = useState<TransactionModalPrefill | null>(null);
@@ -189,6 +244,36 @@ export default function App() {
     const timer = setTimeout(() => setToastMessage(null), 2800);
     return () => clearTimeout(timer);
   }, [toastMessage]);
+
+  // PC: press N to record a new transaction (when not typing); PWA shortcuts: ?action=add / ?tab=
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') as NavSection | null;
+    if (tab && MOBILE_TAB_ORDER.includes(tab)) setActiveSection(tab);
+    if (params.get('action') === 'add') {
+      setEditingTx(null);
+      setTxPrefill({ type: 'expense' });
+      setTxModalOpen(true);
+    }
+    if (params.has('action') || params.has('tab')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== 'n') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      setEditingTx(null);
+      setTxPrefill({ type: 'expense' });
+      setTxModalOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const openAddTransaction = (prefill: TransactionModalPrefill = { type: 'expense' }) => {
     setEditingTx(null);
@@ -420,7 +505,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <MotionConfig reducedMotion="user">
-        <div className="flex h-[100dvh] w-full overflow-hidden bg-slate-50 text-slate-900">
+        <div className="flex h-full w-full overflow-hidden bg-[var(--app-bg)] text-slate-900 lg:bg-slate-50">
           <Sidebar
             activeSection={activeSection}
             onSelectSection={handleSelectSection}
@@ -433,10 +518,17 @@ export default function App() {
             <TopBar
               activeSection={activeSection}
               onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
+              onOpenMenu={() => setMenuOpen(true)}
+              onBack={() => handleSelectSection('dashboard')}
+              scrolled={scrolled}
             />
 
             <main
               ref={mainScrollRef}
+              onScroll={(e) => {
+                const past = e.currentTarget.scrollTop > 34;
+                setScrolled((prev) => (prev === past ? prev : past));
+              }}
               onTouchStart={handleMainTouchStart}
               onTouchMove={handleMainTouchMove}
               onTouchEnd={handleMainTouchEnd}
@@ -445,7 +537,7 @@ export default function App() {
               }}
               className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain touch-pan-y"
             >
-              <div className="mx-auto w-full max-w-7xl px-4 pt-5 pb-6 sm:px-8 sm:py-8">
+              <div className="mx-auto w-full max-w-7xl overflow-x-clip pt-5 pb-8 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:py-8 sm:pl-[max(2rem,env(safe-area-inset-left))] sm:pr-[max(2rem,env(safe-area-inset-right))]">
                 {isDesktop ? (
                   <AnimatePresence mode="wait">
                     <motion.div
@@ -459,7 +551,28 @@ export default function App() {
                     </motion.div>
                   </AnimatePresence>
                 ) : (
-                  renderActiveView()
+                  <motion.div
+                    key={groupOf(activeSection) ?? activeSection}
+                    initial={
+                      slideDirRef.current === 0
+                        ? false
+                        : { opacity: 0, x: slideDirRef.current * 28 }
+                    }
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: 'spring', stiffness: 520, damping: 42, mass: 0.7 }}
+                  >
+                    <h2 className="mx-auto mb-3 w-full max-w-2xl px-1 text-[32px] font-bold leading-tight tracking-tight text-slate-900">
+                      {LARGE_TITLES[activeSection]}
+                    </h2>
+                    {groupOf(activeSection) && (
+                      <SectionTabs
+                        group={groupOf(activeSection)!}
+                        active={activeSection}
+                        onSelect={handleSelectSection}
+                      />
+                    )}
+                    {renderActiveView()}
+                  </motion.div>
                 )}
               </div>
             </main>
@@ -467,11 +580,18 @@ export default function App() {
             <MobileBottomNav
               activeSection={activeSection}
               onSelectSection={handleSelectSection}
-              totalAssets={totalAssets}
-              accountCount={state.accounts.length}
-              onOpenDataModal={() => setDataModalOpen(true)}
+              onAdd={() => openAddTransaction({ type: 'expense' })}
             />
           </div>
+
+          <MobileMenuSheet
+            open={menuOpen && !isDesktop}
+            onClose={() => setMenuOpen(false)}
+            totalAssets={totalAssets}
+            accountCount={state.accounts.length}
+            onSelectSection={handleSelectSection}
+            onOpenDataModal={() => setDataModalOpen(true)}
+          />
 
           <TransactionModal
             open={txModalOpen}
@@ -502,6 +622,7 @@ export default function App() {
             }}
           />
 
+          <KeyboardAccessory />
           <OfflineIndicator />
           <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
         </div>

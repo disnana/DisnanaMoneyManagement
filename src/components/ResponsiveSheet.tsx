@@ -9,6 +9,7 @@ import {
   useTransform,
 } from 'motion/react';
 import { X } from 'lucide-react';
+import { pushLayer } from '../utils/navHistory';
 
 interface ResponsiveSheetProps {
   open: boolean;
@@ -17,8 +18,15 @@ interface ResponsiveSheetProps {
   titleId?: string;
   maxWidthClass?: string;
   instantClose?: boolean;
+  /** Phones: cover the whole screen like a native modal page (✕ left, centered title) */
+  fullScreenMobile?: boolean;
   footer?: React.ReactNode;
   children: React.ReactNode;
+}
+
+interface SheetCustom {
+  skip: boolean;
+  mobile: boolean;
 }
 
 const scrimVariants: Variants = {
@@ -27,24 +35,45 @@ const scrimVariants: Variants = {
     opacity: 1,
     transition: { duration: 0.14, ease: 'easeOut' },
   },
-  exit: (skip: boolean) => ({
+  exit: ({ skip }: SheetCustom) => ({
     opacity: 0,
-    transition: { duration: skip ? 0 : 0.08, ease: 'easeOut' },
+    transition: { duration: skip ? 0 : 0.18, ease: 'easeOut' },
   }),
 };
 
+const isMobileViewport = () =>
+  typeof window !== 'undefined' && window.innerWidth < 640;
+
+// Mobile: true bottom sheet that rises from the screen edge (spring) and sinks away.
+// Desktop (>= sm): centered dialog with a soft fade/scale.
 const sheetTransitionVariants: Variants = {
-  initial: { y: 36, opacity: 0 },
-  animate: {
-    y: 0,
-    opacity: 1,
-    transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
-  },
-  exit: (skip: boolean) => ({
-    y: skip ? 0 : 48,
-    opacity: 0,
-    transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
-  }),
+  initial: ({ mobile }: SheetCustom) =>
+    mobile ? { y: '100%' } : { y: 12, opacity: 0, scale: 0.98 },
+  animate: ({ mobile }: SheetCustom) =>
+    mobile
+      ? {
+          y: 0,
+          transition: { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 },
+        }
+      : {
+          y: 0,
+          opacity: 1,
+          scale: 1,
+          transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
+        },
+  exit: ({ skip, mobile }: SheetCustom) =>
+    mobile
+      ? {
+          y: skip ? 0 : '100%',
+          opacity: skip ? 0 : 1,
+          transition: { duration: skip ? 0 : 0.22, ease: [0.32, 0.72, 0, 1] },
+        }
+      : {
+          y: skip ? 0 : 8,
+          opacity: 0,
+          scale: 1,
+          transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
+        },
 };
 
 export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
@@ -54,6 +83,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   titleId,
   maxWidthClass = 'sm:max-w-lg',
   instantClose = false,
+  fullScreenMobile = false,
   footer,
   children,
 }) => {
@@ -72,16 +102,22 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     }
   }, [open, sheetY]);
 
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', handleKey);
+    // System back (Android) / back gesture closes the sheet instead of leaving the app
+    const release = pushLayer(() => onCloseRef.current());
     return () => {
       window.removeEventListener('keydown', handleKey);
+      release();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const finishPull = useCallback(
     (dy: number, velocityY: number) => {
@@ -110,6 +146,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
 
   // Pull-down gesture on handle & header (mobile & touch)
   const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (fullScreenMobile) return;
     if (typeof window !== 'undefined' && window.innerWidth >= 640) return;
     const targetEl = e.target as HTMLElement;
     if (targetEl.closest('button')) return;
@@ -139,7 +176,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
 
   // Pull-down gesture from inside scrollable body when scrolled to top (scrollTop <= 0)
   useEffect(() => {
-    if (!open) return;
+    if (!open || fullScreenMobile) return;
     const el = bodyRef.current;
     if (!el) return;
 
@@ -208,16 +245,18 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [open, finishPull, sheetY]);
+  }, [open, fullScreenMobile, finishPull, sheetY]);
 
   const skipExit = instantClose || dragDismissed;
+  const fs = fullScreenMobile;
+  const custom: SheetCustom = { skip: skipExit, mobile: isMobileViewport() };
 
   const sheetTree = (
-    <AnimatePresence custom={skipExit}>
+    <AnimatePresence custom={custom}>
       {open && (
         <div
           key="responsive-sheet-root"
-          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+          className="fixed inset-x-0 top-[var(--vvt,0px)] z-50 flex h-[var(--vvh,100%)] items-end justify-center sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -229,13 +268,13 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            custom={skipExit}
+            custom={custom}
             onClick={onClose}
             className="absolute inset-0"
           >
             <motion.div
               style={{ opacity: backdropDragOpacity }}
-              className="h-full w-full bg-slate-900/35"
+              className="h-full w-full bg-black/35"
             />
           </motion.div>
 
@@ -245,13 +284,17 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
             initial="initial"
             animate="animate"
             exit="exit"
-            custom={skipExit}
-            className={`relative z-10 w-full ${maxWidthClass}`}
+            custom={custom}
+            className={`relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}
           >
             {/* Interactive pull-down layer */}
             <motion.div
               style={{ y: sheetY }}
-              className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-slate-200 bg-white shadow-2xl sm:rounded-2xl"
+              className={`flex w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90%] sm:rounded-2xl sm:border sm:border-slate-200 ${
+                fs
+                  ? 'h-full sm:h-auto'
+                  : 'max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] rounded-t-3xl border border-slate-200'
+              }`}
             >
               {/* Pull-to-dismiss handle + sticky header zone */}
               <div
@@ -260,26 +303,42 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
                 className="shrink-0 touch-none select-none sm:touch-auto"
               >
                 {/* Mobile Drag Handle Indicator */}
-                <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
-                  <span className="h-1.5 w-11 rounded-full bg-slate-300" />
-                </div>
+                {!fs && (
+                  <div className="flex justify-center pt-2.5 pb-1 sm:hidden" aria-hidden="true">
+                    <span className="h-1.5 w-11 rounded-full bg-slate-300" />
+                  </div>
+                )}
 
                 {/* Sticky Sheet Header */}
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3 sm:px-6 sm:py-4">
+                <div
+                  className={`flex items-center gap-1 border-b border-slate-200 sm:justify-between sm:gap-3 sm:px-6 sm:py-4 ${
+                    fs ? 'px-2 py-1.5 sm:py-4' : 'justify-between px-5 py-3'
+                  }`}
+                  style={
+                    fs
+                      ? { paddingTop: 'max(0.375rem, env(safe-area-inset-top, 0px))' }
+                      : undefined
+                  }
+                >
                   <h2
                     id={titleId}
-                    className="text-base font-semibold leading-snug text-slate-900"
+                    className={`text-base font-semibold leading-snug text-slate-900 ${
+                      fs ? 'flex-1 text-center sm:flex-none sm:text-left' : ''
+                    }`}
                   >
                     {title}
                   </h2>
                   <button
                     type="button"
                     onClick={onClose}
-                    className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95"
+                    className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 active:scale-95 ${
+                      fs ? 'order-first sm:order-last' : ''
+                    }`}
                     aria-label="閉じる"
                   >
                     <X className="h-5 w-5" />
                   </button>
+                  {fs && <span className="w-11 shrink-0 sm:hidden" aria-hidden="true" />}
                 </div>
               </div>
 
@@ -287,13 +346,21 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
               <div
                 ref={bodyRef}
                 className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5"
+                style={
+                  footer
+                    ? undefined
+                    : { paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom, 0px))' }
+                }
               >
                 {children}
               </div>
 
               {/* Optional Sticky Footer */}
               {footer && (
-                <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3.5 pb-safe sm:px-6 sm:py-4">
+                <div
+                  className="shrink-0 border-t border-slate-200 bg-white px-5 pt-3.5 sm:px-6 sm:pt-4"
+                  style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom, 0px))' }}
+                >
                   {footer}
                 </div>
               )}

@@ -15,6 +15,14 @@ import {
 } from '../utils/format';
 import { computeCreditCardSummary } from '../utils/creditCard';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
+import { useIsDesktop } from '../hooks/useMediaQuery';
+import { haptic } from '../utils/haptics';
+import {
+  CategoryBadge,
+  InsetGroup,
+  SectionHeader,
+  TxRowBody,
+} from './mobile/MobileKit';
 
 interface DashboardViewProps {
   state: FinanceState;
@@ -39,6 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenAddTransaction,
   onEditTransaction,
 }) => {
+  const isDesktop = useIsDesktop();
   const currentRealMonth = getCurrentMonthKey();
   const prevMonth = shiftMonth(selectedMonth, -1);
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
@@ -186,182 +195,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     trendData.items.find((i) => i.monthKey === chartPreviewMonth) ??
     trendData.items[trendData.items.length - 1];
 
-  return (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Workspace Toolbar: Month Navigation */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-            {formatMonthLabel(selectedMonth)}の収支サマリー
-          </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
-            個人・事業をまとめた月間キャッシュフローと口座・カードの状況です
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <MonthSwitcherBar
-            selectedMonth={selectedMonth}
-            onChangeMonth={onChangeMonth}
-            className="flex-1 sm:flex-initial"
-          />
-          {selectedMonth !== currentRealMonth && (
-            <button
-              type="button"
-              onClick={() => onChangeMonth(currentRealMonth)}
-              className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
-            >
-              今月に戻す
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 4-Column KPI Strip */}
-      <section
-        aria-label="主要財務指標"
-        className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4"
-      >
-        <div className="p-4 sm:p-6">
-          <div className="text-xs font-medium text-slate-500">今月の収入</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
-            {formatJPY(metrics.income)}
-          </div>
-          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
-            前月比{' '}
-            <span
-              className={
-                metrics.incomeDiff >= 0
-                  ? 'font-medium text-emerald-700'
-                  : 'font-medium text-slate-700'
-              }
-            >
-              {metrics.incomeDiff >= 0 ? '+' : ''}
-              {formatJPY(metrics.incomeDiff)}
-            </span>
-          </div>
-        </div>
-
-        <div className="p-4 sm:p-6">
-          <div className="text-xs font-medium text-slate-500">今月の支出（手数料含む）</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
-            {formatJPY(metrics.expense)}
-          </div>
-          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
-            前月比{' '}
-            <span
-              className={
-                metrics.expenseDiff <= 0
-                  ? 'font-medium text-emerald-700'
-                  : 'font-medium text-red-600'
-              }
-            >
-              {metrics.expenseDiff > 0 ? '+' : ''}
-              {formatJPY(metrics.expenseDiff)}
-            </span>
-          </div>
-        </div>
-
-        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
-          <div className="text-xs font-medium text-slate-500">月間収支（貯蓄額）</div>
-          <div
-            className={`mt-1.5 font-mono text-2xl font-bold tracking-tight tabular-nums ${
-              metrics.net >= 0 ? 'text-emerald-700' : 'text-red-600'
-            }`}
-          >
-            {metrics.net >= 0 ? `+${formatJPY(metrics.net)}` : formatJPY(metrics.net)}
-          </div>
-          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
-            {metrics.income > 0 ? `貯蓄率 ${metrics.savingsRate}%` : '収入データなし'}
-          </div>
-        </div>
-
-        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
-          <div className="text-xs font-medium text-slate-500">総資産残高</div>
-          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
-            {formatJPY(totalAssets)}
-          </div>
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => onNavigate('accounts')}
-              className="inline-flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98]"
-            >
-              <span>{state.accounts.length}つの口座内訳を見る</span>
-              <ChevronRight className="h-4 w-4 shrink-0" />
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Credit Card Quick Status Strip */}
-      {cardSummaries.length > 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 shrink-0 text-slate-500" />
-              <h3 className="text-sm font-semibold text-slate-900">
-                クレジットカード請求予定・利用枠
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('accounts')}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
-            >
-              <span>カード詳細・先払い管理</span>
-              <ChevronRight className="h-4 w-4 shrink-0" />
-            </button>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
-            {cardSummaries.map((s) => (
-              <button
-                key={s.card.id}
-                type="button"
-                onClick={() => onNavigate('accounts')}
-                className="flex min-h-[64px] w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3.5 text-left transition-all hover:border-slate-300 hover:bg-slate-100/70 active:scale-[0.99] sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-slate-900 break-words">
-                      {s.card.name}
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 sm:hidden" />
-                  </div>
-                  <div className="mt-0.5 text-xs text-slate-500">
-                    {formatDayLabel(s.card.closingDay)}締め ·{' '}
-                    {s.card.paymentMonthOffset === 2 ? '翌々月' : '翌月'}
-                    {formatDayLabel(s.card.paymentDay)}払い
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 font-mono text-xs tabular-nums sm:flex sm:items-center sm:gap-5">
-                  <div>
-                    <div className="text-slate-500">今月引落</div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {formatJPY(s.thisMonthRemaining)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-slate-500">来月予定</div>
-                    <div className="text-sm font-bold text-slate-700">
-                      {formatJPY(s.nextMonthRemaining)}
-                    </div>
-                  </div>
-                  {s.creditLimit > 0 && (
-                    <div>
-                      <div className="text-slate-500">残り枠</div>
-                      <div className="text-sm font-bold text-teal-800">
-                        {formatJPY(s.availableCredit)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
+  const chartsRow = (
+    <>
       {/* Main Analytics Row: 6-Month Cashflow Chart + Category Breakdown */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 lg:col-span-7">
@@ -608,6 +443,438 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </section>
       </div>
+    </>
+  );
+
+  if (!isDesktop) {
+    return (
+      <div className="mx-auto w-full max-w-2xl space-y-6">
+        {/* Month bar */}
+        <div className="flex items-center gap-2">
+          <MonthSwitcherBar
+            plain
+            selectedMonth={selectedMonth}
+            onChangeMonth={onChangeMonth}
+            className="flex-1"
+          />
+          {selectedMonth !== currentRealMonth && (
+            <button
+              type="button"
+              onClick={() => onChangeMonth(currentRealMonth)}
+              className="inline-flex min-h-[44px] items-center px-2 text-[15px] font-medium text-teal-700 active:opacity-50"
+            >
+              今月
+            </button>
+          )}
+        </div>
+
+        {/* Hero */}
+        <section
+          aria-label="主要財務指標"
+          className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0d9488] via-[#0f766e] to-[#134e4a] p-5 text-white shadow-lg shadow-teal-900/20"
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/10 blur-2xl"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              haptic(6);
+              onNavigate('accounts');
+            }}
+            className="relative block w-full text-left active:opacity-80"
+          >
+            <div className="flex items-center justify-between text-xs font-medium text-teal-100">
+              <span>総資産残高 · {state.accounts.length}口座</span>
+              <ChevronRight className="h-4 w-4" />
+            </div>
+            <div className="mt-1 font-mono text-[34px] font-bold leading-tight tracking-tight tabular-nums">
+              {formatJPY(totalAssets)}
+            </div>
+          </button>
+
+          <div className="relative mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-black/15 p-3 backdrop-blur-sm">
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-teal-100">収入</div>
+              <div className="truncate font-mono text-[15px] font-bold tabular-nums">
+                {formatJPY(metrics.income)}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-teal-100">支出</div>
+              <div className="truncate font-mono text-[15px] font-bold tabular-nums">
+                {formatJPY(metrics.expense)}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-teal-100">収支</div>
+              <div
+                className={`truncate font-mono text-[15px] font-bold tabular-nums ${
+                  metrics.net >= 0 ? 'text-emerald-200' : 'text-red-200'
+                }`}
+              >
+                {metrics.net >= 0 ? '+' : ''}
+                {formatJPY(metrics.net)}
+              </div>
+            </div>
+          </div>
+          <div className="relative mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-teal-100 tabular-nums">
+            <span>
+              収入 前月比 {metrics.incomeDiff >= 0 ? '+' : ''}
+              {formatJPY(metrics.incomeDiff)}
+            </span>
+            <span>
+              支出 前月比 {metrics.expenseDiff > 0 ? '+' : ''}
+              {formatJPY(metrics.expenseDiff)}
+            </span>
+            {metrics.income > 0 && <span>貯蓄率 {metrics.savingsRate}%</span>}
+          </div>
+        </section>
+
+        {/* Credit cards carousel */}
+        {cardSummaries.length > 0 && (
+          <section>
+            <SectionHeader
+              title="クレジットカード"
+              actionLabel="詳細"
+              onAction={() => onNavigate('accounts')}
+            />
+            <div
+              data-no-tab-swipe="true"
+              className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {cardSummaries.map((s) => {
+                const used =
+                  s.creditLimit > 0
+                    ? Math.min(100, Math.round(((s.creditLimit - s.availableCredit) / s.creditLimit) * 100))
+                    : 0;
+                return (
+                  <button
+                    key={s.card.id}
+                    type="button"
+                    onClick={() => onNavigate('accounts')}
+                    className="w-[78%] max-w-[300px] shrink-0 snap-start rounded-2xl bg-white p-4 text-left ring-1 ring-slate-200/70 transition-transform active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                      <CreditCard className="h-4 w-4 text-teal-700" />
+                      <span className="truncate">{s.card.name}</span>
+                    </div>
+                    <div className="mt-3 text-[11px] text-slate-500">今月引落</div>
+                    <div className="font-mono text-xl font-bold text-slate-900 tabular-nums">
+                      {formatJPY(s.thisMonthRemaining)}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {formatDayLabel(s.card.closingDay)}締め ·{' '}
+                      {s.card.paymentMonthOffset === 2 ? '翌々月' : '翌月'}
+                      {formatDayLabel(s.card.paymentDay)}払い
+                    </div>
+                    <div className="mt-3 flex items-center justify-between font-mono text-[11px] tabular-nums text-slate-600">
+                      <span>来月 {formatJPY(s.nextMonthRemaining)}</span>
+                      {s.creditLimit > 0 && (
+                        <span className="text-teal-800">残り枠 {formatJPY(s.availableCredit)}</span>
+                      )}
+                    </div>
+                    {s.creditLimit > 0 && (
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${used >= 80 ? 'bg-amber-500' : 'bg-teal-700'}`}
+                          style={{ width: `${used}%` }}
+                        />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Recent transactions */}
+        <section>
+          <SectionHeader
+            title={`${formatMonthLabel(selectedMonth)}の主な取引`}
+            actionLabel="すべて"
+            onAction={() => onNavigate('transactions')}
+          />
+          {recentTransactions.length === 0 ? (
+            <InsetGroup className="px-6 py-10 text-center">
+              <p className="text-sm text-slate-500">この月の取引はまだありません</p>
+              <button
+                type="button"
+                onClick={onOpenAddTransaction}
+                className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-semibold text-white active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                最初の収支を記録
+              </button>
+            </InsetGroup>
+          ) : (
+            <InsetGroup className="divide-y divide-slate-100">
+              {recentTransactions.map((tx) => {
+                const cat = getCategoryById(tx.categoryId);
+                const acc = accountNameMap[tx.accountId] ?? '口座';
+                const to = tx.toAccountId ? accountNameMap[tx.toAccountId] ?? '口座' : '';
+                return (
+                  <button
+                    key={tx.id}
+                    type="button"
+                    onClick={() => onEditTransaction(tx)}
+                    className="block w-full transition-colors active:bg-slate-50"
+                  >
+                    <TxRowBody
+                      tx={tx}
+                      category={cat}
+                      accountLabel={
+                        tx.type === 'transfer'
+                          ? `${acc} → ${to}`
+                          : `${formatShortDate(tx.date)} · ${cat.name}`
+                      }
+                    />
+                  </button>
+                );
+              })}
+            </InsetGroup>
+          )}
+        </section>
+
+        {/* Budgets */}
+        <section>
+          <SectionHeader
+            title="予算の進捗"
+            actionLabel={budgetStatuses.length === 0 ? '設定する' : '管理'}
+            onAction={() => onNavigate('budgets')}
+          />
+          {budgetStatuses.length === 0 ? (
+            <InsetGroup className="px-6 py-8 text-center text-sm text-slate-500">
+              カテゴリ別の予算が未設定です
+            </InsetGroup>
+          ) : (
+            <InsetGroup className="divide-y divide-slate-100">
+              {budgetStatuses.slice(0, 5).map((item) => {
+                const pct = Math.round(item.ratio * 100);
+                const bar =
+                  item.ratio > 1 ? 'bg-red-600' : item.ratio >= 0.8 ? 'bg-amber-500' : 'bg-teal-700';
+                return (
+                  <button
+                    key={item.category.id}
+                    type="button"
+                    onClick={() => onNavigate('budgets')}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left active:bg-slate-50"
+                  >
+                    <CategoryBadge category={item.category} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2 text-[13px]">
+                        <span className="truncate font-semibold text-slate-900">
+                          {item.category.name}
+                        </span>
+                        <span
+                          className={`shrink-0 font-mono text-xs font-bold tabular-nums ${
+                            item.ratio > 1 ? 'text-red-600' : 'text-slate-600'
+                          }`}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${bar}`}
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-slate-500 tabular-nums">
+                        {formatJPY(item.spent)} / {formatJPY(item.limit)}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </InsetGroup>
+          )}
+        </section>
+
+        {chartsRow}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Workspace Toolbar: Month Navigation */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+            {formatMonthLabel(selectedMonth)}の収支サマリー
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
+            個人・事業をまとめた月間キャッシュフローと口座・カードの状況です
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthSwitcherBar
+            selectedMonth={selectedMonth}
+            onChangeMonth={onChangeMonth}
+            className="flex-1 sm:flex-initial"
+          />
+          {selectedMonth !== currentRealMonth && (
+            <button
+              type="button"
+              onClick={() => onChangeMonth(currentRealMonth)}
+              className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+            >
+              今月に戻す
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 4-Column KPI Strip */}
+      <section
+        aria-label="主要財務指標"
+        className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4"
+      >
+        <div className="p-4 sm:p-6">
+          <div className="text-xs font-medium text-slate-500">今月の収入</div>
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+            {formatJPY(metrics.income)}
+          </div>
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
+            前月比{' '}
+            <span
+              className={
+                metrics.incomeDiff >= 0
+                  ? 'font-medium text-emerald-700'
+                  : 'font-medium text-slate-700'
+              }
+            >
+              {metrics.incomeDiff >= 0 ? '+' : ''}
+              {formatJPY(metrics.incomeDiff)}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          <div className="text-xs font-medium text-slate-500">今月の支出（手数料含む）</div>
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+            {formatJPY(metrics.expense)}
+          </div>
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
+            前月比{' '}
+            <span
+              className={
+                metrics.expenseDiff <= 0
+                  ? 'font-medium text-emerald-700'
+                  : 'font-medium text-red-600'
+              }
+            >
+              {metrics.expenseDiff > 0 ? '+' : ''}
+              {formatJPY(metrics.expenseDiff)}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
+          <div className="text-xs font-medium text-slate-500">月間収支（貯蓄額）</div>
+          <div
+            className={`mt-1.5 font-mono text-2xl font-bold tracking-tight tabular-nums ${
+              metrics.net >= 0 ? 'text-emerald-700' : 'text-red-600'
+            }`}
+          >
+            {metrics.net >= 0 ? `+${formatJPY(metrics.net)}` : formatJPY(metrics.net)}
+          </div>
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
+            {metrics.income > 0 ? `貯蓄率 ${metrics.savingsRate}%` : '収入データなし'}
+          </div>
+        </div>
+
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
+          <div className="text-xs font-medium text-slate-500">総資産残高</div>
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+            {formatJPY(totalAssets)}
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => onNavigate('accounts')}
+              className="inline-flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98]"
+            >
+              <span>{state.accounts.length}つの口座内訳を見る</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Credit Card Quick Status Strip */}
+      {cardSummaries.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4 shrink-0 text-slate-500" />
+              <h3 className="text-sm font-semibold text-slate-900">
+                クレジットカード請求予定・利用枠
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('accounts')}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+            >
+              <span>カード詳細・先払い管理</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            </button>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
+            {cardSummaries.map((s) => (
+              <button
+                key={s.card.id}
+                type="button"
+                onClick={() => onNavigate('accounts')}
+                className="flex min-h-[64px] w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3.5 text-left transition-all hover:border-slate-300 hover:bg-slate-100/70 active:scale-[0.99] sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-900 break-words">
+                      {s.card.name}
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 sm:hidden" />
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {formatDayLabel(s.card.closingDay)}締め ·{' '}
+                    {s.card.paymentMonthOffset === 2 ? '翌々月' : '翌月'}
+                    {formatDayLabel(s.card.paymentDay)}払い
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 font-mono text-xs tabular-nums sm:flex sm:items-center sm:gap-5">
+                  <div>
+                    <div className="text-slate-500">今月引落</div>
+                    <div className="text-sm font-bold text-slate-900">
+                      {formatJPY(s.thisMonthRemaining)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500">来月予定</div>
+                    <div className="text-sm font-bold text-slate-700">
+                      {formatJPY(s.nextMonthRemaining)}
+                    </div>
+                  </div>
+                  {s.creditLimit > 0 && (
+                    <div>
+                      <div className="text-slate-500">残り枠</div>
+                      <div className="text-sm font-bold text-teal-800">
+                        {formatJPY(s.availableCredit)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {chartsRow}
 
       {/* Bottom Row: Recent Transactions & Budget Watchlist */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
