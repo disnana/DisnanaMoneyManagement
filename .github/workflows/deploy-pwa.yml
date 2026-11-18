@@ -107,6 +107,12 @@ jobs:
           mkdir -p .cache
           bunx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc.tsbuildinfo
 
+      - name: Unit tests
+        run: bun run test
+
+      - name: Audit production dependencies
+        run: bun audit --production --audit-level=high
+
       - name: Build PWA
         env:
           VITE_BASE_PATH: ${{ steps.base_path.outputs.value }}

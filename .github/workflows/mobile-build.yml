@@ -20,29 +20,14 @@ defaults:
     working-directory: apps/mobile
 
 jobs:
-  check:
-    name: Typecheck & bundle
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx expo export --platform android --output-dir /tmp/export-android
-      - run: npx expo export --platform ios --output-dir /tmp/export-ios
-
   android:
     name: Android APK
-    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -66,11 +51,12 @@ jobs:
 
   ios:
     name: iOS unsigned IPA
-    needs: check
     runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; jobs that need more ask for it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+
+jobs:
+  web:
+    name: Web · typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - name: Cache Bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Typecheck web + core (strict)
+        run: |
+          bunx tsc --noEmit
+          bunx tsc --noEmit -p packages/core/tsconfig.json
+      - name: Unit tests
+        run: bun run test
+      - name: Build
+        run: bun run build
+
+  e2e:
+    name: E2E · Playwright (mobile + desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Run E2E
+        run: bunx playwright test
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  mobile:
+    name: Mobile · typecheck & Hermes bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx expo export --platform android --output-dir "$RUNNER_TEMP/export-android"
+      - run: npx expo export --platform ios --output-dir "$RUNNER_TEMP/export-ios"
+
+  audit:
+    name: Security · dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - name: Web · production dependencies (no exceptions)
+        run: bun audit --production --audit-level=high
+      - name: Web · all dependencies (high+, only documented exceptions)
+        run: bun audit --audit-level=high $(node scripts/audit-allowlist.mjs ids)
+      - name: Web · full report (informational)
+        run: bun audit || true
+      - name: Mobile · install
+        working-directory: apps/mobile
+        run: npm ci --ignore-scripts
+      - name: Mobile · audit (high+, only documented exceptions)
+        run: node scripts/audit-allowlist.mjs npm apps/mobile
+      - name: Mobile · verify registry signatures and provenance
+        working-directory: apps/mobile
+        run: npm audit signatures
+
+  secrets:
+    name: Security · secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: gitleaks (pinned release)
+        env:
+          GITLEAKS_VERSION: '8.28.0'
+        run: |
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tgz gitleaks
+          ./gitleaks detect --source . --no-banner --redact --verbose
+
+  workflows:
+    name: Lint · GitHub Actions workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: actionlint (pinned image)
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7 -color
+
+  # Single required check for branch protection: green only if every job above is green.
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [web, e2e, mobile, audit, secrets, workflows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all jobs succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for r in $RESULTS; do [ "$r" = "success" ] || exit 1; done
