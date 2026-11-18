@@ -63,15 +63,39 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
       - run: npm ci
+      - name: Select the newest installed Xcode
+        shell: bash
+        working-directory: .
+        run: |
+          # Expo SDK 58 targets the latest Xcode; prefer Xcode 26+ when the image has it
+          LATEST=$(find /Applications -maxdepth 1 -name 'Xcode_*.app' | sort -V | tail -1)
+          echo "installed: $(find /Applications -maxdepth 1 -name 'Xcode*.app' | sort -V | tr '\n' ' ')"
+          if [ -n "$LATEST" ]; then sudo xcode-select -s "$LATEST/Contents/Developer"; fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
       - name: Generate native project
         run: npx expo prebuild --platform ios
       - name: Build (no code signing)
+        shell: bash
         run: |
           WS=$(find ios -maxdepth 1 -name '*.xcworkspace' | head -1)
           SCHEME=$(basename "$WS" .xcworkspace)
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log"
+      - name: Show the actual errors
+        if: failure()
+        shell: bash
+        run: |
+          grep -nE "error:|fatal error|\*\* BUILD FAILED|\[ExpoModulesJSI\]|Command .* failed|swift-.*error" "$RUNNER_TEMP/xcodebuild.log" | grep -v "Werror" | head -80 || true
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          retention-days: 7
       - name: Package IPA
         run: |
           mkdir -p Payload
