@@ -121,14 +121,6 @@ export default function AddScreen() {
       <Stack.Screen
         options={{
           title: editing ? '取引を編集' : '収支を記録',
-          headerLeft:
-            Platform.OS === 'ios'
-              ? () => (
-                  <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="閉じる" style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
-                    <SymbolView name={{ ios: 'xmark', android: 'close' }} size={16} tintColor={p.textSecondary} />
-                  </Pressable>
-                )
-              : undefined,
         }}
       />
 
