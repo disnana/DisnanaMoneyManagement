@@ -51,6 +51,8 @@ jobs:
 
   ios:
     name: iOS unsigned IPA
+    # iOS is distributed through Expo Go for now: build the native IPA only on demand
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 60
     steps:

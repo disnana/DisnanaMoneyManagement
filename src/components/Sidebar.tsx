@@ -12,6 +12,7 @@ import {
 import { NavSection } from '../types/finance';
 import { formatJPY } from '../utils/format';
 import { PWAInstallButton } from './PWAInstallButton';
+import { ThemeSwitch } from './ThemeSwitch';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -99,6 +100,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           <PWAInstallButton />
+
+          <div>
+            <div className="mb-1.5 px-2 text-xs font-medium text-slate-500">外観</div>
+            <ThemeSwitch />
+          </div>
 
           <button
             type="button"

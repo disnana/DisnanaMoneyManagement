@@ -7,6 +7,7 @@ import { FinanceProvider } from '@/lib/store';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { usePalette } from '@/lib/theme';
+import '@/lib/themePref';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,6 +25,16 @@ export default function RootLayout() {
       <FinanceProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="settings"
+            options={{
+              presentation: 'modal',
+              headerShown: true,
+              headerShadowVisible: false,
+              headerStyle: { backgroundColor: p.bg },
+              headerTintColor: p.text,
+            }}
+          />
           <Stack.Screen
             name="add"
             options={Platform.select({

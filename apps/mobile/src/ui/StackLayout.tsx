@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { usePalette } from '@/lib/theme';
 import { AddButton } from '@/ui/AddButton';
+import { SettingsButton } from '@/ui/SettingsButton';
 
 /** Android / default: standard top app bar on the tonal background. */
 export function TabStack({ title }: { title: string }) {
@@ -13,7 +14,7 @@ export function TabStack({ title }: { title: string }) {
         headerShadowVisible: false,
         contentStyle: { backgroundColor: p.bg },
       }}>
-      <Stack.Screen name="index" options={{ title, headerRight: () => <AddButton /> }} />
+      <Stack.Screen name="index" options={{ title, headerRight: () => <AddButton />, headerLeft: () => <SettingsButton /> }} />
     </Stack>
   );
 }
