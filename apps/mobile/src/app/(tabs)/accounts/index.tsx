@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { SymbolViewProps } from 'expo-symbols';
 import { formatJPY } from '@dmm/core/utils/format';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
@@ -28,6 +29,8 @@ export default function Accounts() {
     return (
       <Row
         key={a.id}
+        chevron
+        onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: a.id } })}
         icon={ICONS[a.type]}
         title={a.name}
         subtitle={a.institution || ACCOUNT_TYPE_LABELS[a.type]}

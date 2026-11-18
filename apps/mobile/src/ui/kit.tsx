@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
-import { Pressable, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -131,27 +132,36 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void;
 }) {
   const p = usePalette();
+  const dark = useColorScheme() === 'dark';
+  const activeIndex = options.findIndex((o) => o.id === value);
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: p.fill, borderRadius: metrics.controlRadius, padding: 2 }}>
-      {options.map((o) => {
-        const active = o.id === value;
+    <View style={{ flexDirection: 'row', backgroundColor: p.fill, borderRadius: metrics.controlRadius + 2, padding: 3 }}>
+      {options.map((o, i) => {
+        const active = i === activeIndex;
+        // thin divider between neighbours, hidden next to the selected thumb
+        const showDivider = i > 0 && i !== activeIndex && i - 1 !== activeIndex;
         return (
-          <Pressable
-            key={o.id}
-            onPress={() => {
-              if (!active) tick();
-              onChange(o.id);
-            }}
-            style={{
-              flex: 1,
-              minHeight: 34,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: Math.max(metrics.controlRadius - 2, 7),
-              backgroundColor: active ? p.card : 'transparent',
-            }}>
-            <Text style={{ color: active ? p.text : p.textSecondary, fontSize: 13, fontWeight: active ? '700' : '500' }}>{o.label}</Text>
-          </Pressable>
+          <View key={o.id} style={{ flex: 1, flexDirection: 'row' }}>
+            <View style={{ width: StyleSheet.hairlineWidth * 2, marginVertical: 8, backgroundColor: showDivider ? p.textSecondary : 'transparent', opacity: 0.35 }} />
+            <Pressable
+              onPress={() => {
+                if (!active) tick();
+                onChange(o.id);
+              }}
+              style={{
+                flex: 1,
+                minHeight: 36,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: metrics.controlRadius,
+                backgroundColor: active ? (dark ? 'rgba(255,255,255,0.2)' : p.card) : 'transparent',
+                ...(active
+                  ? { shadowColor: '#000', shadowOpacity: dark ? 0 : 0.14, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: dark ? 0 : 2 }
+                  : null),
+              }}>
+              <Text style={{ color: active ? p.text : p.textSecondary, fontSize: 14, fontWeight: active ? '700' : '500' }}>{o.label}</Text>
+            </Pressable>
+          </View>
         );
       })}
     </View>
@@ -160,6 +170,8 @@ export function Segmented<T extends string>({
 
 export function MonthBar({ month, onChange }: { month: string; onChange: (m: string) => void }) {
   const p = usePalette();
+  const base = new Date(`${month}-01T00:00:00`);
+  const pickDate = (d: Date) => onChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
     <Pressable
       hitSlop={8}
@@ -174,9 +186,21 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
       {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
-      <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', minWidth: 140, textAlign: 'center', fontVariant: ['tabular-nums'] }}>
-        {formatMonthLabel(month)}
-      </Text>
+      <View style={{ minWidth: 150, alignItems: 'center', justifyContent: 'center', height: 44 }}>
+        <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+        {/* Tap the month -> system calendar. iOS: an invisible compact picker laid over the label; Android: Material dialog. */}
+        {Platform.OS === 'ios' ? (
+          <View style={{ position: 'absolute', inset: 0, opacity: 0.015, alignItems: 'center', justifyContent: 'center' }}>
+            <DateTimePicker value={base} mode="date" display="compact" locale="ja-JP" onChange={(_, d) => d && pickDate(d)} />
+          </View>
+        ) : Platform.OS === 'android' ? (
+          <Pressable
+            accessibilityLabel="月をカレンダーで選ぶ"
+            style={{ position: 'absolute', inset: 0 }}
+            onPress={() => DateTimePickerAndroid.open({ value: base, mode: 'date', onChange: (_, d) => d && pickDate(d) })}
+          />
+        ) : null}
+      </View>
       {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
     </View>
   );

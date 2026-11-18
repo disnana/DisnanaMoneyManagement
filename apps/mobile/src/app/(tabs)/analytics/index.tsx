@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { categoryIcon } from '@/lib/categoryIcons';
@@ -32,7 +33,10 @@ export default function Analytics() {
       ) : (
         <Group>
           {m.categoryBreakdown.map((c) => (
-            <View key={c.categoryId} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+            <Pressable
+              key={c.categoryId}
+              onPress={() => router.push({ pathname: '/analytics/category', params: { id: c.categoryId } })}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: pressed ? p.fill : 'transparent' })}>
               <IconBadge name={categoryIcon(c.categoryId)} color={c.color} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>{c.name}</Text>
@@ -44,7 +48,7 @@ export default function Analytics() {
                 <Text style={{ color: p.text, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(c.amount)}</Text>
                 <Text style={{ color: p.textSecondary, fontSize: 12 }}>{Math.round(c.share * 100)}%</Text>
               </View>
-            </View>
+            </Pressable>
           ))}
         </Group>
       )}
