@@ -42,6 +42,8 @@ import { computeCreditCardSummary, getCycleRangeLabel } from '../utils/creditCar
 import { ConfirmDialog } from './ConfirmDialog';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { TransactionModalPrefill } from './TransactionModal';
+import { Segmented } from './mobile/MobileKit';
+import { useIsDesktop } from '../hooks/useMediaQuery';
 
 interface AccountsViewProps {
   accounts: Account[];
@@ -93,6 +95,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   onOpenPrefilledTransaction,
 }) => {
   const [usageFilter, setUsageFilter] = useState<'all' | AccountUsageScope>('all');
+  const isDesktop = useIsDesktop();
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [name, setName] = useState('');
@@ -267,9 +271,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   return (
     <div className="space-y-6 sm:space-y-8">
+      {isDesktop ? (
+        <>
       {/* Header & Actions */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <div>
+        <div className="hidden lg:block">
           <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             口座・カード管理
           </h2>
@@ -384,14 +390,119 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         </div>
       </section>
 
+        </>
+      ) : (
+        <>
+      {/* Mobile: one filter row + one add menu, compact summary */}
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <Segmented
+            layoutId="accounts-usage-seg"
+            value={usageFilter}
+            options={[
+              { id: 'all', label: 'すべて' },
+              { id: 'personal', label: '個人' },
+              { id: 'household', label: '家庭' },
+              { id: 'business', label: '業務' },
+            ] as const}
+            onChange={setUsageFilter}
+          />
+        </div>
+        <button
+          type="button"
+          aria-label="追加"
+          onClick={() => setAddMenuOpen(true)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-teal-700 text-white transition-transform active:scale-90"
+        >
+          <Plus className="h-5 w-5" strokeWidth={2.4} />
+        </button>
+      </div>
+
+      <section
+        aria-label="資産サマリー"
+        className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/70"
+      >
+        <div className="px-5 pb-3 pt-4">
+          <div className="text-xs font-medium text-slate-500">
+            {usageFilter === 'all' ? '正味総資産' : `${ACCOUNT_USAGE_LABELS[usageFilter]} 合計`}
+          </div>
+          <div className="mt-0.5 font-mono text-[32px] font-bold leading-tight text-slate-900 tabular-nums">
+            {formatJPY(
+              usageFilter === 'all'
+                ? totalAssets
+                : groupedTotals.liquid + groupedTotals.investment + groupedTotals.creditDebt
+            )}
+          </div>
+        </div>
+        <dl className="divide-y divide-slate-100 border-t border-slate-100 text-sm">
+          <div className="flex items-center justify-between px-5 py-2.5">
+            <dt className="text-slate-500">預金・現金</dt>
+            <dd className="font-mono font-semibold tabular-nums">{formatJPY(groupedTotals.liquid)}</dd>
+          </div>
+          {groupedTotals.investment !== 0 && (
+            <div className="flex items-center justify-between px-5 py-2.5">
+              <dt className="text-slate-500">投資・積立</dt>
+              <dd className="font-mono font-semibold tabular-nums">{formatJPY(groupedTotals.investment)}</dd>
+            </div>
+          )}
+          {groupedTotals.creditDebt !== 0 && (
+            <div className="flex items-center justify-between px-5 py-2.5">
+              <dt className="text-slate-500">クレカ未決済</dt>
+              <dd
+                className={`font-mono font-semibold tabular-nums ${
+                  groupedTotals.creditDebt < 0 ? 'text-red-600' : ''
+                }`}
+              >
+                {formatJPY(groupedTotals.creditDebt)}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </section>
+
+      <ResponsiveSheet
+        open={addMenuOpen}
+        instantClose
+        onClose={() => setAddMenuOpen(false)}
+        title="追加"
+        titleId="accounts-add-menu"
+      >
+        <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl ring-1 ring-slate-200/70">
+          {[
+            { label: '口座を追加', run: () => openAdd('bank') },
+            { label: 'カードを追加', run: () => openAdd('credit') },
+            ...(accounts.length >= 2
+              ? [{ label: '口座間で振替', run: () => onOpenPrefilledTransaction({ type: 'transfer' }) }]
+              : []),
+            { label: '外貨・Stripe入金', run: () => onOpenPrefilledTransaction({ mode: 'fx_payout' }) },
+          ].map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              onClick={() => {
+                setAddMenuOpen(false);
+                it.run();
+              }}
+              className="flex min-h-[52px] w-full items-center px-4 text-left text-[16px] text-slate-900 active:bg-slate-50"
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      </ResponsiveSheet>
+
+        </>
+      )}
+
       {/* Credit & Debit Cards Section */}
       {(creditCards.length > 0 || debitCards.length > 0) && (
         <section className="space-y-4">
           <div>
             <h3 className="text-lg font-bold tracking-tight text-slate-900">
-              登録カード（クレジットカード・デビットカード）
+              <span className="lg:hidden">カード</span>
+              <span className="hidden lg:inline">登録カード（クレジットカード・デビットカード）</span>
             </h3>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 hidden text-xs text-slate-500 lg:block">
               基準月: {formatMonthLabel(cardReferenceMonth)} · クレカは締め日別の請求予定と利用枠、デビットは紐付け銀行口座からの即時引き落としを管理します
             </p>
           </div>

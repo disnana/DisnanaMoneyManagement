@@ -102,7 +102,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
+        <div className="hidden lg:block">
           <h2 className="text-xl font-bold tracking-tight text-slate-900">カテゴリ別予算管理</h2>
           <p className="mt-0.5 text-sm text-slate-500">
             カテゴリごとに月間の上限額を設定し、使いすぎを事前に防ぎます
