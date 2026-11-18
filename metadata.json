@@ -1,0 +1,8 @@
+{
+  "name": "Kakeibo — 家計・資産管理アプリ",
+  "description": "日々の収支記録、口座残高、カテゴリ別予算、固定費、貯蓄目標を一元管理できる個人向けお金管理アプリケーション。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

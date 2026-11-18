@@ -1,0 +1,489 @@
+import React, { useMemo, useState } from 'react';
+import {
+  Search,
+  Download,
+  Pencil,
+  Trash2,
+  ArrowUpDown,
+  Plus,
+} from 'lucide-react';
+import { Account, Transaction, TransactionScope, TransactionType } from '../types/finance';
+import {
+  ALL_CATEGORIES,
+  INCOME_TAX_CATEGORY_LABELS,
+  RECEIPT_METHOD_LABELS,
+  getCategoryById,
+} from '../data/categories';
+import {
+  exportTransactionsToCSV,
+  formatFullDate,
+  formatJPY,
+  formatMonthLabel,
+  formatSignedJPY,
+  getEffectiveOutflow,
+} from '../utils/format';
+import { ConfirmDialog } from './ConfirmDialog';
+
+interface TransactionsViewProps {
+  transactions: Transaction[];
+  accounts: Account[];
+  accountNameMap: Record<string, string>;
+  selectedMonth: string;
+  onEditTransaction: (tx: Transaction) => void;
+  onDeleteTransaction: (id: string) => void;
+  onOpenAddTransaction: () => void;
+}
+
+export const TransactionsView: React.FC<TransactionsViewProps> = ({
+  transactions,
+  accounts,
+  accountNameMap,
+  selectedMonth,
+  onEditTransaction,
+  onDeleteTransaction,
+  onOpenAddTransaction,
+}) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | TransactionType>('all');
+  const [scopeFilter, setScopeFilter] = useState<'all' | TransactionScope>('all');
+  const [monthFilter, setMonthFilter] = useState<string>(selectedMonth);
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<
+    'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc'
+  >('date_desc');
+  const [deletingTx, setDeletingTx] = useState<Transaction | null>(null);
+
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    set.add(selectedMonth);
+    for (const tx of transactions) {
+      set.add(tx.date.slice(0, 7));
+    }
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [transactions, selectedMonth]);
+
+  const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return transactions
+      .filter((tx) => {
+        if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
+        if (scopeFilter !== 'all' && (tx.scope ?? 'personal') !== scopeFilter) {
+          return false;
+        }
+        if (monthFilter !== 'all' && tx.date.slice(0, 7) !== monthFilter) return false;
+        if (categoryFilter !== 'all' && tx.categoryId !== categoryFilter) return false;
+        if (
+          accountFilter !== 'all' &&
+          tx.accountId !== accountFilter &&
+          tx.toAccountId !== accountFilter
+        ) {
+          return false;
+        }
+        if (q) {
+          const catName = getCategoryById(tx.categoryId).name.toLowerCase();
+          const accName = (accountNameMap[tx.accountId] ?? '').toLowerCase();
+          const hit =
+            tx.title.toLowerCase().includes(q) ||
+            (tx.memo ?? '').toLowerCase().includes(q) ||
+            (tx.counterparty ?? '').toLowerCase().includes(q) ||
+            (tx.accountingSubject ?? '').toLowerCase().includes(q) ||
+            catName.includes(q) ||
+            accName.includes(q);
+          if (!hit) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'date_desc') return b.date.localeCompare(a.date);
+        if (sortBy === 'date_asc') return a.date.localeCompare(b.date);
+        if (sortBy === 'amount_desc') return b.amount - a.amount;
+        return a.amount - b.amount;
+      });
+  }, [
+    transactions,
+    typeFilter,
+    scopeFilter,
+    monthFilter,
+    categoryFilter,
+    accountFilter,
+    searchQuery,
+    sortBy,
+    accountNameMap,
+  ]);
+
+  const summary = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    for (const tx of filtered) {
+      if (tx.type === 'income') income += tx.amount;
+      else if (tx.type === 'expense') expense += tx.amount;
+      else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
+        expense += tx.transferFee ?? 0;
+      }
+    }
+    return { income, expense, net: income - expense };
+  }, [filtered]);
+
+  const toggleDateSort = () => {
+    setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
+  };
+
+  const toggleAmountSort = () => {
+    setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight text-slate-900">取引履歴台帳</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            個人・事業、ポイント充当、振替手数料、受取形態（ギフト券等）を含めて検索・管理できます
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            exportTransactionsToCSV(
+              filtered,
+              accountNameMap,
+              `kakeibo-${monthFilter === 'all' ? 'all' : monthFilter}.csv`
+            )
+          }
+          disabled={filtered.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>表示中をCSV出力</span>
+        </button>
+      </div>
+
+      {/* Filter Bar */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+              {(
+                [
+                  { id: 'all', label: 'すべて' },
+                  { id: 'expense', label: '支出' },
+                  { id: 'income', label: '収入' },
+                  { id: 'transfer', label: '振替' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setTypeFilter(tab.id)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                    typeFilter === tab.id
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+              {(
+                [
+                  { id: 'all', label: '個人・事業' },
+                  { id: 'personal', label: '個人' },
+                  { id: 'business', label: '事業・経費' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setScopeFilter(tab.id)}
+                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                    scopeFilter === tab.id
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative min-w-[240px] flex-1 max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="項目名・取引先・勘定科目・メモで検索"
+              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
+          <select
+            aria-label="月で絞り込む"
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
+          >
+            <option value="all">全期間</option>
+            {availableMonths.map((m) => (
+              <option key={m} value={m}>
+                {formatMonthLabel(m)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="カテゴリで絞り込む"
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
+          >
+            <option value="all">すべてのカテゴリ</option>
+            {ALL_CATEGORIES.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            aria-label="口座で絞り込む"
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
+          >
+            <option value="all">すべての口座</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+
+          {(searchQuery ||
+            typeFilter !== 'all' ||
+            scopeFilter !== 'all' ||
+            monthFilter !== selectedMonth ||
+            categoryFilter !== 'all' ||
+            accountFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
+                setTypeFilter('all');
+                setScopeFilter('all');
+                setMonthFilter(selectedMonth);
+                setCategoryFilter('all');
+                setAccountFilter('all');
+              }}
+              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+            >
+              条件をリセット
+            </button>
+          )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-4 text-xs text-slate-500 tabular-nums">
+            <span>該当 {filtered.length}件</span>
+            <span aria-hidden="true">·</span>
+            <span>
+              収入 <strong className="font-mono text-emerald-700">{formatJPY(summary.income)}</strong>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              支出 <strong className="font-mono text-slate-900">{formatJPY(summary.expense)}</strong>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Ledger Table */}
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {filtered.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <p className="text-sm font-medium text-slate-700">
+              条件に一致する取引が見つかりませんでした
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              絞り込み条件を変更するか、新しい収支を記録してください。
+            </p>
+            <button
+              type="button"
+              onClick={onOpenAddTransaction}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>収支を記録する</span>
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
+                  <th className="py-3 pl-6 pr-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={toggleDateSort}
+                      className="inline-flex items-center gap-1 font-medium hover:text-slate-900"
+                    >
+                      <span>日付</span>
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </th>
+                  <th className="px-3 py-3 whitespace-nowrap">項目・税務/取引詳細</th>
+                  <th className="px-3 py-3 whitespace-nowrap">カテゴリ / 区分</th>
+                  <th className="px-3 py-3 whitespace-nowrap">口座</th>
+                  <th className="px-3 py-3 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={toggleAmountSort}
+                      className="inline-flex items-center justify-end gap-1 font-medium hover:text-slate-900"
+                    >
+                      <span>金額</span>
+                      <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                  </th>
+                  <th className="py-3 pl-3 pr-6 text-right whitespace-nowrap">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((tx) => {
+                  const cat = getCategoryById(tx.categoryId);
+                  const accName = accountNameMap[tx.accountId] ?? '不明な口座';
+                  const toAccName = tx.toAccountId
+                    ? accountNameMap[tx.toAccountId] ?? '不明な口座'
+                    : '';
+
+                  const detailParts: string[] = [];
+                  if (tx.counterparty) detailParts.push(tx.counterparty);
+                  if (tx.type === 'income') {
+                    if (tx.receiptMethod) {
+                      detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
+                    }
+                    if (tx.incomeTaxCategory) {
+                      detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
+                    }
+                  }
+                  if (tx.type === 'expense' && tx.scope === 'business') {
+                    detailParts.push(tx.accountingSubject ?? '経費');
+                    if ((tx.businessRatio ?? 100) < 100) {
+                      detailParts.push(`按分${tx.businessRatio}%`);
+                    }
+                  }
+                  if (tx.type === 'transfer' && tx.isPrepayment) {
+                    detailParts.push('先払い・繰上返済');
+                  }
+                  if (tx.memo) detailParts.push(tx.memo);
+
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="group transition-colors hover:bg-slate-50/80"
+                    >
+                      <td className="py-2.5 pl-6 pr-3 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
+                        {formatFullDate(tx.date)}
+                      </td>
+                      <td className="px-3 py-2.5 max-w-sm">
+                        <div className="truncate font-medium text-slate-900">
+                          {tx.title}
+                        </div>
+                        {detailParts.length > 0 && (
+                          <div className="truncate text-xs text-slate-500">
+                            {detailParts.join(' · ')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-slate-700 whitespace-nowrap">
+                        <div>{cat.name}</div>
+                        <div className="text-[11px] text-slate-400">
+                          {tx.scope === 'business' ? '事業・経費' : '個人'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-slate-600 whitespace-nowrap">
+                        {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono tabular-nums whitespace-nowrap">
+                        <div
+                          className={`text-sm font-semibold ${
+                            tx.type === 'income'
+                              ? 'text-emerald-700'
+                              : tx.type === 'expense'
+                              ? 'text-slate-900'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {formatSignedJPY(tx.amount, tx.type)}
+                        </div>
+                        {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                          <div className="text-[11px] text-slate-500">
+                            手数料 {formatJPY(tx.transferFee ?? 0)}
+                          </div>
+                        )}
+                        {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
+                          <div className="text-[11px] text-teal-700">
+                            P充当 {formatJPY(tx.pointUsed ?? 0)} · 実請求{' '}
+                            {formatJPY(getEffectiveOutflow(tx))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 pl-3 pr-6 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onEditTransaction(tx)}
+                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                            aria-label={`${tx.title}を編集`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTx(tx)}
+                            className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                            aria-label={`${tx.title}を削除`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <ConfirmDialog
+        open={Boolean(deletingTx)}
+        title="この取引を削除しますか？"
+        description={
+          deletingTx
+            ? `「${deletingTx.title}」（${formatJPY(
+                deletingTx.amount
+              )} / ${formatFullDate(
+                deletingTx.date
+              )}）を削除します。口座残高も自動で再計算されます。`
+            : ''
+        }
+        confirmLabel="削除する"
+        danger={true}
+        onConfirm={() => {
+          if (deletingTx) {
+            onDeleteTransaction(deletingTx.id);
+            setDeletingTx(null);
+          }
+        }}
+        onCancel={() => setDeletingTx(null)}
+      />
+    </div>
+  );
+};
