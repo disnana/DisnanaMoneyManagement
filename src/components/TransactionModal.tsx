@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { X, ArrowRightLeft, ArrowDownLeft, ArrowUpRight, Briefcase, User } from 'lucide-react';
+import { ArrowRightLeft, ArrowDownLeft, ArrowUpRight, Briefcase, User } from 'lucide-react';
 import {
   Account,
   IncomeTaxCategory,
@@ -20,6 +19,7 @@ import {
   getCategoryById,
 } from '../data/categories';
 import { formatJPY, getCurrentMonthKey, getTodayString, shiftMonth } from '../utils/format';
+import { ResponsiveSheet } from './ResponsiveSheet';
 
 export interface TransactionModalPrefill {
   type?: TransactionType;
@@ -75,15 +75,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [targetBillingMonth, setTargetBillingMonth] = useState(getCurrentMonthKey());
 
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -375,164 +366,156 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     type === 'transfer' ? transferEligibleAccounts : accounts;
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="tx-modal-backdrop"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="tx-modal-title"
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.98 }}
-            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-            className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
+    <ResponsiveSheet
+      open={open}
+      onClose={onClose}
+      title={editingTransaction ? '取引を編集' : '新しい取引を記録'}
+      titleId="tx-modal-title"
+      maxWidthClass="sm:max-w-xl"
+      footer={
+        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
           >
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-              <h2 id="tx-modal-title" className="text-base font-semibold text-slate-900">
-                {editingTransaction ? '取引を編集' : '新しい取引を記録'}
-              </h2>
+            キャンセル
+          </button>
+          <button
+            type="submit"
+            form="tx-modal-form"
+            className="min-h-[44px] whitespace-nowrap rounded-xl bg-teal-700 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-teal-800 active:scale-[0.98]"
+          >
+            {editingTransaction ? '変更を保存' : '記録を追加'}
+          </button>
+        </div>
+      }
+    >
+      <form id="tx-modal-form" onSubmit={handleSubmit} className="space-y-5">
+        {/* Type & Scope Bar */}
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 sm:flex-1">
+            <button
+              type="button"
+              onClick={() => handleTypeChange('expense')}
+              className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                type === 'expense'
+                  ? 'bg-white text-red-600 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+              <span>支出</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTypeChange('income')}
+              className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                type === 'income'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ArrowDownLeft className="h-3.5 w-3.5 shrink-0" />
+              <span>収入</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTypeChange('transfer')}
+              className={`flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
+                type === 'transfer'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" />
+              <span>口座振替</span>
+            </button>
+          </div>
+
+          <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 sm:w-auto sm:inline-grid">
+            <button
+              type="button"
+              onClick={() => handleScopeChange('personal')}
+              className={`inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                scope === 'personal'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <User className="h-3.5 w-3.5 shrink-0" />
+              <span>個人</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleScopeChange('business')}
+              className={`inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                scope === 'business'
+                  ? 'bg-white text-teal-800 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Briefcase className="h-3.5 w-3.5 shrink-0" />
+              <span>事業・経費</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Amount Input */}
+        <div>
+          <label htmlFor="tx-amount" className="block text-xs font-medium text-slate-600">
+            {type === 'expense'
+              ? '支払総額 (円)'
+              : type === 'income'
+              ? '収入総額・額面 (円)'
+              : '振替金額 (円)'}
+          </label>
+          <div className="relative mt-1.5">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold text-slate-400">
+              ¥
+            </span>
+            <input
+              ref={amountInputRef}
+              id="tx-amount"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              required
+              value={amountStr}
+              onChange={(e) => setAmountStr(e.target.value)}
+              placeholder="0"
+              className="min-h-[48px] w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-9 pr-4 font-mono text-2xl font-semibold text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+            />
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            {[1000, 3000, 5000, 10000].map((val) => (
               <button
+                key={val}
                 type="button"
-                onClick={onClose}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                aria-label="閉じる"
+                onClick={() => handleQuickAddAmount(val)}
+                className="min-h-[40px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 active:scale-[0.98] tabular-nums"
               >
-                <X className="h-4 w-4" />
+                +¥{val.toLocaleString('ja-JP')}
               </button>
-            </div>
+            ))}
+          </div>
+        </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 p-6">
-              {/* Type & Scope Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="grid w-full grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 sm:w-auto sm:min-w-[240px] sm:flex-1">
-                  <button
-                    type="button"
-                    onClick={() => handleTypeChange('expense')}
-                    className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-                      type === 'expense'
-                        ? 'bg-white text-red-600 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <ArrowUpRight className="h-3.5 w-3.5" />
-                    <span>支出</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTypeChange('income')}
-                    className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-                      type === 'income'
-                        ? 'bg-white text-emerald-700 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <ArrowDownLeft className="h-3.5 w-3.5" />
-                    <span>収入</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTypeChange('transfer')}
-                    className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap ${
-                      type === 'transfer'
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <ArrowRightLeft className="h-3.5 w-3.5" />
-                    <span>口座振替</span>
-                  </button>
-                </div>
-
-                <div className="inline-flex rounded-lg bg-slate-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => handleScopeChange('personal')}
-                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                      scope === 'personal'
-                        ? 'bg-white text-slate-900 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <User className="h-3.5 w-3.5" />
-                    <span>個人</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleScopeChange('business')}
-                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                      scope === 'business'
-                        ? 'bg-white text-teal-800 shadow-xs'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Briefcase className="h-3.5 w-3.5" />
-                    <span>事業・経費</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Amount Input */}
-              <div>
-                <label htmlFor="tx-amount" className="block text-xs font-medium text-slate-600">
-                  {type === 'expense'
-                    ? '支払総額 (円)'
-                    : type === 'income'
-                    ? '収入総額・額面 (円)'
-                    : '振替金額 (円)'}
-                </label>
-                <div className="relative mt-1.5">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-lg font-semibold text-slate-400">
-                    ¥
-                  </span>
-                  <input
-                    ref={amountInputRef}
-                    id="tx-amount"
-                    type="number"
-                    min="1"
-                    step="1"
-                    required
-                    value={amountStr}
-                    onChange={(e) => setAmountStr(e.target.value)}
-                    placeholder="0"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-4 font-mono text-2xl font-semibold text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20"
-                  />
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {[1000, 3000, 5000, 10000].map((val) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => handleQuickAddAmount(val)}
-                      className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 tabular-nums"
-                    >
-                      +¥{val.toLocaleString('ja-JP')}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="tx-date" className="block text-xs font-medium text-slate-600">
-                    日付
-                  </label>
-                  <input
-                    id="tx-date"
-                    type="date"
-                    required
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none"
-                  />
-                </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="tx-date" className="block text-xs font-medium text-slate-600">
+              日付
+            </label>
+            <input
+              id="tx-date"
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 tabular-nums focus:border-teal-600 focus:outline-none"
+            />
+          </div>
 
                 {type !== 'transfer' ? (
                   <div>
@@ -546,7 +529,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       id="tx-category"
                       value={categoryId}
                       onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
+                      className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
                     >
                       {activeCategories.map((cat) => (
                         <option key={cat.id} value={cat.id}>
@@ -567,7 +550,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       id="tx-to-account"
                       value={toAccountId}
                       onChange={(e) => setToAccountId(e.target.value)}
-                      className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
+                      className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
                     >
                       {transferEligibleAccounts.map((acc) => (
                         <option key={acc.id} value={acc.id}>
@@ -590,7 +573,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     id="tx-account"
                     value={accountId}
                     onChange={(e) => handleAccountChange(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
+                    className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
                   >
                     {accountSelectPool.map((acc) => (
                       <option key={acc.id} value={acc.id}>
@@ -616,13 +599,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         ? '例: 銀行から引き出し、カード先払い'
                         : '例: スーパー、備品購入、新幹線'
                     }
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none"
+                    className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none"
                   />
                 </div>
               </div>
 
               {type === 'transfer' && (
-                <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <label htmlFor="tx-fee" className="text-xs font-medium text-slate-700">
@@ -632,16 +615,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         振替元からの総出金額: {formatJPY(numericAmount + numericFee)}
                       </span>
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <input
                         id="tx-fee"
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         step="1"
                         value={transferFeeStr}
                         onChange={(e) => setTransferFeeStr(e.target.value)}
                         placeholder="0"
-                        className="w-36 rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-mono text-sm font-semibold text-slate-900 tabular-nums"
+                        className="min-h-[42px] w-32 rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm font-semibold text-slate-900 tabular-nums"
                       />
                       {[0, 110, 220, 440].map((fee) => (
                         <button
@@ -650,7 +634,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                           onClick={() =>
                             setTransferFeeStr(fee === 0 ? '' : String(fee))
                           }
-                          className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-xs text-slate-700 hover:bg-slate-100 tabular-nums"
+                          className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-3 py-2 font-mono text-xs font-medium text-slate-700 hover:bg-slate-100 active:scale-[0.98] tabular-nums"
                         >
                           ¥{fee}
                         </button>
@@ -660,12 +644,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
                   {selectedToAccount?.type === 'credit' && (
                     <div className="space-y-3 border-t border-slate-200 pt-3">
-                      <label className="flex items-center gap-2 text-xs font-medium text-slate-800">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 text-xs font-medium text-slate-800">
                         <input
                           type="checkbox"
                           checked={isPrepayment}
                           onChange={(e) => setIsPrepayment(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
+                          className="h-5 w-5 rounded border-slate-300 text-teal-700 focus:ring-teal-600"
                         />
                         <span>先払い・繰上返済として記録する（利用枠を即時回復）</span>
                       </label>
@@ -676,7 +660,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         <select
                           value={targetBillingMonth}
                           onChange={(e) => setTargetBillingMonth(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                          className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                         >
                           {billingMonthChoices.map((m) => (
                             <option key={m} value={m}>
@@ -691,7 +675,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {type === 'expense' && (
-                <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label
@@ -703,17 +687,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       <input
                         id="tx-points"
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         step="1"
                         value={pointUsedStr}
                         onChange={(e) => setPointUsedStr(e.target.value)}
                         placeholder="0"
-                        className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-mono text-sm font-semibold text-slate-900 tabular-nums"
+                        className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-sm font-semibold text-slate-900 tabular-nums"
                       />
                     </div>
                     <div className="flex flex-col justify-end">
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
-                        口座・カード実請求額:{' '}
+                      <div className="flex min-h-[44px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        <span>口座・カード実請求額</span>
                         <strong className="font-mono text-sm text-slate-900 tabular-nums">
                           {formatJPY(Math.max(0, numericAmount - numericPoints))}
                         </strong>
@@ -731,7 +716,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                           <select
                             value={accountingSubject}
                             onChange={(e) => setAccountingSubject(e.target.value)}
-                            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                            className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                           >
                             {ACCOUNTING_SUBJECTS.map((subj) => (
                               <option key={subj} value={subj}>
@@ -749,7 +734,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             value={counterparty}
                             onChange={(e) => setCounterparty(e.target.value)}
                             placeholder="例: Amazon、JR東日本"
-                            className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                            className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                           />
                         </div>
                       </div>
@@ -764,7 +749,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             {formatJPY(Math.round(numericAmount * (businessRatio / 100)))}
                           </span>
                         </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                           <input
                             type="range"
                             min="0"
@@ -772,14 +757,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             step="5"
                             value={businessRatio}
                             onChange={(e) => setBusinessRatio(Number(e.target.value))}
-                            className="flex-1 accent-teal-700"
+                            className="min-h-[36px] min-w-[140px] flex-1 accent-teal-700"
                           />
                           {[100, 50, 30].map((pct) => (
                             <button
                               key={pct}
                               type="button"
                               onClick={() => setBusinessRatio(pct)}
-                              className={`rounded border px-2 py-1 font-mono text-[11px] ${
+                              className={`min-h-[40px] rounded-xl border px-3 py-1.5 font-mono text-xs active:scale-[0.98] ${
                                 businessRatio === pct
                                   ? 'border-teal-700 bg-teal-50 font-semibold text-teal-800'
                                   : 'border-slate-200 bg-white text-slate-600'
@@ -796,7 +781,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               )}
 
               {type === 'income' && (
-                <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-slate-700">
@@ -807,7 +792,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         onChange={(e) =>
                           handleReceiptMethodChange(e.target.value as ReceiptMethod)
                         }
-                        className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                        className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                       >
                         {(Object.keys(RECEIPT_METHOD_LABELS) as ReceiptMethod[]).map(
                           (k) => (
@@ -828,7 +813,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         onChange={(e) =>
                           setIncomeTaxCategory(e.target.value as IncomeTaxCategory)
                         }
-                        className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                        className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                       >
                         {(
                           Object.keys(INCOME_TAX_CATEGORY_LABELS) as IncomeTaxCategory[]
@@ -851,7 +836,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                         value={counterparty}
                         onChange={(e) => setCounterparty(e.target.value)}
                         placeholder="例: 株式会社〇〇、クラウドワークス"
-                        className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900"
+                        className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
                       />
                     </div>
                     <div>
@@ -868,12 +853,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       </div>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="0"
                         step="1"
                         value={withholdingTaxStr}
                         onChange={(e) => setWithholdingTaxStr(e.target.value)}
                         placeholder="0"
-                        className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 font-mono text-xs font-semibold text-slate-900 tabular-nums"
+                        className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-900 tabular-nums"
                       />
                     </div>
                   </div>
@@ -890,35 +876,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   value={memo}
                   onChange={(e) => setMemo(e.target.value)}
                   placeholder="補足情報、領収書番号、内訳など"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none"
+                  className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:outline-none"
                 />
               </div>
 
               {error && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700">
                   {error}
                 </div>
               )}
-
-              <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  className="whitespace-nowrap rounded-lg bg-teal-700 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-800"
-                >
-                  {editingTransaction ? '変更を保存' : '記録を追加'}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </form>
+    </ResponsiveSheet>
   );
 };

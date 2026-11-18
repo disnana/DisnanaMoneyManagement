@@ -41,22 +41,29 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.14 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[1px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) onCancel();
+          }}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 backdrop-blur-[2px] sm:items-center sm:p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-dialog-title"
         >
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.98 }}
-            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl"
+            initial={{ opacity: 0, y: 28 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full rounded-t-3xl border border-slate-200 bg-white p-5 pb-safe shadow-2xl sm:max-w-md sm:rounded-2xl sm:p-6"
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="mb-3 flex justify-center sm:hidden" aria-hidden="true">
+              <span className="h-1.5 w-10 rounded-full bg-slate-300" />
+            </div>
+
+            <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
                 <div
-                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                     danger ? 'bg-red-50 text-red-600' : 'bg-teal-50 text-teal-700'
                   }`}
                 >
@@ -72,24 +79,25 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               <button
                 type="button"
                 onClick={onCancel}
-                className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:scale-95"
                 aria-label="閉じる"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="mt-6 flex items-center justify-end gap-3">
+
+            <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
               <button
                 type="button"
                 onClick={onCancel}
-                className="whitespace-nowrap rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                className="min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
               >
                 {cancelLabel}
               </button>
               <button
                 type="button"
                 onClick={onConfirm}
-                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
+                className={`min-h-[44px] whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-colors active:scale-[0.98] ${
                   danger
                     ? 'bg-red-600 hover:bg-red-700'
                     : 'bg-teal-700 hover:bg-teal-800'

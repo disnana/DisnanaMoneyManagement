@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, Check, Trash2, X, CalendarCheck2, Target } from 'lucide-react';
+import { Plus, Check, Trash2, CalendarCheck2, Target } from 'lucide-react';
 import { Account, RecurringItem, SavingsGoal, Transaction } from '../types/finance';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryById } from '../data/categories';
 import { formatFullDate, formatJPY, formatMonthLabel } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ResponsiveSheet } from './ResponsiveSheet';
 
 interface PlanningViewProps {
   recurringItems: RecurringItem[];
@@ -144,9 +145,9 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
               setRecAccountId(accounts[0]?.id ?? '');
               setRecModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3.5 py-2 text-xs font-medium text-white transition-colors hover:bg-teal-800 whitespace-nowrap"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             <span>定期項目を追加</span>
           </button>
         </div>
@@ -230,15 +231,15 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                       </span>
 
                       {isRecorded ? (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 whitespace-nowrap">
-                          <Check className="h-3.5 w-3.5" />
+                        <span className="inline-flex min-h-[44px] items-center gap-1.5 px-2 text-xs font-medium text-emerald-700 whitespace-nowrap">
+                          <Check className="h-4 w-4" />
                           <span>{formatMonthLabel(selectedMonth)} 記帳済</span>
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => onRecordRecurring(item, selectedMonth)}
-                          className="rounded-lg border border-teal-700 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800 transition-colors hover:bg-teal-100 whitespace-nowrap"
+                          className="min-h-[44px] rounded-xl border border-teal-700 bg-teal-50 px-3.5 py-2 text-xs font-semibold text-teal-800 transition-all hover:bg-teal-100 active:scale-[0.98] whitespace-nowrap"
                         >
                           今月分を記帳
                         </button>
@@ -247,10 +248,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setDeletingRec(item)}
-                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 active:scale-95"
                         aria-label={`${item.title}を削除`}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -273,9 +274,9 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           <button
             type="button"
             onClick={() => setGoalModalOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-800 transition-colors hover:bg-slate-50 whitespace-nowrap"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-semibold text-slate-800 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             <span>目標を追加</span>
           </button>
         </div>
@@ -320,10 +321,10 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setDeletingGoal(goal)}
-                        className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 active:scale-95"
                         aria-label={`${goal.title}を削除`}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
 
@@ -358,7 +359,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onContributeGoal(goal.id, 10000)}
-                      className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 font-mono text-xs font-medium text-slate-800 transition-colors hover:bg-slate-100 tabular-nums whitespace-nowrap"
+                      className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs font-semibold text-slate-800 transition-all hover:bg-slate-100 active:scale-[0.98] tabular-nums whitespace-nowrap"
                     >
                       +¥10,000 積立
                     </button>
@@ -368,7 +369,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                         setCustomContribGoal(goal);
                         setContribAmount('20000');
                       }}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+                      className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
                     >
                       金額指定
                     </button>
@@ -381,279 +382,255 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       </section>
 
       {/* Add Recurring Modal */}
-      {recModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-base font-semibold text-slate-900">定期取引を追加</h3>
-              <button
-                type="button"
-                onClick={() => setRecModalOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveRecurring} className="space-y-4 p-6">
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRecType('expense');
-                    setRecCategoryId(EXPENSE_CATEGORIES[0].id);
-                  }}
-                  className={`rounded-md py-1.5 text-xs font-semibold ${
-                    recType === 'expense' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
-                  }`}
-                >
-                  固定支出
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRecType('income');
-                    setRecCategoryId(INCOME_CATEGORIES[0].id);
-                  }}
-                  className={`rounded-md py-1.5 text-xs font-semibold ${
-                    recType === 'income' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
-                  }`}
-                >
-                  定期収入
-                </button>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600">名称</label>
-                <input
-                  type="text"
-                  required
-                  value={recTitle}
-                  onChange={(e) => setRecTitle(e.target.value)}
-                  placeholder="例: 家賃、ジム会費、月次給与"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">金額 (円)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={recAmount}
-                    onChange={(e) => setRecAmount(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm font-semibold tabular-nums"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">毎月の日付 (1〜28)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="28"
-                    required
-                    value={recDay}
-                    onChange={(e) => setRecDay(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm tabular-nums"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">カテゴリ</label>
-                  <select
-                    value={recCategoryId}
-                    onChange={(e) => setRecCategoryId(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    {(recType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">口座</label>
-                  <select
-                    value={recAccountId}
-                    onChange={(e) => setRecAccountId(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setRecModalOpen(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                >
-                  追加する
-                </button>
-              </div>
-            </form>
+      <ResponsiveSheet
+        open={recModalOpen}
+        onClose={() => setRecModalOpen(false)}
+        title="定期取引を追加"
+        titleId="rec-modal-title"
+        maxWidthClass="sm:max-w-md"
+        footer={
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setRecModalOpen(false)}
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98]"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              form="rec-modal-form"
+              className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
+            >
+              追加する
+            </button>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="rec-modal-form" onSubmit={handleSaveRecurring} className="space-y-4">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setRecType('expense');
+                setRecCategoryId(EXPENSE_CATEGORIES[0].id);
+              }}
+              className={`min-h-[42px] rounded-lg py-2 text-xs font-semibold ${
+                recType === 'expense' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
+              }`}
+            >
+              固定支出
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRecType('income');
+                setRecCategoryId(INCOME_CATEGORIES[0].id);
+              }}
+              className={`min-h-[42px] rounded-lg py-2 text-xs font-semibold ${
+                recType === 'income' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600'
+              }`}
+            >
+              定期収入
+            </button>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600">名称</label>
+            <input
+              type="text"
+              required
+              value={recTitle}
+              onChange={(e) => setRecTitle(e.target.value)}
+              placeholder="例: 家賃、ジム会費、月次給与"
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-600">金額 (円)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                required
+                value={recAmount}
+                onChange={(e) => setRecAmount(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-sm font-semibold tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600">毎月の日付 (1〜28)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="28"
+                required
+                value={recDay}
+                onChange={(e) => setRecDay(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-sm tabular-nums"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-600">カテゴリ</label>
+              <select
+                value={recCategoryId}
+                onChange={(e) => setRecCategoryId(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                {(recType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600">口座</label>
+              <select
+                value={recAccountId}
+                onChange={(e) => setRecAccountId(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </form>
+      </ResponsiveSheet>
 
       {/* Add Goal Modal */}
-      {goalModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-base font-semibold text-slate-900">貯蓄目標を追加</h3>
-              <button
-                type="button"
-                onClick={() => setGoalModalOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveGoal} className="space-y-4 p-6">
-              <div>
-                <label className="block text-xs font-medium text-slate-600">目標タイトル</label>
-                <input
-                  type="text"
-                  required
-                  value={goalTitle}
-                  onChange={(e) => setGoalTitle(e.target.value)}
-                  placeholder="例: 引っ越し資金、海外旅行"
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">目標金額 (円)</label>
-                  <input
-                    type="number"
-                    min="1000"
-                    required
-                    value={goalTarget}
-                    onChange={(e) => setGoalTarget(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm font-semibold tabular-nums"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600">現在の積立額 (円)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={goalCurrent}
-                    onChange={(e) => setGoalCurrent(e.target.value)}
-                    className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm tabular-nums"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600">目標期日（任意）</label>
-                <input
-                  type="date"
-                  value={goalDate}
-                  onChange={(e) => setGoalDate(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tabular-nums"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600">メモ（任意）</label>
-                <input
-                  type="text"
-                  value={goalNote}
-                  onChange={(e) => setGoalNote(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setGoalModalOpen(false)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                >
-                  追加する
-                </button>
-              </div>
-            </form>
+      <ResponsiveSheet
+        open={goalModalOpen}
+        onClose={() => setGoalModalOpen(false)}
+        title="貯蓄目標を追加"
+        titleId="goal-modal-title"
+        maxWidthClass="sm:max-w-md"
+        footer={
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setGoalModalOpen(false)}
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98]"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              form="goal-modal-form"
+              className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
+            >
+              追加する
+            </button>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="goal-modal-form" onSubmit={handleSaveGoal} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600">目標タイトル</label>
+            <input
+              type="text"
+              required
+              value={goalTitle}
+              onChange={(e) => setGoalTitle(e.target.value)}
+              placeholder="例: 引っ越し資金、海外旅行"
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-slate-600">目標金額 (円)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1000"
+                required
+                value={goalTarget}
+                onChange={(e) => setGoalTarget(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-sm font-semibold tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600">現在の積立額 (円)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={goalCurrent}
+                onChange={(e) => setGoalCurrent(e.target.value)}
+                className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-sm tabular-nums"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600">目標期日（任意）</label>
+            <input
+              type="date"
+              value={goalDate}
+              onChange={(e) => setGoalDate(e.target.value)}
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600">メモ（任意）</label>
+            <input
+              type="text"
+              value={goalNote}
+              onChange={(e) => setGoalNote(e.target.value)}
+              className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </form>
+      </ResponsiveSheet>
 
       {/* Custom Contribution Modal */}
-      {customContribGoal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-[1px]"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                積立額を更新: {customContribGoal.title}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setCustomContribGoal(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <form onSubmit={handleContribSubmit} className="space-y-4 p-6">
-              <div>
-                <label className="block text-xs font-medium text-slate-600">
-                  増減額 (円) — 引き出す場合はマイナスを入力
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={contribAmount}
-                  onChange={(e) => setContribAmount(e.target.value)}
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-lg font-semibold tabular-nums"
-                />
-              </div>
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setCustomContribGoal(null)}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
-                >
-                  更新する
-                </button>
-              </div>
-            </form>
+      <ResponsiveSheet
+        open={Boolean(customContribGoal)}
+        onClose={() => setCustomContribGoal(null)}
+        title={customContribGoal ? `積立額を更新: ${customContribGoal.title}` : '積立額を更新'}
+        titleId="contrib-modal-title"
+        maxWidthClass="sm:max-w-sm"
+        footer={
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setCustomContribGoal(null)}
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98]"
+            >
+              キャンセル
+            </button>
+            <button
+              type="submit"
+              form="contrib-modal-form"
+              className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
+            >
+              更新する
+            </button>
           </div>
-        </div>
-      )}
+        }
+      >
+        <form id="contrib-modal-form" onSubmit={handleContribSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600">
+              増減額 (円) — 引き出す場合はマイナスを入力
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              required
+              value={contribAmount}
+              onChange={(e) => setContribAmount(e.target.value)}
+              className="mt-1.5 min-h-[48px] w-full rounded-xl border border-slate-300 px-3 py-2 font-mono text-lg font-semibold tabular-nums"
+            />
+          </div>
+        </form>
+      </ResponsiveSheet>
 
       <ConfirmDialog
         open={Boolean(deletingRec)}

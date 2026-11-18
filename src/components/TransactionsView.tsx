@@ -6,6 +6,8 @@ import {
   Trash2,
   ArrowUpDown,
   Plus,
+  RotateCcw,
+  ChevronRight,
 } from 'lucide-react';
 import { Account, Transaction, TransactionScope, TransactionType } from '../types/finance';
 import {
@@ -125,6 +127,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return { income, expense, net: income - expense };
   }, [filtered]);
 
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+      typeFilter !== 'all' ||
+      scopeFilter !== 'all' ||
+      monthFilter !== selectedMonth ||
+      categoryFilter !== 'all' ||
+      accountFilter !== 'all'
+  );
+
   const toggleDateSort = () => {
     setSortBy((prev) => (prev === 'date_desc' ? 'date_asc' : 'date_desc'));
   };
@@ -135,10 +146,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">取引履歴台帳</h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
+            取引履歴台帳
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
             個人・事業、ポイント充当、振替手数料、受取形態（ギフト券等）を含めて検索・管理できます
           </p>
         </div>
@@ -153,18 +166,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             )
           }
           disabled={filtered.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap"
+          className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto whitespace-nowrap"
         >
-          <Download className="h-3.5 w-3.5" />
+          <Download className="h-4 w-4" />
           <span>表示中をCSV出力</span>
         </button>
       </div>
 
       {/* Filter Bar */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+      <section className="space-y-3.5 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="grid grid-cols-4 rounded-xl bg-slate-100 p-1 sm:inline-flex">
               {(
                 [
                   { id: 'all', label: 'すべて' },
@@ -177,7 +190,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setTypeFilter(tab.id)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                  className={`min-h-[40px] rounded-lg px-3 text-xs font-semibold transition-colors whitespace-nowrap ${
                     typeFilter === tab.id
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -188,7 +201,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               ))}
             </div>
 
-            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+            <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 sm:inline-flex">
               {(
                 [
                   { id: 'all', label: '個人・事業' },
@@ -200,7 +213,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setScopeFilter(tab.id)}
-                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                  className={`min-h-[40px] rounded-lg px-2.5 text-xs font-semibold transition-colors whitespace-nowrap ${
                     scopeFilter === tab.id
                       ? 'bg-white text-slate-900 shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -212,98 +225,102 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
           </div>
 
-          <div className="relative w-full sm:min-w-[240px] sm:flex-1 sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full lg:max-w-sm">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="項目名・取引先・勘定科目・メモで検索"
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600/20"
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-teal-600/20"
             />
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3">
-          <select
-            aria-label="月で絞り込む"
-            value={monthFilter}
-            onChange={(e) => setMonthFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
-          >
-            <option value="all">全期間</option>
-            {availableMonths.map((m) => (
-              <option key={m} value={m}>
-                {formatMonthLabel(m)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="カテゴリで絞り込む"
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
-          >
-            <option value="all">すべてのカテゴリ</option>
-            {ALL_CATEGORIES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="口座で絞り込む"
-            value={accountFilter}
-            onChange={(e) => setAccountFilter(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 focus:border-teal-600 focus:outline-none"
-          >
-            <option value="all">すべての口座</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-
-          {(searchQuery ||
-            typeFilter !== 'all' ||
-            scopeFilter !== 'all' ||
-            monthFilter !== selectedMonth ||
-            categoryFilter !== 'all' ||
-            accountFilter !== 'all') && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setTypeFilter('all');
-                setScopeFilter('all');
-                setMonthFilter(selectedMonth);
-                setCategoryFilter('all');
-                setAccountFilter('all');
-              }}
-              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+        <div className="flex flex-col gap-3 border-t border-slate-100 pt-3.5 lg:flex-row lg:flex-wrap lg:items-center">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap lg:items-center">
+            <select
+              aria-label="月で絞り込む"
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:border-teal-600 focus:outline-none lg:w-auto"
             >
-              条件をリセット
-            </button>
-          )}
+              <option value="all">全期間</option>
+              {availableMonths.map((m) => (
+                <option key={m} value={m}>
+                  {formatMonthLabel(m)}
+                </option>
+              ))}
+            </select>
 
-          <div className="ml-auto flex flex-wrap items-center gap-4 text-xs text-slate-500 tabular-nums">
+            <select
+              aria-label="カテゴリで絞り込む"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:border-teal-600 focus:outline-none lg:w-auto"
+            >
+              <option value="all">すべてのカテゴリ</option>
+              {ALL_CATEGORIES.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              aria-label="口座で絞り込む"
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 focus:border-teal-600 focus:outline-none lg:w-auto"
+            >
+              <option value="all">すべての口座</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setTypeFilter('all');
+                  setScopeFilter('all');
+                  setMonthFilter(selectedMonth);
+                  setCategoryFilter('all');
+                  setAccountFilter('all');
+                }}
+                className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98] whitespace-nowrap"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>条件をリセット</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 tabular-nums lg:ml-auto">
             <span>該当 {filtered.length}件</span>
             <span aria-hidden="true">·</span>
             <span>
-              収入 <strong className="font-mono text-emerald-700">{formatJPY(summary.income)}</strong>
+              収入{' '}
+              <strong className="font-mono text-emerald-700">
+                {formatJPY(summary.income)}
+              </strong>
             </span>
             <span aria-hidden="true">·</span>
             <span>
-              支出 <strong className="font-mono text-slate-900">{formatJPY(summary.expense)}</strong>
+              支出{' '}
+              <strong className="font-mono text-slate-900">
+                {formatJPY(summary.expense)}
+              </strong>
             </span>
           </div>
         </div>
       </section>
 
-      {/* Ledger Table */}
+      {/* Ledger Table / Mobile Cards */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {filtered.length === 0 ? (
           <div className="px-6 py-16 text-center">
@@ -316,15 +333,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <button
               type="button"
               onClick={onOpenAddTransaction}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
+              className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98]"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className="h-4 w-4" />
               <span>収支を記録する</span>
             </button>
           </div>
         ) : (
           <>
-            {/* Mobile Card List (no hidden columns or horizontal scroll) */}
+            {/* Mobile Card List (tappable rows + >=44px action buttons) */}
             <div className="divide-y divide-slate-100 md:hidden">
               {filtered.map((tx) => {
                 const cat = getCategoryById(tx.categoryId);
@@ -355,14 +372,20 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 if (tx.memo) detailParts.push(tx.memo);
 
                 return (
-                  <div key={tx.id} className="space-y-2 px-4 py-3.5">
-                    <div className="flex items-start justify-between gap-3">
+                  <div key={tx.id} className="px-4 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => onEditTransaction(tx)}
+                      className="flex w-full items-start justify-between gap-3 rounded-lg text-left transition-colors active:bg-slate-50"
+                    >
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold leading-snug text-slate-900 break-words">
                           {tx.title}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
-                          <span className="font-mono tabular-nums">{formatFullDate(tx.date)}</span>
+                          <span className="font-mono tabular-nums">
+                            {formatFullDate(tx.date)}
+                          </span>
                           <span aria-hidden="true">·</span>
                           <span>{cat.name}</span>
                           <span aria-hidden="true">·</span>
@@ -376,53 +399,55 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             </>
                           )}
                         </div>
+                        {detailParts.length > 0 && (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500 break-words">
+                            {detailParts.join(' · ')}
+                          </p>
+                        )}
                       </div>
-                      <div className="shrink-0 text-right font-mono tabular-nums">
-                        <div
-                          className={`text-sm font-semibold ${
-                            tx.type === 'income'
-                              ? 'text-emerald-700'
-                              : tx.type === 'expense'
-                              ? 'text-slate-900'
-                              : 'text-slate-500'
-                          }`}
-                        >
-                          {formatSignedJPY(tx.amount, tx.type)}
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="text-right font-mono tabular-nums">
+                          <div
+                            className={`text-sm font-semibold ${
+                              tx.type === 'income'
+                                ? 'text-emerald-700'
+                                : tx.type === 'expense'
+                                ? 'text-slate-900'
+                                : 'text-slate-500'
+                            }`}
+                          >
+                            {formatSignedJPY(tx.amount, tx.type)}
+                          </div>
+                          {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                            <div className="text-[11px] text-slate-500">
+                              手数料 {formatJPY(tx.transferFee ?? 0)}
+                            </div>
+                          )}
+                          {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
+                            <div className="text-[11px] text-teal-700">
+                              P充当 {formatJPY(tx.pointUsed ?? 0)}
+                            </div>
+                          )}
                         </div>
-                        {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
-                          <div className="text-[11px] text-slate-500">
-                            手数料 {formatJPY(tx.transferFee ?? 0)}
-                          </div>
-                        )}
-                        {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
-                          <div className="text-[11px] text-teal-700">
-                            P充当 {formatJPY(tx.pointUsed ?? 0)}
-                          </div>
-                        )}
+                        <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
                       </div>
-                    </div>
+                    </button>
 
-                    {detailParts.length > 0 && (
-                      <p className="text-xs leading-relaxed text-slate-500 break-words">
-                        {detailParts.join(' · ')}
-                      </p>
-                    )}
-
-                    <div className="flex items-center justify-end gap-2 pt-1">
+                    <div className="mt-2.5 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => onEditTransaction(tx)}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98]"
                       >
-                        <Pencil className="h-3 w-3" />
+                        <Pencil className="h-3.5 w-3.5" />
                         <span>編集</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setDeletingTx(tx)}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                        className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.98]"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-3.5 w-3.5" />
                         <span>削除</span>
                       </button>
                     </div>
@@ -436,14 +461,14 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
-                    <th className="py-3 pl-6 pr-3 whitespace-nowrap">
+                    <th className="py-2.5 pl-6 pr-3 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={toggleDateSort}
-                        className="inline-flex items-center gap-1 font-medium hover:text-slate-900"
+                        className="inline-flex min-h-[40px] items-center gap-1 font-medium hover:text-slate-900"
                       >
                         <span>日付</span>
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3.5 w-3.5" />
                       </button>
                     </th>
                     <th className="px-3 py-3">項目・税務/取引詳細</th>
@@ -453,10 +478,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <button
                         type="button"
                         onClick={toggleAmountSort}
-                        className="inline-flex items-center justify-end gap-1 font-medium hover:text-slate-900"
+                        className="inline-flex min-h-[40px] items-center justify-end gap-1 font-medium hover:text-slate-900"
                       >
                         <span>金額</span>
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3.5 w-3.5" />
                       </button>
                     </th>
                     <th className="py-3 pl-3 pr-6 text-right whitespace-nowrap">操作</th>
@@ -496,10 +521,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         key={tx.id}
                         className="group align-top transition-colors hover:bg-slate-50/80"
                       >
-                        <td className="py-3 pl-6 pr-3 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
+                        <td className="py-3.5 pl-6 pr-3 font-mono text-xs text-slate-600 tabular-nums whitespace-nowrap">
                           {formatFullDate(tx.date)}
                         </td>
-                        <td className="min-w-[200px] px-3 py-3">
+                        <td className="min-w-[200px] px-3 py-3.5">
                           <div className="font-medium leading-snug text-slate-900 break-words">
                             {tx.title}
                           </div>
@@ -509,16 +534,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-700">
+                        <td className="px-3 py-3.5 text-xs text-slate-700">
                           <div className="leading-snug">{cat.name}</div>
                           <div className="mt-0.5 text-[11px] text-slate-400">
                             {tx.scope === 'business' ? '事業・経費' : '個人'}
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-xs leading-snug text-slate-600 break-words">
+                        <td className="px-3 py-3.5 text-xs leading-snug text-slate-600 break-words">
                           {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
                         </td>
-                        <td className="px-3 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                        <td className="px-3 py-3.5 text-right font-mono tabular-nums whitespace-nowrap">
                           <div
                             className={`text-sm font-semibold ${
                               tx.type === 'income'
@@ -542,23 +567,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             </div>
                           )}
                         </td>
-                        <td className="py-3 pl-3 pr-6 text-right whitespace-nowrap">
+                        <td className="py-2.5 pl-3 pr-6 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => onEditTransaction(tx)}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                               aria-label={`${tx.title}を編集`}
                             >
-                              <Pencil className="h-3.5 w-3.5" />
+                              <Pencil className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => setDeletingTx(tx)}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                               aria-label={`${tx.title}を削除`}
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         </td>
@@ -597,3 +622,4 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     </div>
   );
 };
+

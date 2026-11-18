@@ -8,7 +8,6 @@ import {
   CalendarClock,
   FileText,
   Database,
-  X,
 } from 'lucide-react';
 import { NavSection } from '../types/finance';
 import { formatJPY } from '../utils/format';
@@ -20,8 +19,6 @@ interface SidebarProps {
   totalAssets: number;
   accountCount: number;
   onOpenDataModal: () => void;
-  mobileOpen: boolean;
-  onCloseMobile: () => void;
 }
 
 const NAV_ITEMS: {
@@ -44,113 +41,75 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalAssets,
   accountCount,
   onOpenDataModal,
-  mobileOpen,
-  onCloseMobile,
 }) => {
-  const navContent = (
-    <div className="flex h-full flex-col justify-between bg-white">
-      <div className="overflow-y-auto">
-        <div className="flex min-h-16 items-center justify-between gap-2 border-b border-slate-200 px-5 py-3">
-          <button
-            type="button"
-            onClick={() => {
-              onSelectSection('dashboard');
-              onCloseMobile();
-            }}
-            className="text-left min-w-0"
-          >
-            <span className="block text-[13px] font-bold tracking-tight text-slate-900 leading-snug break-words">
-              DisnanaMoneyManagement
-            </span>
-            <span className="block text-[11px] font-mono font-semibold text-teal-700 leading-tight mt-0.5">
-              (DMM)
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={onCloseMobile}
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden"
-            aria-label="メニューを閉じる"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <nav className="space-y-1 p-4" aria-label="メインナビゲーション">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  onSelectSection(item.id);
-                  onCloseMobile();
-                }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
-                  isActive
-                    ? 'bg-teal-50 text-teal-800'
-                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
-                }`}
-              >
-                <Icon
-                  className={`h-4 w-4 shrink-0 ${
-                    isActive ? 'text-teal-700' : 'text-slate-400'
-                  }`}
-                />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      <div className="border-t border-slate-200 p-4 space-y-3">
-        <div className="px-2">
-          <div className="text-xs font-medium text-slate-500">
-            総資産残高 · {accountCount}口座
-          </div>
-          <div className="mt-1 font-mono text-lg font-semibold tracking-tight text-slate-900 tabular-nums">
-            {formatJPY(totalAssets)}
-          </div>
-        </div>
-
-        <PWAInstallButton />
-
-        <button
-          type="button"
-          onClick={() => {
-            onOpenDataModal();
-            onCloseMobile();
-          }}
-          className="flex w-full items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
-        >
-          <Database className="h-4 w-4 shrink-0 text-slate-500" />
-          <span>データ管理・バックアップ</span>
-        </button>
-      </div>
-    </div>
-  );
-
   return (
-    <>
-      <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
-        <div className="sticky top-0 h-screen">{navContent}</div>
-      </aside>
+    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
+      <div className="sticky top-0 flex h-screen flex-col justify-between bg-white">
+        <div className="overflow-y-auto">
+          <div className="flex min-h-16 items-center border-b border-slate-200 px-5 py-3">
+            <button
+              type="button"
+              onClick={() => onSelectSection('dashboard')}
+              className="min-w-0 text-left transition-opacity hover:opacity-80"
+            >
+              <span className="block text-[13px] font-bold tracking-tight text-slate-900 leading-snug break-words">
+                DisnanaMoneyManagement
+              </span>
+              <span className="mt-0.5 block font-mono text-[11px] font-semibold text-teal-700 leading-tight">
+                (DMM)
+              </span>
+            </button>
+          </div>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 z-40 flex lg:hidden">
-          <div
-            className="fixed inset-0 bg-slate-900/40"
-            onClick={onCloseMobile}
-            aria-hidden="true"
-          />
-          <aside className="relative z-10 w-72 max-w-[82vw] border-r border-slate-200 bg-white shadow-xl">
-            {navContent}
-          </aside>
+          <nav className="space-y-1 p-3.5" aria-label="メインナビゲーション">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelectSection(item.id)}
+                  className={`flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all active:scale-[0.99] whitespace-nowrap ${
+                    isActive
+                      ? 'bg-teal-50 font-semibold text-teal-900'
+                      : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${
+                      isActive ? 'text-teal-700' : 'text-slate-400'
+                    }`}
+                  />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
-      )}
-    </>
+
+        <div className="space-y-3 border-t border-slate-200 p-4">
+          <div className="px-2">
+            <div className="text-xs font-medium text-slate-500">
+              総資産残高 · {accountCount}口座
+            </div>
+            <div className="mt-1 font-mono text-lg font-semibold tracking-tight text-slate-900 tabular-nums">
+              {formatJPY(totalAssets)}
+            </div>
+          </div>
+
+          <PWAInstallButton />
+
+          <button
+            type="button"
+            onClick={onOpenDataModal}
+            className="flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 active:scale-[0.99]"
+          >
+            <Database className="h-4 w-4 shrink-0 text-slate-500" />
+            <span>データ管理・バックアップ</span>
+          </button>
+        </div>
+      </div>
+    </aside>
   );
 };

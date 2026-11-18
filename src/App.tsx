@@ -10,6 +10,7 @@ import { getCurrentMonthKey } from './utils/format';
 import { useFinanceStore } from './hooks/useFinanceStore';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { DashboardView } from './components/DashboardView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { TransactionsView } from './components/TransactionsView';
@@ -109,7 +110,11 @@ export default function App() {
 
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthKey);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const handleSelectSection = useCallback((section: NavSection) => {
+    setActiveSection(section);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
 
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [txPrefill, setTxPrefill] = useState<TransactionModalPrefill | null>(null);
@@ -158,22 +163,19 @@ export default function App() {
         <div className="flex min-h-screen overflow-x-clip bg-slate-50 text-slate-900">
         <Sidebar
           activeSection={activeSection}
-          onSelectSection={setActiveSection}
+          onSelectSection={handleSelectSection}
           totalAssets={totalAssets}
           accountCount={state.accounts.length}
           onOpenDataModal={() => setDataModalOpen(true)}
-          mobileOpen={mobileMenuOpen}
-          onCloseMobile={() => setMobileMenuOpen(false)}
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar
             activeSection={activeSection}
-            onOpenMobileMenu={() => setMobileMenuOpen(true)}
             onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
           />
 
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-8 sm:py-8">
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-5 pb-24 sm:px-8 sm:py-8 lg:pb-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeSection}
@@ -190,7 +192,7 @@ export default function App() {
                     onChangeMonth={setSelectedMonth}
                     totalAssets={totalAssets}
                     accountNameMap={accountNameMap}
-                    onNavigate={setActiveSection}
+                    onNavigate={handleSelectSection}
                     onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
                     onEditTransaction={openEditTransaction}
                   />
@@ -340,6 +342,14 @@ export default function App() {
             clearAllData();
             showToast('すべてのデータを消去しました');
           }}
+        />
+
+        <MobileBottomNav
+          activeSection={activeSection}
+          onSelectSection={handleSelectSection}
+          totalAssets={totalAssets}
+          accountCount={state.accounts.length}
+          onOpenDataModal={() => setDataModalOpen(true)}
         />
 
         <OfflineIndicator />

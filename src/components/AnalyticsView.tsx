@@ -49,7 +49,7 @@ const DonutChart: React.FC<{
   centerLabel: string;
   slices: DonutSlice[];
 }> = ({ title, subtitle, centerLabel, slices }) => {
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const total = useMemo(() => slices.reduce((s, x) => s + x.value, 0), [slices]);
 
   const radius = 82;
@@ -70,10 +70,10 @@ const DonutChart: React.FC<{
     });
   }, [slices, total, circumference]);
 
-  const activeSlice = slices.find((s) => s.id === hoveredId) ?? null;
+  const activeSlice = slices.find((s) => s.id === activeId) ?? null;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-6">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
       <div className="border-b border-slate-100 pb-4">
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
         <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
@@ -86,7 +86,7 @@ const DonutChart: React.FC<{
       ) : (
         <div className="mt-6 grid grid-cols-1 items-center gap-6 sm:grid-cols-12">
           <div className="flex justify-center sm:col-span-5">
-            <div className="relative h-56 w-56">
+            <div className="relative h-52 w-52 sm:h-56 sm:w-56">
               <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
                 <circle
                   cx="110"
@@ -97,8 +97,8 @@ const DonutChart: React.FC<{
                   strokeWidth="22"
                 />
                 {segments.map((seg) => {
-                  const isHovered = hoveredId === seg.id;
-                  const dimmed = hoveredId !== null && !isHovered;
+                  const isActive = activeId === seg.id;
+                  const dimmed = activeId !== null && !isActive;
                   return (
                     <circle
                       key={seg.id}
@@ -107,13 +107,14 @@ const DonutChart: React.FC<{
                       r={radius}
                       fill="none"
                       stroke={seg.color}
-                      strokeWidth={isHovered ? 26 : 22}
+                      strokeWidth={isActive ? 26 : 22}
                       strokeDasharray={`${seg.strokeLength} ${circumference}`}
                       strokeDashoffset={seg.offset}
                       className="cursor-pointer transition-all duration-150"
                       style={{ opacity: dimmed ? 0.35 : 1 }}
-                      onMouseEnter={() => setHoveredId(seg.id)}
-                      onMouseLeave={() => setHoveredId(null)}
+                      onMouseEnter={() => setActiveId(seg.id)}
+                      onMouseLeave={() => setActiveId(null)}
+                      onClick={() => setActiveId(isActive ? null : seg.id)}
                     />
                   );
                 })}
@@ -134,21 +135,26 @@ const DonutChart: React.FC<{
             </div>
           </div>
 
-          <div className="space-y-2 sm:col-span-7">
+          <div className="space-y-1 sm:col-span-7">
             {slices.slice(0, 10).map((slice) => {
-              const isHovered = hoveredId === slice.id;
+              const isActive = activeId === slice.id;
               return (
-                <div
+                <button
                   key={slice.id}
-                  onMouseEnter={() => setHoveredId(slice.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className={`flex cursor-pointer items-start justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs transition-colors ${
-                    isHovered ? 'bg-slate-50' : ''
+                  type="button"
+                  onMouseEnter={() => setActiveId(slice.id)}
+                  onMouseLeave={() => setActiveId(null)}
+                  onClick={() => setActiveId(isActive ? null : slice.id)}
+                  aria-pressed={isActive}
+                  className={`flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs transition-all active:scale-[0.99] ${
+                    isActive
+                      ? 'bg-slate-100 ring-1 ring-slate-200'
+                      : 'hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex min-w-0 items-start gap-2">
+                  <div className="flex min-w-0 items-center gap-2.5">
                     <span
-                      className="mt-1 h-2.5 w-2.5 shrink-0 rounded-xs"
+                      className="h-3 w-3 shrink-0 rounded-xs"
                       style={{ backgroundColor: slice.color }}
                       aria-hidden="true"
                     />
@@ -162,7 +168,7 @@ const DonutChart: React.FC<{
                       {formatJPY(slice.value)}
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -336,6 +342,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return months.map((m) => ({
       monthKey: m,
       label: `${Number(m.slice(5, 7))}月`,
+      fullLabel: formatMonthLabel(m),
       income: map[m].income,
       expense: map[m].expense,
       net: map[m].income - map[m].expense,
@@ -347,6 +354,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     ...monthlyTrend.map((d) => Math.max(d.income, d.expense, Math.abs(d.net)))
   );
 
+  const activeTrendMonth =
+    monthlyTrend.find((d) => d.monthKey === selectedMonth) ??
+    monthlyTrend[monthlyTrend.length - 1];
+
   const periodTitle =
     periodMode === 'month'
       ? formatMonthLabel(selectedMonth)
@@ -357,18 +368,18 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             収支分析・ポートフォリオ
           </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
             {periodTitle}のカテゴリ構成・所得区分・支払方法別の割合を可視化します
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 sm:inline-flex">
             {(
               [
                 { id: 'month', label: '単月' },
@@ -380,7 +391,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 key={opt.id}
                 type="button"
                 onClick={() => setPeriodMode(opt.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[40px] rounded-lg px-3.5 text-xs font-semibold transition-colors whitespace-nowrap ${
                   periodMode === opt.id
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -391,7 +402,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             ))}
           </div>
 
-          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+          <div className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 sm:inline-flex">
             {(
               [
                 { id: 'all', label: 'すべて' },
@@ -403,7 +414,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 key={opt.id}
                 type="button"
                 onClick={() => setScopeFilter(opt.id)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap ${
+                className={`min-h-[40px] rounded-lg px-3.5 text-xs font-semibold transition-colors whitespace-nowrap ${
                   scopeFilter === opt.id
                     ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -414,22 +425,22 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             ))}
           </div>
 
-          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white">
+          <div className="inline-flex items-center justify-between rounded-xl border border-slate-200 bg-white sm:justify-start">
             <button
               type="button"
               onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-              className="rounded-l-lg p-2 text-slate-600 hover:bg-slate-50"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 hover:bg-slate-50 active:scale-95"
               aria-label="前の月"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-[100px] px-2.5 text-center font-mono text-xs font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+            <span className="min-w-[104px] px-3 text-center font-mono text-xs font-semibold text-slate-900 tabular-nums whitespace-nowrap">
               {formatMonthLabel(selectedMonth)}
             </span>
             <button
               type="button"
               onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-              className="rounded-r-lg p-2 text-slate-600 hover:bg-slate-50"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 hover:bg-slate-50 active:scale-95"
               aria-label="次の月"
             >
               <ChevronRight className="h-4 w-4" />
@@ -440,13 +451,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
       {/* Summary Strip */}
       <section className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4">
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="text-xs font-medium text-slate-500">総収入 ({periodTitle})</div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
             {formatJPY(analyticsSummary.totalIncome)}
           </div>
         </div>
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="text-xs font-medium text-slate-500">総支出（手数料含む）</div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
             {formatJPY(analyticsSummary.totalOutflow)}
@@ -457,14 +468,14 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             </div>
           )}
         </div>
-        <div className="p-5 sm:border-t sm:border-slate-200 lg:border-t-0">
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-5 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">ポイント充当による節約</div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-teal-700 tabular-nums">
             {formatJPY(analyticsSummary.pointSaved)}
           </div>
           <div className="mt-1 text-xs text-slate-500">実請求から控除された額</div>
         </div>
-        <div className="p-5 sm:border-t sm:border-slate-200 lg:border-t-0">
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-5 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">事業経費算入額（按分後）</div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
             {formatJPY(analyticsSummary.businessDeductible)}
@@ -476,7 +487,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <DonutChart
           title="支出カテゴリ構成（円グラフ）"
-          subtitle={`${periodTitle}のカテゴリ別割合`}
+          subtitle={`${periodTitle}のカテゴリ別割合 · 項目タップでハイライト`}
           centerLabel="支出合計"
           slices={analyticsSummary.expenseSlices}
         />
@@ -500,7 +511,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           />
         </div>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-7">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 lg:col-span-7">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">
@@ -518,8 +529,40 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             </div>
           </div>
 
-          <div className="mt-6">
-            <svg viewBox="0 0 600 224" className="h-56 w-full">
+          {activeTrendMonth && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+              <span className="font-semibold text-slate-900">
+                {activeTrendMonth.fullLabel}
+              </span>
+              <span className="text-slate-600 tabular-nums">
+                収入:{' '}
+                <strong className="font-mono text-teal-800">
+                  {formatJPY(activeTrendMonth.income)}
+                </strong>
+              </span>
+              <span className="text-slate-600 tabular-nums">
+                支出:{' '}
+                <strong className="font-mono text-slate-900">
+                  {formatJPY(activeTrendMonth.expense)}
+                </strong>
+              </span>
+              <span className="text-slate-600 tabular-nums">
+                純収支:{' '}
+                <strong
+                  className={`font-mono ${
+                    activeTrendMonth.net >= 0 ? 'text-emerald-700' : 'text-red-600'
+                  }`}
+                >
+                  {activeTrendMonth.net >= 0
+                    ? `+${formatJPY(activeTrendMonth.net)}`
+                    : formatJPY(activeTrendMonth.net)}
+                </strong>
+              </span>
+            </div>
+          )}
+
+          <div className="mt-4">
+            <svg viewBox="0 0 600 224" className="h-52 w-full sm:h-56">
               {[0, 0.5, 1].map((r) => {
                 const y = 180 - r * 136;
                 const val = Math.round(maxTrendValue * r);
@@ -568,12 +611,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                 const x = 96 + i * ((554 - 96) / Math.max(1, monthlyTrend.length - 1));
                 const clamped = Math.max(0, d.net);
                 const y = 180 - (clamped / maxTrendValue) * 136;
+                const isSelected = d.monthKey === selectedMonth;
                 return (
-                  <g key={d.monthKey}>
+                  <g
+                    key={d.monthKey}
+                    className="cursor-pointer"
+                    onClick={() => onChangeMonth(d.monthKey)}
+                  >
                     <circle
                       cx={x}
                       cy={y}
-                      r="4.5"
+                      r={isSelected ? '6' : '4.5'}
                       fill={d.net >= 0 ? '#0F766E' : '#DC2626'}
                       stroke="#FFFFFF"
                       strokeWidth="2"
@@ -592,7 +640,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       x={x}
                       y="206"
                       textAnchor="middle"
-                      className="fill-slate-500 text-[12px]"
+                      className={`text-[12px] ${
+                        isSelected ? 'fill-slate-900 font-semibold' : 'fill-slate-500'
+                      }`}
                     >
                       {d.label}
                     </text>
@@ -601,12 +651,42 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               })}
             </svg>
           </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            {monthlyTrend.map((d) => {
+              const isSelected = d.monthKey === selectedMonth;
+              return (
+                <button
+                  key={d.monthKey}
+                  type="button"
+                  onClick={() => onChangeMonth(d.monthKey)}
+                  className={`flex min-h-[44px] flex-col items-center justify-center rounded-lg border px-1.5 py-1 text-center transition-all active:scale-95 ${
+                    isSelected
+                      ? 'border-teal-700 bg-teal-50 text-teal-900'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-[11px] font-semibold whitespace-nowrap">
+                    {d.label}
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] tabular-nums ${
+                      d.net >= 0 ? 'text-emerald-700' : 'text-red-600'
+                    }`}
+                  >
+                    {d.net >= 0 ? '+' : ''}
+                    {Math.round(d.net / 1000)}k
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </section>
       </div>
 
       {/* Bottom Row: Payment Accounts & Receipt Methods Breakdown */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
           <h3 className="text-base font-semibold text-slate-900">
             支払元・口座別の実支出額
           </h3>
@@ -620,10 +700,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               {analyticsSummary.accountBreakdown.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between py-2.5 text-sm"
+                  className="flex items-center justify-between gap-3 py-3 text-sm"
                 >
-                  <span className="font-medium text-slate-800">{item.name}</span>
-                  <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                  <span className="min-w-0 font-medium text-slate-800 break-words">
+                    {item.name}
+                  </span>
+                  <span className="shrink-0 font-mono font-semibold text-slate-900 tabular-nums">
                     {formatJPY(item.value)}
                   </span>
                 </div>
@@ -632,7 +714,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
           <h3 className="text-base font-semibold text-slate-900">
             受取形態別の収入内訳
           </h3>
@@ -646,10 +728,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               {analyticsSummary.receiptBreakdown.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between py-2.5 text-sm"
+                  className="flex items-center justify-between gap-3 py-3 text-sm"
                 >
-                  <span className="font-medium text-slate-800">{item.name}</span>
-                  <span className="font-mono font-semibold text-emerald-700 tabular-nums">
+                  <span className="min-w-0 font-medium text-slate-800 break-words">
+                    {item.name}
+                  </span>
+                  <span className="shrink-0 font-mono font-semibold text-emerald-700 tabular-nums">
                     {formatJPY(item.value)}
                   </span>
                 </div>
@@ -661,3 +745,4 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     </div>
   );
 };
+

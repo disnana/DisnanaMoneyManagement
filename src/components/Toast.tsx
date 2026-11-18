@@ -9,7 +9,7 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ message, onDismiss }) => {
   return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-50 flex flex-col items-end">
+    <div className="pointer-events-none fixed bottom-20 right-4 left-4 z-50 flex flex-col items-center sm:left-auto sm:right-5 sm:items-end lg:bottom-5">
       <AnimatePresence>
         {message && (
           <motion.div
@@ -26,7 +26,7 @@ export const Toast: React.FC<ToastProps> = ({ message, onDismiss }) => {
             <button
               type="button"
               onClick={onDismiss}
-              className="ml-1 rounded p-0.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+              className="ml-1 inline-flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
               aria-label="通知を閉じる"
             >
               <X className="h-3.5 w-3.5" />

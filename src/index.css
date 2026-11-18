@@ -11,15 +11,36 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    overscroll-behavior-y: contain;
   }
 
   h1, h2, h3, h4 {
     text-wrap: balance;
   }
+
+  button,
+  a,
+  select,
+  input[type="checkbox"],
+  input[type="radio"] {
+    touch-action: manipulation;
+  }
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 @media (prefers-reduced-motion: reduce) {

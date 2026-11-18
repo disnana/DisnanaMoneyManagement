@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, ArrowRight, Plus, CreditCard } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, CreditCard } from 'lucide-react';
 import { FinanceState, NavSection, Transaction } from '../types/finance';
 import { getCategoryById } from '../data/categories';
 import {
@@ -177,27 +177,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const activeTrendPoint =
     trendData.items.find((i) => i.monthKey === hoveredMonth) ??
+    trendData.items.find((i) => i.monthKey === selectedMonth) ??
     trendData.items[trendData.items.length - 1];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Workspace Toolbar: Month Navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             {formatMonthLabel(selectedMonth)}の収支サマリー
           </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
             個人・事業をまとめた月間キャッシュフローと口座・カードの状況です
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex flex-1 items-center justify-between rounded-xl border border-slate-200 bg-white sm:flex-initial">
             <button
               type="button"
               onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-              className="rounded-l-lg p-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
               aria-label="前の月"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -208,7 +209,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-              className="rounded-r-lg p-2 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
               aria-label="次の月"
             >
               <ChevronRight className="h-4 w-4" />
@@ -218,7 +219,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => onChangeMonth(currentRealMonth)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap"
+              className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
             >
               今月に戻す
             </button>
@@ -231,12 +232,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         aria-label="主要財務指標"
         className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4"
       >
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="text-xs font-medium text-slate-500">今月の収入</div>
-          <div className="mt-2 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
             {formatJPY(metrics.income)}
           </div>
-          <div className="mt-2 text-xs text-slate-500 tabular-nums">
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
             前月比{' '}
             <span
               className={
@@ -251,12 +252,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="text-xs font-medium text-slate-500">今月の支出（手数料含む）</div>
-          <div className="mt-2 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
             {formatJPY(metrics.expense)}
           </div>
-          <div className="mt-2 text-xs text-slate-500 tabular-nums">
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
             前月比{' '}
             <span
               className={
@@ -271,33 +272,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        <div className="p-6 sm:border-t sm:border-slate-200 lg:border-t-0">
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">月間収支（貯蓄額）</div>
           <div
-            className={`mt-2 font-mono text-2xl font-bold tracking-tight tabular-nums ${
+            className={`mt-1.5 font-mono text-2xl font-bold tracking-tight tabular-nums ${
               metrics.net >= 0 ? 'text-emerald-700' : 'text-red-600'
             }`}
           >
             {metrics.net >= 0 ? `+${formatJPY(metrics.net)}` : formatJPY(metrics.net)}
           </div>
-          <div className="mt-2 text-xs text-slate-500 tabular-nums">
+          <div className="mt-1.5 text-xs text-slate-500 tabular-nums">
             {metrics.income > 0 ? `貯蓄率 ${metrics.savingsRate}%` : '収入データなし'}
           </div>
         </div>
 
-        <div className="p-6 sm:border-t sm:border-slate-200 lg:border-t-0">
+        <div className="p-4 sm:border-t sm:border-slate-200 sm:p-6 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">総資産残高</div>
-          <div className="mt-2 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+          <div className="mt-1.5 font-mono text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
             {formatJPY(totalAssets)}
           </div>
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-3">
             <button
               type="button"
               onClick={() => onNavigate('accounts')}
-              className="inline-flex items-center gap-1 font-medium text-teal-700 hover:underline"
+              className="inline-flex min-h-[44px] w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98]"
             >
               <span>{state.accounts.length}つの口座内訳を見る</span>
-              <ArrowRight className="h-3 w-3" />
+              <ChevronRight className="h-4 w-4 shrink-0" />
             </button>
           </div>
         </div>
@@ -305,10 +306,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Credit Card Quick Status Strip */}
       {cardSummaries.length > 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-slate-500" />
+              <CreditCard className="h-4 w-4 shrink-0 text-slate-500" />
               <h3 className="text-sm font-semibold text-slate-900">
                 クレジットカード請求予定・利用枠
               </h3>
@@ -316,20 +317,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('accounts')}
-              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
             >
-              カード詳細・先払い管理 →
+              <span>カード詳細・先払い管理</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
             </button>
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
             {cardSummaries.map((s) => (
-              <div
+              <button
                 key={s.card.id}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3"
+                type="button"
+                onClick={() => onNavigate('accounts')}
+                className="flex min-h-[64px] w-full flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3.5 text-left transition-all hover:border-slate-300 hover:bg-slate-100/70 active:scale-[0.99] sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-slate-900 break-words">
-                    {s.card.name}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-slate-900 break-words">
+                      {s.card.name}
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 sm:hidden" />
                   </div>
                   <div className="mt-0.5 text-xs text-slate-500">
                     {formatDayLabel(s.card.closingDay)}締め ·{' '}
@@ -337,7 +344,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     {formatDayLabel(s.card.paymentDay)}払い
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs tabular-nums">
+                <div className="grid grid-cols-3 gap-3 font-mono text-xs tabular-nums sm:flex sm:items-center sm:gap-5">
                   <div>
                     <div className="text-slate-500">今月引落</div>
                     <div className="text-sm font-bold text-slate-900">
@@ -359,7 +366,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </section>
@@ -367,12 +374,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Main Analytics Row: 6-Month Cashflow Chart + Category Breakdown */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-7">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 lg:col-span-7">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">6ヶ月間の収支推移</h3>
               <p className="mt-0.5 text-xs text-slate-500">
-                棒グラフをクリックすると該当月へ切り替わります
+                棒グラフまたは下の月ボタンをタップして切り替えられます
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-600">
@@ -388,7 +395,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {activeTrendPoint && (
-            <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
               <span className="font-semibold text-slate-900">
                 {activeTrendPoint.fullLabel}
               </span>
@@ -419,10 +426,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           )}
 
-          <div className="mt-5">
+          <div className="mt-4">
             <svg
               viewBox="0 0 620 228"
-              className="h-56 w-full"
+              className="h-52 w-full sm:h-56"
               role="img"
               aria-label="6ヶ月間の収入と支出の棒グラフ"
             >
@@ -518,10 +525,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
             </svg>
           </div>
+
+          {/* Touch-friendly month selector buttons */}
+          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+            {trendData.items.map((item) => {
+              const isSelected = item.monthKey === selectedMonth;
+              return (
+                <button
+                  key={item.monthKey}
+                  type="button"
+                  onClick={() => onChangeMonth(item.monthKey)}
+                  className={`flex min-h-[44px] flex-col items-center justify-center rounded-lg border px-1.5 py-1 text-center transition-all active:scale-95 ${
+                    isSelected
+                      ? 'border-teal-700 bg-teal-50 text-teal-900'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-[11px] font-semibold whitespace-nowrap">
+                    {item.shortLabel}
+                  </span>
+                  <span
+                    className={`font-mono text-[10px] tabular-nums ${
+                      item.net >= 0 ? 'text-emerald-700' : 'text-red-600'
+                    }`}
+                  >
+                    {item.net >= 0 ? '+' : ''}
+                    {Math.round(item.net / 1000)}k
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </section>
 
         {/* Expense Category Breakdown */}
-        <section className="rounded-xl border border-slate-200 bg-white p-6 lg:col-span-5">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 lg:col-span-5">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-semibold text-slate-900">カテゴリ別支出</h3>
@@ -532,9 +570,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={() => onNavigate('analytics')}
-              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
             >
-              円グラフで詳しく →
+              <span>円グラフで詳しく</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
             </button>
           </div>
 
@@ -544,9 +583,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenAddTransaction}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="mt-3 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98]"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
                 <span>支出を記録する</span>
               </button>
             </div>
@@ -582,16 +621,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Bottom Row: Recent Transactions & Budget Watchlist */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <section className="rounded-xl border border-slate-200 bg-white lg:col-span-7">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 sm:px-6 sm:py-4">
             <h3 className="text-base font-semibold text-slate-900">
               {formatMonthLabel(selectedMonth)}の主な取引
             </h3>
             <button
               type="button"
               onClick={() => onNavigate('transactions')}
-              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
             >
-              すべて見る →
+              <span>すべて見る</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
             </button>
           </div>
 
@@ -603,9 +643,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenAddTransaction}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-4 py-2 text-xs font-medium text-white hover:bg-teal-800"
+                className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98]"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-4 w-4" />
                 <span>最初の収支を記録</span>
               </button>
             </div>
@@ -622,7 +662,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     key={tx.id}
                     type="button"
                     onClick={() => onEditTransaction(tx)}
-                    className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left transition-colors hover:bg-slate-50"
+                    className="flex min-h-[60px] w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100/70 sm:px-6"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium leading-snug text-slate-900 break-words">
@@ -644,28 +684,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         )}
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div
-                        className={`font-mono text-sm font-semibold tabular-nums ${
-                          tx.type === 'income'
-                            ? 'text-emerald-700'
-                            : tx.type === 'expense'
-                            ? 'text-slate-900'
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        {formatSignedJPY(tx.amount, tx.type)}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="text-right">
+                        <div
+                          className={`font-mono text-sm font-semibold tabular-nums ${
+                            tx.type === 'income'
+                              ? 'text-emerald-700'
+                              : tx.type === 'expense'
+                              ? 'text-slate-900'
+                              : 'text-slate-500'
+                          }`}
+                        >
+                          {formatSignedJPY(tx.amount, tx.type)}
+                        </div>
+                        {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                          <div className="font-mono text-[11px] text-slate-400 tabular-nums">
+                            手数料 {formatJPY(tx.transferFee ?? 0)}
+                          </div>
+                        )}
+                        {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
+                          <div className="font-mono text-[11px] text-teal-700 tabular-nums">
+                            P充当 {formatJPY(tx.pointUsed ?? 0)}
+                          </div>
+                        )}
                       </div>
-                      {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
-                        <div className="font-mono text-[11px] text-slate-400 tabular-nums">
-                          手数料 {formatJPY(tx.transferFee ?? 0)}
-                        </div>
-                      )}
-                      {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
-                        <div className="font-mono text-[11px] text-teal-700 tabular-nums">
-                          P充当 {formatJPY(tx.pointUsed ?? 0)}
-                        </div>
-                      )}
+                      <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
                     </div>
                   </button>
                 );
@@ -676,14 +719,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Budget Watchlist */}
         <section className="rounded-xl border border-slate-200 bg-white lg:col-span-5">
-          <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 sm:px-6 sm:py-4">
             <h3 className="text-base font-semibold text-slate-900">予算の進捗</h3>
             <button
               type="button"
               onClick={() => onNavigate('budgets')}
-              className="text-xs font-medium text-teal-700 hover:underline whitespace-nowrap"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
             >
-              予算を設定 →
+              <span>予算を設定</span>
+              <ChevronRight className="h-4 w-4 shrink-0" />
             </button>
           </div>
 
@@ -693,9 +737,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigate('budgets')}
-                className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98]"
               >
-                予算を追加する
+                <Plus className="h-4 w-4" />
+                <span>予算を追加する</span>
               </button>
             </div>
           ) : (
@@ -718,30 +763,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     : 'text-emerald-700';
 
                 return (
-                  <div key={item.category.id} className="px-6 py-3.5">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium text-slate-900">
-                          {item.category.name}
-                        </span>
-                        <span aria-hidden="true" className="text-slate-300">
-                          ·
-                        </span>
-                        <span className={`font-medium ${textStatusColor}`}>
-                          {statusLabel}
+                  <button
+                    key={item.category.id}
+                    type="button"
+                    onClick={() => onNavigate('budgets')}
+                    className="flex min-h-[56px] w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100/70 sm:px-6"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium text-slate-900">
+                            {item.category.name}
+                          </span>
+                          <span aria-hidden="true" className="text-slate-300">
+                            ·
+                          </span>
+                          <span className={`font-medium ${textStatusColor}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <span className="font-mono text-slate-600 tabular-nums">
+                          {formatJPY(item.spent)} / {formatJPY(item.limit)} ({pct}%)
                         </span>
                       </div>
-                      <span className="font-mono text-slate-600 tabular-nums">
-                        {formatJPY(item.spent)} / {formatJPY(item.limit)} ({pct}%)
-                      </span>
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={`h-full rounded-full ${barColor}`}
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className={`h-full rounded-full ${barColor}`}
-                        style={{ width: `${Math.min(100, pct)}%` }}
-                      />
-                    </div>
-                  </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" aria-hidden="true" />
+                  </button>
                 );
               })}
             </div>
@@ -751,3 +804,4 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     </div>
   );
 };
+

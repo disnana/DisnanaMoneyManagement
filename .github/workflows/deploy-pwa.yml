@@ -69,15 +69,38 @@ jobs:
             bun install
           fi
 
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
       - name: Resolve GitHub Pages base path
         id: base_path
         run: |
-          REPO_NAME="${{ github.event.repository.name }}"
-          if [[ "$REPO_NAME" == *.github.io ]]; then
-            echo "value=/" >> "$GITHUB_OUTPUT"
+          PAGES_BASE="${{ steps.pages.outputs.base_path }}"
+          CUSTOM_OVERRIDE="${{ vars.VITE_BASE_PATH }}"
+
+          if [ -n "$CUSTOM_OVERRIDE" ]; then
+            RESOLVED_BASE="$CUSTOM_OVERRIDE"
+          elif [ -f "CNAME" ] || [ -f "public/CNAME" ]; then
+            RESOLVED_BASE="/"
+          elif [ -z "$PAGES_BASE" ] || [ "$PAGES_BASE" = "/" ]; then
+            RESOLVED_BASE="/"
           else
-            echo "value=/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
+            RESOLVED_BASE="${PAGES_BASE%/}/"
           fi
+
+          # Ensure leading and trailing slash
+          case "$RESOLVED_BASE" in
+            /*) ;;
+            *) RESOLVED_BASE="/$RESOLVED_BASE" ;;
+          esac
+          case "$RESOLVED_BASE" in
+            */) ;;
+            *) RESOLVED_BASE="$RESOLVED_BASE/" ;;
+          esac
+
+          echo "Resolved VITE_BASE_PATH=$RESOLVED_BASE (pages.base_path='$PAGES_BASE')"
+          echo "value=$RESOLVED_BASE" >> "$GITHUB_OUTPUT"
 
       - name: Typecheck (incremental cache)
         run: |
@@ -91,9 +114,6 @@ jobs:
 
       - name: Create SPA 404 fallback
         run: cp dist/index.html dist/404.html
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

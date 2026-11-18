@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Download, Plus, AlertCircle } from 'lucide-react';
+import { Download, Plus, AlertCircle, ChevronRight } from 'lucide-react';
 import { Account, Transaction } from '../types/finance';
 import {
   INCOME_TAX_CATEGORY_LABELS,
@@ -177,56 +177,60 @@ export const TaxView: React.FC<TaxViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900">
+          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
             経費・所得・確定申告サポート
           </h2>
-          <p className="mt-0.5 text-sm text-slate-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
             Amazonギフト券等の現物収入・雑所得の集計と、家事按分を反映した事業経費を確認できます
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <select
-            aria-label="対象年を選択"
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs font-semibold text-slate-800"
-          >
-            {availableYears.map((y) => (
-              <option key={y} value={y}>
-                {y}年分
-              </option>
-            ))}
-          </select>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+            <select
+              aria-label="対象年を選択"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 font-mono text-xs font-semibold text-slate-800"
+            >
+              {availableYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}年分
+                </option>
+              ))}
+            </select>
 
-          <button
-            type="button"
-            onClick={onOpenAddIncome}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>報酬・ギフト収入を記録</span>
-          </button>
+            <button
+              type="button"
+              onClick={handleExportTaxCsv}
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+            >
+              <Download className="h-4 w-4 shrink-0" />
+              <span>確定申告用CSV</span>
+            </button>
+          </div>
 
-          <button
-            type="button"
-            onClick={onOpenAddBusinessExpense}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3.5 py-2 text-xs font-medium text-white hover:bg-teal-800 whitespace-nowrap"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>事業経費を登録</span>
-          </button>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+            <button
+              type="button"
+              onClick={onOpenAddIncome}
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>報酬・ギフト記録</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={handleExportTaxCsv}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 whitespace-nowrap"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span>確定申告用CSV</span>
-          </button>
+            <button
+              type="button"
+              onClick={onOpenAddBusinessExpense}
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-3.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>事業経費を登録</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -290,13 +294,38 @@ export const TaxView: React.FC<TaxViewProps> = ({
 
       {/* Income Tax & Receipt Breakdown */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
           <h3 className="text-base font-semibold text-slate-900">所得区分別 収入集計</h3>
           <p className="mt-0.5 text-xs text-slate-500">
             給与所得・事業所得・雑所得などの税務区分ごとの合計
           </p>
 
-          <div className="mt-4 overflow-x-auto">
+          {/* Mobile Stacked List */}
+          <div className="mt-4 divide-y divide-slate-100 md:hidden">
+            {taxSummary.incomeByTaxCategory.length === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400">収入データがありません</p>
+            ) : (
+              taxSummary.incomeByTaxCategory.map(([key, data]) => (
+                <div key={key} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900">
+                      {INCOME_TAX_CATEGORY_LABELS[
+                        key as keyof typeof INCOME_TAX_CATEGORY_LABELS
+                      ] ?? key}
+                    </div>
+                    <div className="mt-0.5 font-mono text-xs text-slate-500 tabular-nums">
+                      {data.count}件 · 源泉徴収 {formatJPY(data.withholding)}
+                    </div>
+                  </div>
+                  <div className="shrink-0 font-mono text-sm font-semibold text-emerald-700 tabular-nums">
+                    {formatJPY(data.amount)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs text-slate-500">
@@ -338,7 +367,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-6">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
           <h3 className="text-base font-semibold text-slate-900">
             受取形態別 集計（ギフト券・現物含む）
           </h3>
@@ -346,7 +375,32 @@ export const TaxView: React.FC<TaxViewProps> = ({
             現金・振込以外のAmazonギフト券やポイント付与も税務上漏れなく把握できます
           </p>
 
-          <div className="mt-4 overflow-x-auto">
+          {/* Mobile Stacked List */}
+          <div className="mt-4 divide-y divide-slate-100 md:hidden">
+            {taxSummary.incomeByReceiptMethod.length === 0 ? (
+              <p className="py-8 text-center text-xs text-slate-400">データがありません</p>
+            ) : (
+              taxSummary.incomeByReceiptMethod.map(([method, data]) => (
+                <div key={method} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900">
+                      {RECEIPT_METHOD_LABELS[
+                        method as keyof typeof RECEIPT_METHOD_LABELS
+                      ] ?? method}
+                    </div>
+                    <div className="mt-0.5 font-mono text-xs text-slate-500 tabular-nums">
+                      {data.count}件
+                    </div>
+                  </div>
+                  <div className="shrink-0 font-mono text-sm font-semibold text-slate-900 tabular-nums">
+                    {formatJPY(data.amount)}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto md:block">
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-xs text-slate-500">
@@ -385,8 +439,8 @@ export const TaxView: React.FC<TaxViewProps> = ({
         </section>
       </div>
 
-      {/* Accounting Subjects Table */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
+      {/* Accounting Subjects Table / Mobile List */}
+      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
           <div>
             <h3 className="text-base font-semibold text-slate-900">
@@ -401,7 +455,33 @@ export const TaxView: React.FC<TaxViewProps> = ({
           </span>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        {/* Mobile Stacked List */}
+        <div className="mt-3 divide-y divide-slate-100 md:hidden">
+          {taxSummary.expenseBySubject.length === 0 ? (
+            <p className="py-10 text-center text-xs text-slate-400">
+              {selectedYear}年の事業経費はまだ登録されていません
+            </p>
+          ) : (
+            taxSummary.expenseBySubject.map(([subj, data]) => (
+              <div key={subj} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-slate-900">{subj}</div>
+                  <div className="mt-0.5 font-mono text-xs text-slate-500 tabular-nums">
+                    {data.count}件 · 総支払額 {formatJPY(data.gross)}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-sm font-bold text-slate-900 tabular-nums">
+                    {formatJPY(data.deductible)}
+                  </div>
+                  <div className="text-[11px] text-slate-400">算入額</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="mt-4 hidden overflow-x-auto md:block">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-xs text-slate-500">
@@ -442,7 +522,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
       {/* Detailed Ledger Lists for Tax Audit */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="border-b border-slate-200 px-4 py-3.5 sm:px-6 sm:py-4">
             <h3 className="text-base font-semibold text-slate-900">
               事業・雑所得・ギフト収入明細
             </h3>
@@ -456,7 +536,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
                   key={tx.id}
                   type="button"
                   onClick={() => onEditTransaction(tx)}
-                  className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left hover:bg-slate-50"
+                  className="flex min-h-[60px] w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100/70 sm:px-6"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium leading-snug text-slate-900 break-words">
@@ -483,15 +563,18 @@ export const TaxView: React.FC<TaxViewProps> = ({
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 text-right font-mono tabular-nums">
-                    <div className="text-sm font-semibold text-emerald-700">
-                      +{formatJPY(tx.amount)}
-                    </div>
-                    {(tx.withholdingTax ?? 0) > 0 && (
-                      <div className="text-[11px] text-slate-500">
-                        源泉 {formatJPY(tx.withholdingTax ?? 0)}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="text-right font-mono tabular-nums">
+                      <div className="text-sm font-semibold text-emerald-700">
+                        +{formatJPY(tx.amount)}
                       </div>
-                    )}
+                      {(tx.withholdingTax ?? 0) > 0 && (
+                        <div className="text-[11px] text-slate-500">
+                          源泉 {formatJPY(tx.withholdingTax ?? 0)}
+                        </div>
+                      )}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
                   </div>
                 </button>
               ))}
@@ -500,7 +583,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white">
-          <div className="border-b border-slate-200 px-6 py-4">
+          <div className="border-b border-slate-200 px-4 py-3.5 sm:px-6 sm:py-4">
             <h3 className="text-base font-semibold text-slate-900">
               登録済み事業経費明細
             </h3>
@@ -517,7 +600,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
                     key={tx.id}
                     type="button"
                     onClick={() => onEditTransaction(tx)}
-                    className="flex w-full items-start justify-between gap-4 px-6 py-3.5 text-left hover:bg-slate-50"
+                    className="flex min-h-[60px] w-full items-center justify-between gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100/70 sm:px-6"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium leading-snug text-slate-900 break-words">
@@ -539,15 +622,18 @@ export const TaxView: React.FC<TaxViewProps> = ({
                         )}
                       </div>
                     </div>
-                    <div className="shrink-0 text-right font-mono tabular-nums">
-                      <div className="text-sm font-semibold text-slate-900">
-                        {formatJPY(deductible)}
-                      </div>
-                      {tx.type === 'expense' && deductible !== tx.amount && (
-                        <div className="text-[11px] text-slate-400">
-                          総額 {formatJPY(tx.amount)}
+                    <div className="flex shrink-0 items-center gap-2">
+                      <div className="text-right font-mono tabular-nums">
+                        <div className="text-sm font-semibold text-slate-900">
+                          {formatJPY(deductible)}
                         </div>
-                      )}
+                        {tx.type === 'expense' && deductible !== tx.amount && (
+                          <div className="text-[11px] text-slate-400">
+                            総額 {formatJPY(tx.amount)}
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
                     </div>
                   </button>
                 );
