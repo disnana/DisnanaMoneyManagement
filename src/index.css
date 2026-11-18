@@ -189,6 +189,27 @@ html[data-kb="open"] .mobile-nav {
   display: none;
 }
 
+/* Soft keyboard up: pin the whole app to the *visible* area so iOS never pans the page up
+   (no header scrolled away, no background peeking out below). */
+html[data-kb="open"] #root {
+  bottom: auto;
+  top: var(--vvt, 0px);
+  height: var(--vvh, 100%);
+}
+
+/* ...and, like native iOS sheets, expand to the large detent while typing: nothing behind shows. */
+@media (max-width: 639px) {
+  html[data-kb="open"] .sheet-wrap {
+    height: 100%;
+  }
+  html[data-kb="open"] .sheet-card {
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    border-width: 0;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   .glass-bar {
     background-color: rgb(28 28 30 / 0.82);
