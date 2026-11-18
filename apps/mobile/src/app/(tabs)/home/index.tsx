@@ -5,7 +5,6 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeroCard } from '@/ui/HeroCard';
 import { CreditPaymentCard } from '@/ui/CreditPaymentCard';
-import { LedgerPicker } from '@/ui/LedgerPicker';
 import { Group, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
@@ -27,13 +26,12 @@ function HomeMonth({ month }: { month: string }) {
 
   return (
     <>
-      <LedgerPicker />
-      <HeroCard month={month} />
+      <HeroCard month={month} withLedger />
 
       {statements.length > 0 ? (
         <>
           <SectionTitle>カードの支払い</SectionTitle>
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 8 }}>
             {statements.map((statement) => (
               <CreditPaymentCard key={statement.card.id} statement={statement}
                 onPress={() => router.navigate({ pathname: '/accounts/[id]', params: { id: statement.card.id } }, { withAnchor: true })} />
