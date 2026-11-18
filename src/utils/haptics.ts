@@ -4,6 +4,9 @@
  *  - iOS Safari 18+ (incl. home-screen PWAs): toggling a native <input type=checkbox switch>
  *    fires the system's selection haptic. We click a hidden one inside a user gesture.
  */
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 let iosSwitch: HTMLLabelElement | null = null;
 
 function iosTick(): boolean {
@@ -36,6 +39,11 @@ const isIOS =
 
 export function haptic(ms: number = 8): void {
   try {
+    if (Capacitor.isNativePlatform()) {
+      // Real Taptic Engine through the native plugin
+      void Haptics.impact({ style: ms >= 12 ? ImpactStyle.Medium : ImpactStyle.Light });
+      return;
+    }
     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
       navigator.vibrate(ms);
       return;

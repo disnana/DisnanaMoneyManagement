@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  AnimatePresence,
-  Variants,
-  animate,
-  motion,
-  useMotionValue,
-  useTransform,
-} from 'motion/react';
 import { X } from 'lucide-react';
 import { pushLayer } from '../utils/navHistory';
 
@@ -24,58 +16,6 @@ interface ResponsiveSheetProps {
   children: React.ReactNode;
 }
 
-interface SheetCustom {
-  skip: boolean;
-  mobile: boolean;
-}
-
-const scrimVariants: Variants = {
-  initial: { opacity: 0 },
-  animate: {
-    opacity: 1,
-    transition: { duration: 0.14, ease: 'easeOut' },
-  },
-  exit: ({ skip }: SheetCustom) => ({
-    opacity: 0,
-    transition: { duration: skip ? 0 : 0.18, ease: 'easeOut' },
-  }),
-};
-
-const isMobileViewport = () =>
-  typeof window !== 'undefined' && window.innerWidth < 640;
-
-// Mobile: true bottom sheet that rises from the screen edge (spring) and sinks away.
-// Desktop (>= sm): centered dialog with a soft fade/scale.
-const sheetTransitionVariants: Variants = {
-  initial: ({ mobile }: SheetCustom) =>
-    mobile ? { y: '100%' } : { y: 12, opacity: 0, scale: 0.98 },
-  animate: ({ mobile }: SheetCustom) =>
-    mobile
-      ? {
-          y: 0,
-          transition: { duration: 0.32, ease: [0.32, 0.72, 0, 1] },
-        }
-      : {
-          y: 0,
-          opacity: 1,
-          scale: 1,
-          transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
-        },
-  exit: ({ skip, mobile }: SheetCustom) =>
-    mobile
-      ? {
-          y: skip ? 0 : '100%',
-          opacity: skip ? 0 : 1,
-          transition: { duration: skip ? 0 : 0.2, ease: [0.32, 0.72, 0, 1] },
-        }
-      : {
-          y: skip ? 0 : 8,
-          opacity: 0,
-          scale: 1,
-          transition: { duration: skip ? 0 : 0.11, ease: [0.32, 0.72, 0, 1] },
-        },
-};
-
 export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   open,
   onClose,
@@ -87,20 +27,48 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
   footer,
   children,
 }) => {
-  const sheetY = useMotionValue(0);
-  const backdropDragOpacity = useTransform(sheetY, [0, 320], [1, 0]);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const scrimInnerRef = useRef<HTMLDivElement>(null);
   const isDismissingRef = useRef(false);
-  const [dragDismissed, setDragDismissed] = useState(false);
+  const dragDismissedRef = useRef(false);
+  const [mounted, setMounted] = useState(open);
+  const [closing, setClosing] = useState(false);
 
+  /** Direct style writes (no React state / animation library per frame while dragging) */
+  const setY = useCallback((v: number, transition?: string) => {
+    const card = cardRef.current;
+    if (card) {
+      card.style.transition = transition ?? 'none';
+      card.style.transform = v === 0 ? '' : `translate3d(0,${v}px,0)`;
+    }
+    const scrim = scrimInnerRef.current;
+    if (scrim) {
+      scrim.style.transition = transition ? 'opacity 0.2s ease-out' : 'none';
+      scrim.style.opacity = String(Math.max(0, 1 - v / 320));
+    }
+  }, []);
+
+  // Mount on open; on close play the exit animation (CSS) and unmount when it ends
   useEffect(() => {
     if (open) {
       isDismissingRef.current = false;
-      setDragDismissed(false);
-      sheetY.set(0);
+      dragDismissedRef.current = false;
+      setClosing(false);
+      setMounted(true);
+    } else if (mounted) {
+      if (instantClose || dragDismissedRef.current) {
+        setMounted(false);
+      } else {
+        setClosing(true);
+        const t = window.setTimeout(() => {
+          setMounted(false);
+          setClosing(false);
+        }, 320);
+        return () => window.clearTimeout(t);
+      }
     }
-  }, [open, sheetY]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -119,29 +87,40 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     };
   }, [open]);
 
+  // While any sheet is mounted (incl. its exit animation), drop expensive blur layers behind it
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mounted) return;
+    document.documentElement.setAttribute('data-sheet', 'open');
+    return () => {
+      // our own root is already detached or about to be; look for any other sheet still mounted
+      window.setTimeout(() => {
+        if (!document.querySelector('[data-sheet-root]')) {
+          document.documentElement.removeAttribute('data-sheet');
+        }
+      }, 0);
+    };
+  }, [mounted]);
+
   const finishPull = useCallback(
     (dy: number, velocityY: number) => {
       if (isDismissingRef.current) return;
       if (dy > 90 || (dy > 32 && velocityY > 0.42)) {
         isDismissingRef.current = true;
         const target = typeof window !== 'undefined' ? window.innerHeight : 700;
-        animate(sheetY, target, {
-          duration: 0.14,
-          ease: [0.32, 0.72, 0, 1],
-          onComplete: () => {
-            setDragDismissed(true);
-            onClose();
-          },
-        });
+        setY(target, 'transform 0.16s cubic-bezier(0.32,0.72,0,1)');
+        window.setTimeout(() => {
+          dragDismissedRef.current = true;
+          onCloseRef.current();
+        }, 160);
       } else {
-        animate(sheetY, 0, {
-          type: 'spring',
-          stiffness: 460,
-          damping: 38,
-        });
+        setY(0, 'transform 0.28s cubic-bezier(0.2,0.9,0.25,1)');
+        window.setTimeout(() => {
+          if (cardRef.current) cardRef.current.style.transition = '';
+        }, 300);
       }
     },
-    [onClose, sheetY]
+    [setY]
   );
 
   // Pull-down gesture on handle & header (mobile & touch)
@@ -158,7 +137,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
     const handleMove = (ev: PointerEvent) => {
       const dy = Math.max(0, ev.clientY - startY);
       currentDy = dy;
-      sheetY.set(dy);
+      setY(dy);
     };
 
     const handleUp = () => {
@@ -176,7 +155,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
 
   // Pull-down gesture from inside scrollable body when scrolled to top (scrollTop <= 0)
   useEffect(() => {
-    if (!open || fullScreenMobile) return;
+    if (!mounted || fullScreenMobile) return;
     const el = bodyRef.current;
     if (!el) return;
 
@@ -221,7 +200,7 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
       if (pulling) {
         if (e.cancelable) e.preventDefault();
         currentDy = Math.max(0, dy);
-        sheetY.set(currentDy);
+        setY(currentDy);
       }
     };
 
@@ -245,60 +224,40 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
       el.removeEventListener('touchend', onTouchEnd);
       el.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [open, fullScreenMobile, finishPull, sheetY]);
+  }, [mounted, fullScreenMobile, finishPull, setY]);
 
-  const skipExit = instantClose || dragDismissed;
   const fs = fullScreenMobile;
-  const custom: SheetCustom = { skip: skipExit, mobile: isMobileViewport() };
 
-  const sheetTree = (
-    <AnimatePresence custom={custom}>
-      {open && (
+  const sheetTree = mounted ? (
         <div
-          key="responsive-sheet-root"
-          className="fixed inset-x-0 top-[var(--vvt,0px)] z-50 flex h-[var(--vvh,100%)] items-end justify-center sm:items-center sm:p-4"
+          ref={rootRef}
+          data-sheet-root=""
+          data-closing={closing ? '' : undefined}
+          className={`sheet-root fixed inset-x-0 top-[var(--vvt,0px)] z-50 flex h-[var(--vvh,100%)] items-end justify-center sm:items-center sm:p-4 ${
+            closing ? 'sheet-closing' : ''
+          }`}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
         >
-          {/* Scrim layer: fades out faster than the sheet and clears to 0 during drag */}
-          <motion.div
-            aria-hidden="true"
-            variants={scrimVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            custom={custom}
-            onClick={onClose}
-            className="absolute inset-0"
-          >
-            <motion.div
-              style={{ opacity: backdropDragOpacity }}
-              className="h-full w-full bg-black/35"
-            />
-          </motion.div>
+          {/* Scrim */}
+          <div aria-hidden="true" onClick={onClose} className="sheet-scrim absolute inset-0">
+            <div ref={scrimInnerRef} className="h-full w-full bg-black/35" />
+          </div>
 
-          {/* Enter/Exit transition wrapper (opaque sheet card never alpha-blends with scrim) */}
-          <motion.div
-            variants={sheetTransitionVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            custom={custom}
-            className={`sheet-wrap relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}
-          >
-            {/* Interactive pull-down layer */}
-            <motion.div
-              style={{ y: sheetY }}
-              className={`sheet-card flex w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90%] sm:rounded-2xl sm:border sm:border-slate-200 ${
+          {/* Enter/exit wrapper (pure CSS keyframes, GPU composited) */}
+          <div className={`sheet-wrap relative z-10 w-full ${fs ? 'h-full sm:h-auto' : ''} ${maxWidthClass}`}>
+            {/* Interactive pull layer */}
+            <div
+              ref={cardRef}
+              className={`sheet-card flex w-full flex-col overflow-hidden bg-white sm:max-h-[90dvh] sm:rounded-2xl sm:border sm:border-slate-200 sm:shadow-2xl ${
                 fs
                   ? 'h-full sm:h-auto'
-                  : 'max-h-[min(90%,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] rounded-t-3xl border border-slate-200'
+                  : 'max-h-[min(90dvh,calc(var(--vvh,100dvh)-env(safe-area-inset-top,0px)-12px))] rounded-t-3xl border border-slate-200 shadow-2xl'
               }`}
             >
               {/* Pull-to-dismiss handle + sticky header zone */}
               <div
-                ref={headerRef}
                 onPointerDown={handleHeaderPointerDown}
                 className="shrink-0 touch-none select-none sm:touch-auto"
               >
@@ -364,12 +323,10 @@ export const ResponsiveSheet: React.FC<ResponsiveSheetProps> = ({
                   {footer}
                 </div>
               )}
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
-      )}
-    </AnimatePresence>
-  );
+  ) : null;
 
   if (typeof document === 'undefined') return null;
   return createPortal(sheetTree, document.body);

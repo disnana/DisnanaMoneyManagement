@@ -42,7 +42,10 @@ import { computeCreditCardSummary, getCycleRangeLabel } from '../utils/creditCar
 import { ConfirmDialog } from './ConfirmDialog';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { TransactionModalPrefill } from './TransactionModal';
-import { Segmented } from './mobile/MobileKit';
+import { InsetGroup, Segmented, SectionHeader, TxRowBody } from './mobile/MobileKit';
+import { getCategoryById } from '../data/categories';
+import { formatShortDate } from '../utils/format';
+import { ChevronRight as RowChevron, Pencil as EditIcon, Plus as PlusIcon } from 'lucide-react';
 import { useIsDesktop } from '../hooks/useMediaQuery';
 
 interface AccountsViewProps {
@@ -117,6 +120,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   // Strictly real bank accounts ONLY for withdrawal / settlement candidates
   const bankOnlyAccounts = useMemo(
@@ -494,6 +498,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         </>
       )}
 
+      {isDesktop && (
+        <>
       {/* Credit & Debit Cards Section */}
       {(creditCards.length > 0 || debitCards.length > 0) && (
         <section className="space-y-4">
@@ -1120,6 +1126,204 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         )}
       </section>
 
+        </>
+      )}
+
+      {!isDesktop && (() => {
+        const TYPE_TINT: Record<AccountType, string> = {
+          bank: '#4F46E5',
+          psp: '#7C3AED',
+          foreign_bank: '#0284C7',
+          credit: '#16A34A',
+          debit: '#059669',
+          cash: '#2563EB',
+          emoney: '#DB2777',
+          investment: '#D97706',
+        };
+        const renderRow = (acc: Account) => {
+          const Icon = ACCOUNT_ICONS[acc.type];
+          const tint = TYPE_TINT[acc.type];
+          const bal = accountBalances[acc.id] ?? 0;
+          const sub =
+            acc.type === 'debit'
+              ? '即時引き落とし'
+              : acc.type === 'credit'
+              ? `${formatDayLabel(acc.closingDay)}締め`
+              : acc.institution || ACCOUNT_TYPE_LABELS[acc.type];
+          return (
+            <button
+              key={acc.id}
+              type="button"
+              onClick={() => setDetailId(acc.id)}
+              className="flex min-h-[64px] w-full items-center gap-3 px-4 py-2.5 text-left active:bg-slate-50"
+            >
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: `${tint}1A`, color: tint }}
+              >
+                <Icon className="h-[19px] w-[19px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-slate-900">{acc.name}</span>
+                <span className="block truncate text-xs text-slate-500">{sub}</span>
+              </span>
+              {acc.type !== 'debit' && (
+                <span
+                  className={`shrink-0 font-mono text-[15px] font-bold tabular-nums ${
+                    bal < 0 ? 'text-red-600' : 'text-slate-900'
+                  }`}
+                >
+                  {formatJPY(bal)}
+                </span>
+              )}
+              <RowChevron className="h-4 w-4 shrink-0 text-slate-300" />
+            </button>
+          );
+        };
+        const cardRows = [...creditCards, ...debitCards];
+        const detail = detailId ? accounts.find((a) => a.id === detailId) ?? null : null;
+        const detailTx = detail
+          ? transactions
+              .filter(
+                (t) =>
+                  (t.accountId === detail.id || t.toAccountId === detail.id) &&
+                  t.date.slice(0, 7) === cardReferenceMonth
+              )
+              .sort((a, b) => b.date.localeCompare(a.date))
+          : [];
+        const detailBal = detail ? accountBalances[detail.id] ?? 0 : 0;
+        const credit =
+          detail && detail.type === 'credit'
+            ? computeCreditCardSummary(detail, transactions, detailBal, cardReferenceMonth)
+            : null;
+        const monthIn = detailTx.reduce(
+          (sum, t) => sum + (t.type === 'income' || (t.type === 'transfer' && t.toAccountId === detail?.id) ? t.amount : 0),
+          0
+        );
+        const monthOut = detailTx.reduce(
+          (sum, t) => sum + (t.type === 'expense' || (t.type === 'transfer' && t.accountId === detail?.id) ? getEffectiveOutflow(t) : 0),
+          0
+        );
+        const DetailIcon = detail ? ACCOUNT_ICONS[detail.type] : Landmark;
+
+        return (
+          <div className="space-y-6">
+            {nonCardAccounts.length > 0 && (
+              <section>
+                <SectionHeader title="口座" />
+                <InsetGroup className="divide-y divide-slate-100">{nonCardAccounts.map(renderRow)}</InsetGroup>
+              </section>
+            )}
+            {cardRows.length > 0 && (
+              <section>
+                <SectionHeader title="カード" />
+                <InsetGroup className="divide-y divide-slate-100">{cardRows.map(renderRow)}</InsetGroup>
+              </section>
+            )}
+            {filteredAccounts.length === 0 && (
+              <p className="px-6 py-10 text-center text-sm text-slate-500">該当する口座がありません</p>
+            )}
+
+            <ResponsiveSheet
+              open={Boolean(detail)}
+              onClose={() => setDetailId(null)}
+              title={detail?.name ?? ''}
+              titleId="account-detail-title"
+              fullScreenMobile
+            >
+              {detail && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <span
+                      className="mx-auto flex h-14 w-14 items-center justify-center rounded-full"
+                      style={{
+                        backgroundColor: `${TYPE_TINT[detail.type]}1A`,
+                        color: TYPE_TINT[detail.type],
+                      }}
+                    >
+                      <DetailIcon className="h-7 w-7" />
+                    </span>
+                    <div className="mt-2 text-xs text-slate-500">
+                      {ACCOUNT_TYPE_LABELS[detail.type]} · {ACCOUNT_USAGE_LABELS[detail.usageScope ?? 'personal']}
+                      {detail.institution ? ` · ${detail.institution}` : ''}
+                    </div>
+                    {detail.type !== 'debit' && (
+                      <div
+                        className={`mt-1 font-mono text-[34px] font-bold leading-tight tabular-nums ${
+                          detailBal < 0 ? 'text-red-600' : 'text-slate-900'
+                        }`}
+                      >
+                        {formatJPY(detailBal)}
+                      </div>
+                    )}
+                    {credit && (
+                      <div className="mt-2 flex justify-center gap-5 font-mono text-xs text-slate-500 tabular-nums">
+                        <span>今月引落 {formatJPY(credit.thisMonthRemaining)}</span>
+                        <span>来月 {formatJPY(credit.nextMonthRemaining)}</span>
+                        {credit.creditLimit > 0 && <span>残り枠 {formatJPY(credit.availableCredit)}</span>}
+                      </div>
+                    )}
+                  </div>
+
+                  <section>
+                    <SectionHeader title={`${formatMonthLabel(cardReferenceMonth)}の明細`} />
+                    {detailTx.length === 0 ? (
+                      <InsetGroup className="px-6 py-8 text-center text-sm text-slate-500">
+                        記録はありません
+                      </InsetGroup>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex justify-end gap-4 px-1 font-mono text-xs tabular-nums text-slate-500">
+                          <span>入 <b className="text-emerald-700">{formatJPY(monthIn)}</b></span>
+                          <span>出 <b className="text-slate-900">{formatJPY(monthOut)}</b></span>
+                        </div>
+                        <InsetGroup className="divide-y divide-slate-100">
+                          {detailTx.map((tx) => {
+                            const cat = getCategoryById(tx.categoryId);
+                            return (
+                              <TxRowBody
+                                key={tx.id}
+                                tx={tx}
+                                category={cat}
+                                accountLabel={`${formatShortDate(tx.date)} · ${cat.name}`}
+                              />
+                            );
+                          })}
+                        </InsetGroup>
+                      </>
+                    )}
+                  </section>
+
+                  <InsetGroup className="divide-y divide-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => onOpenPrefilledTransaction({ type: 'expense', accountId: detail.id })}
+                      className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left text-[16px] text-teal-700 active:bg-slate-50"
+                    >
+                      <PlusIcon className="h-5 w-5" /> この{detail.type === 'credit' || detail.type === 'debit' ? 'カード' : '口座'}で記録
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(detail)}
+                      className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left text-[16px] text-slate-900 active:bg-slate-50"
+                    >
+                      <EditIcon className="h-5 w-5 text-slate-500" /> 編集
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingAccount(detail)}
+                      className="flex min-h-[52px] w-full items-center gap-3 px-4 text-left text-[16px] text-red-600 active:bg-slate-50"
+                    >
+                      <Trash2 className="h-5 w-5" /> 削除
+                    </button>
+                  </InsetGroup>
+                </div>
+              )}
+            </ResponsiveSheet>
+          </div>
+        );
+      })()}
+
       {/* Add / Edit Account & Card Modal */}
       {/* Add / Edit Account & Card Sheet */}
       <ResponsiveSheet
@@ -1507,6 +1711,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         onConfirm={() => {
           if (deletingAccount) {
             onDeleteAccount(deletingAccount.id);
+            setDetailId(null);
             setDeletingAccount(null);
           }
         }}

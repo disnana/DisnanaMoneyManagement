@@ -230,3 +230,69 @@ html[data-kb="open"] #root {
     opacity: 0.35;
   }
 }
+
+/* ---- Bottom sheets / dialogs: pure CSS motion (no JS animation per frame) ---- */
+.sheet-wrap {
+  animation: sheet-in-up 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+  will-change: transform;
+}
+.sheet-scrim {
+  animation: sheet-fade-in 0.2s ease-out both;
+}
+.sheet-closing .sheet-wrap {
+  animation: sheet-out-down 0.2s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.sheet-closing .sheet-scrim {
+  animation: sheet-fade-out 0.2s ease-out both;
+}
+@keyframes sheet-in-up {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@keyframes sheet-out-down {
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@media (min-width: 640px) {
+  .sheet-wrap {
+    animation-name: sheet-in-pop;
+    animation-duration: 0.16s;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .sheet-closing .sheet-wrap {
+    animation-name: sheet-out-pop;
+    animation-duration: 0.11s;
+  }
+  @keyframes sheet-in-pop {
+    from {
+      opacity: 0;
+      transform: translate3d(0, 12px, 0) scale(0.98);
+    }
+  }
+  @keyframes sheet-out-pop {
+    to {
+      opacity: 0;
+      transform: translate3d(0, 8px, 0);
+    }
+  }
+}
+
+/* While a sheet is open the frosted bars behind it are hidden by the scrim: render them flat.
+   Re-blurring a large area under an animating layer is what makes iOS Safari stutter. */
+html[data-sheet="open"] .glass-bar {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: var(--color-white);
+}
