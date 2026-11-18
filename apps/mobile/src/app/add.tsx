@@ -401,11 +401,10 @@ export default function AddScreen() {
             accessibilityRole="button"
             onPress={() => save(false)}
             style={({ pressed }) => ({
-              flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: p.tint,
-              backgroundColor: editing || paymentMonth ? p.tint : p.card,
+              flex: 1, minHeight: 52, borderRadius: 16, backgroundColor: p.tint,
               alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
             })}>
-            <Text style={{ color: editing || paymentMonth ? p.onTint : p.tint, fontSize: 16, fontWeight: '700' }}>
+            <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>
               {editing ? '変更を保存' : '登録'}
             </Text>
           </Pressable>
@@ -414,10 +413,10 @@ export default function AddScreen() {
               accessibilityRole="button"
               onPress={() => save(true)}
               style={({ pressed }) => ({
-                flex: 1, minHeight: 52, borderRadius: 16, backgroundColor: p.tint,
+                flex: 1, minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: p.tint, backgroundColor: p.card,
                 alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
               })}>
-              <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>続けて登録</Text>
+              <Text style={{ color: p.tint, fontSize: 16, fontWeight: '700' }}>続けて登録</Text>
             </Pressable>
           ) : null}
         </View>
