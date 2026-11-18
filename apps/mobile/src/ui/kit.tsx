@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
-import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Modal, Platform, Pressable, useColorScheme, ScrollView, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -170,8 +170,7 @@ export function Segmented<T extends string>({
 
 export function MonthBar({ month, onChange }: { month: string; onChange: (m: string) => void }) {
   const p = usePalette();
-  const base = new Date(`${month}-01T00:00:00`);
-  const pickDate = (d: Date) => onChange(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  const [open, setOpen] = useState(false);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
     <Pressable
       hitSlop={8}
@@ -188,20 +187,74 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
       {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
       <View style={{ minWidth: 150, alignItems: 'center', justifyContent: 'center', height: 44 }}>
         <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
-        {/* Tap the month -> system calendar. iOS: an invisible compact picker laid over the label; Android: Material dialog. */}
-        {Platform.OS === 'ios' ? (
-          <View style={{ position: 'absolute', inset: 0, opacity: 0.015, alignItems: 'center', justifyContent: 'center' }}>
-            <DateTimePicker value={base} mode="date" display="compact" locale="ja-JP" onChange={(_, d) => d && pickDate(d)} />
-          </View>
-        ) : Platform.OS === 'android' ? (
-          <Pressable
-            accessibilityLabel="月をカレンダーで選ぶ"
-            style={{ position: 'absolute', inset: 0 }}
-            onPress={() => DateTimePickerAndroid.open({ value: base, mode: 'date', onChange: (_, d) => d && pickDate(d) })}
-          />
-        ) : null}
+        <Pressable
+          accessibilityLabel="年月を選ぶ"
+          style={{ position: 'absolute', inset: 0 }}
+          onPress={() => {
+            tick();
+            setOpen(true);
+          }}
+        />
       </View>
       {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
+      <MonthPickerSheet visible={open} month={month} onClose={() => setOpen(false)} onPick={onChange} />
     </View>
+  );
+}
+
+/** Year + month only: a year stepper over a 3x4 month grid (no day selection). */
+function MonthPickerSheet({ visible, month, onClose, onPick }: { visible: boolean; month: string; onClose: () => void; onPick: (m: string) => void }) {
+  const p = usePalette();
+  const [selYear, selMonth] = month.split('-').map(Number);
+  const [year, setYear] = useState(selYear);
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onShow={() => setYear(selYear)}
+      onRequestClose={onClose}
+      supportedOrientations={['portrait', 'landscape']}>
+      <Pressable onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 24 }}>
+        <Pressable
+          onPress={() => {}}
+          style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius + 6, padding: 16, gap: 12, maxWidth: 420, width: '100%', alignSelf: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y - 1); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <SymbolView name={{ ios: 'chevron.left', android: 'chevron_left' }} size={18} tintColor={p.tint} />
+            </Pressable>
+            <Text style={{ color: p.text, fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{year}年</Text>
+            <Pressable hitSlop={10} onPress={() => { tick(); setYear((y) => y + 1); }} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+              <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={18} tintColor={p.tint} />
+            </Pressable>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+              const active = year === selYear && m === selMonth;
+              return (
+                <Pressable
+                  key={m}
+                  onPress={() => {
+                    tick();
+                    onPick(`${year}-${String(m).padStart(2, '0')}`);
+                    onClose();
+                  }}
+                  style={{
+                    width: '23%',
+                    flexGrow: 1,
+                    minHeight: 48,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: metrics.controlRadius + 2,
+                    backgroundColor: active ? p.tint : p.fill,
+                  }}>
+                  <Text style={{ color: active ? p.onTint : p.text, fontSize: 16, fontWeight: active ? '700' : '500' }}>{m}月</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
