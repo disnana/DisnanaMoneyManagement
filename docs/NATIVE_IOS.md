@@ -22,4 +22,4 @@ Web アプリを Capacitor（WKWebView）の殻に入れた iOS アプリです�
 - 無料 Apple ID の署名は **7日で失効**します。期限が切れたら同じ手順で再署名（データは保持されます）。
 - 有料の Apple Developer Program（年額）なら 1 年有効＋TestFlight が使えます。
 - 更新したいとき: 新しい IPA をビルド → 同じ手順で上書きインストール（データは残ります）。
-- 手元に Mac がある場合: `bun run cap:sync` → `npx cap open ios` で Xcode から実機へ。
+- 手元に Mac がある場合: `bun run cap:sync` → `bunx cap open ios` で Xcode から実機へ。

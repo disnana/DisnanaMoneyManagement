@@ -35,7 +35,7 @@ jobs:
         run: bun run build
 
       - name: Sync Capacitor (iOS)
-        run: npx cap sync ios
+        run: bunx cap sync ios
 
       - name: Build app (no code signing)
         run: |

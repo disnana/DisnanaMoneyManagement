@@ -25,10 +25,10 @@ packages/core         型・計算・初期データ・ストア（React/DOM 非
 ## 開発
 ```bash
 cd apps/mobile
-npm install
-npx expo start          # Expo Go / 開発ビルド
-npx tsc --noEmit        # 型チェック
-npx expo export --platform android   # バンドル検証
+bun install
+bunx expo start          # Expo Go / 開発ビルド（iOS は QR を Expo Go で読み取り）
+bunx tsc --noEmit        # 型チェック
+bunx expo export --platform android   # バンドル検証
 ```
-ネイティブビルドは GitHub Actions（`.github/workflows/mobile-build.yml`）。`android/` と `ios/` は
+パッケージ管理は Bun に統一（`bun.lock`、`bunfig.toml` で hoisted）。ネイティブビルドは GitHub Actions（`.github/workflows/mobile-build.yml`）。`android/` と `ios/` は
 `expo prebuild` で生成するのでコミットしません。

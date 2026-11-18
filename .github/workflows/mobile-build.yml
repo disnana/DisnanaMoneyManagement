@@ -28,18 +28,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      # The Expo CLI itself runs on Node
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - run: npm ci
+      - run: bun install --frozen-lockfile
       - name: Generate native project
-        run: npx expo prebuild --platform android --no-install
+        run: bunx expo prebuild --platform android --no-install
       - name: Build release APK (debug-signed; for sideloading/testing)
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease --no-daemon
@@ -57,12 +57,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      # The Expo CLI itself runs on Node
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
-      - run: npm ci
+      - run: bun install --frozen-lockfile
       - name: Select the newest installed Xcode
         shell: bash
         working-directory: .
@@ -74,7 +74,7 @@ jobs:
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
       - name: Generate native project
-        run: npx expo prebuild --platform ios
+        run: bunx expo prebuild --platform ios
       - name: Build (no code signing)
         shell: bash
         run: |

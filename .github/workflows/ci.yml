@@ -81,18 +81,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      # The Expo CLI itself runs on Node
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: apps/mobile/package-lock.json
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx expo export --platform android --output-dir "$RUNNER_TEMP/export-android"
-      - run: npx expo export --platform ios --output-dir "$RUNNER_TEMP/export-ios"
+      - name: Cache Bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-mobile-${{ runner.os }}-${{ hashFiles('apps/mobile/bun.lock') }}
+          restore-keys: bun-mobile-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bunx expo export --platform android --output-dir "$RUNNER_TEMP/export-android"
+      - run: bunx expo export --platform ios --output-dir "$RUNNER_TEMP/export-ios"
 
   audit:
-    name: Security · dependency audit
+    name: Security · dependency audit (bun)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -100,42 +106,28 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@v2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: bun install --frozen-lockfile
+      - name: Read documented exceptions
+        id: allow
+        run: |
+          mapfile -t IGNORES < <(bun scripts/audit-allowlist.mjs ids)
+          echo "flags=${IGNORES[*]}" >> "$GITHUB_OUTPUT"
+      - name: Web · install
+        run: bun install --frozen-lockfile
       - name: Web · production dependencies (no exceptions)
         run: bun audit --production --audit-level=high
       - name: Web · all dependencies (high+, only documented exceptions)
-        run: |
-          mapfile -t IGNORES < <(node scripts/audit-allowlist.mjs ids)
-          bun audit --audit-level=high "${IGNORES[@]}"
+        run: bun audit --audit-level=high ${{ steps.allow.outputs.flags }}
       - name: Web · full report (informational)
         run: bun audit || true
       - name: Mobile · install
         working-directory: apps/mobile
-        run: npm ci --ignore-scripts
-      - name: Mobile · audit (high+, only documented exceptions)
-        run: node scripts/audit-allowlist.mjs npm apps/mobile
-      - name: Mobile · verify registry signatures and provenance
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Mobile · production dependencies (high+, only documented exceptions)
         working-directory: apps/mobile
-        run: |
-          # A *missing public key* is registry-side state (it comes and goes between runs), so retry and
-          # only warn. Anything else - above all an invalid signature - fails the job.
-          for attempt in 1 2 3; do
-            if out=$(npm audit signatures 2>&1); then
-              echo "$out"
-              exit 0
-            fi
-            echo "$out"
-            if ! grep -q 'EMISSINGSIGNATUREKEY' <<<"$out"; then
-              echo "::error::signature verification failed"
-              exit 1
-            fi
-            echo "::warning::attempt $attempt: the registry returned no public key for some attestations; retrying"
-            sleep 15
-          done
-          echo "::warning::signatures could not be fully verified (registry missing a signing key). This is not a tampering signal - that would surface as an invalid signature."
+        run: bun audit --production --audit-level=high ${{ steps.allow.outputs.flags }}
+      - name: Mobile · all dependencies (high+, only documented exceptions)
+        working-directory: apps/mobile
+        run: bun audit --audit-level=high ${{ steps.allow.outputs.flags }}
 
   secrets:
     name: Security · secret scan
