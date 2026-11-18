@@ -6,7 +6,7 @@ import { computeCreditCardSummary, getCycleRangeLabel } from '@dmm/core/utils/cr
 import { formatDayLabel, formatJPY, formatMonthLabel, getEffectiveOutflow } from '@dmm/core/utils/format';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
 import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
-import { pickNear } from '@/lib/pick';
+import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, SectionTitle } from '@/ui/kit';
@@ -55,8 +55,8 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
             </Text>
             <Group>
               <Row title="家計グループ" right={ledger?.name} chevron
-                icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)} onPress={async (event) => {
-                const choice = await pickNear(event, '家計グループ', ledgerOptions(ledgers, ledger?.id));
+                icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)} onPress={async () => {
+                const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledger?.id));
                 if (choice) updateAccount(account.id, { ledgerId: choice });
               }} />
             </Group>

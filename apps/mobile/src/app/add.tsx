@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Alert, Keyboard, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View, type GestureResponderEvent } from 'react-native';
+import { Alert, Keyboard, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -14,7 +14,7 @@ import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
 import { pickCategory } from '@/lib/categoryPicker';
 import { useFinance } from '@/lib/store';
 import { usePalette, metrics } from '@/lib/theme';
-import { pickNear, pickOne } from '@/lib/pick';
+import { pickOne } from '@/lib/pick';
 import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
@@ -108,14 +108,14 @@ export default function AddScreen() {
     }
   };
 
-  const pickAccount = async (event: GestureResponderEvent, setter: (v: string) => void, label: string, excludeId?: string) => {
+  const pickAccount = async (setter: (v: string) => void, label: string, excludeId?: string) => {
     const choices = (type === 'transfer' ? transferAccounts : state.accounts).filter((a) => a.id !== excludeId);
     if (choices.length === 0) {
       Alert.alert('選べる口座がありません');
       return;
     }
     const currentId = label === '入金先' && type === 'transfer' ? toAccountId : accountId;
-    const choice = await pickNear(event, label, choices.map((a) => ({
+    const choice = await pickOne(label, choices.map((a) => ({
       id: a.id, label: a.name, subtitle: ACCOUNT_TYPE_LABELS[a.type], icon: ACCOUNT_ICONS[a.type], selected: a.id === currentId,
     })));
     if (choice) setter(choice);
@@ -190,16 +190,16 @@ export default function AddScreen() {
   const fieldRow = (
     label: string,
     value: string,
-    onPress: (event: GestureResponderEvent) => void,
+    onPress: () => void,
     badge?: { name: SymbolViewProps['name']; color: string },
     detail?: string
   ) => (
     <Pressable
       accessibilityRole="button"
-      onPress={(event) => {
+      onPress={() => {
         Keyboard.dismiss();
         tick();
-        onPress(event);
+        onPress();
       }}
       android_ripple={{ color: p.fill }}
       style={{ minHeight: metrics.rowMinHeight, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -214,7 +214,7 @@ export default function AddScreen() {
   );
 
   const accountRow = (label: string, selected: Account | undefined, setter: (value: string) => void, excludeId?: string) =>
-    fieldRow(label, selected?.name ?? '選択', (event) => pickAccount(event, setter, label, excludeId),
+    fieldRow(label, selected?.name ?? '選択', () => pickAccount(setter, label, excludeId),
       selected ? { name: ACCOUNT_ICONS[selected.type], color: p.tint } : undefined,
       selected ? ACCOUNT_TYPE_LABELS[selected.type] : undefined);
 
@@ -297,8 +297,8 @@ export default function AddScreen() {
           {accountRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法',
             account, setAccountId, type === 'transfer' ? toAccountId : undefined)}
           {type === 'transfer' ? accountRow('入金先', destination, setToAccountId, accountId) : null}
-          {fieldRow('家計グループ', ledger.name, async (event) => {
-            const choice = await pickNear(event, '家計グループ', ledgerOptions(ledgers, ledger.id));
+          {fieldRow('家計グループ', ledger.name, async () => {
+            const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledger.id));
             const group = ledgers.find((item) => item.id === choice);
             if (group) {
               setLedgerId(group.id);

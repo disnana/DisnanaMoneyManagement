@@ -8,7 +8,7 @@ import { assessPurchaseForMonth, estimatePurchaseJPY, FOREIGN_PURCHASE_CURRENCIE
 import { pickCategory } from '@/lib/categoryPicker';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
-import { pickNear, pickOne } from '@/lib/pick';
+import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
@@ -91,8 +91,8 @@ export default function PurchaseEditor() {
             <Group>
               <PlanningInput label="買いたいもの" value={title} onChange={setTitle} />
               <Row title="家計グループ" right={ledger?.name ?? '選択なし'} chevron
-                icon={ledger ? ledgerIcon(ledger) : ALL_LEDGER_ICON} iconColor={ledgerColor(ledger)} onPress={async (event) => {
-                const choice = await pickNear(event, '家計グループ', [
+                icon={ledger ? ledgerIcon(ledger) : ALL_LEDGER_ICON} iconColor={ledgerColor(ledger)} onPress={async () => {
+                const choice = await pickOne('家計グループ', [
                   { id: '', label: '選択なし', icon: ALL_LEDGER_ICON, selected: !ledgerId },
                   ...ledgerOptions(ledgers, ledgerId),
                 ]);

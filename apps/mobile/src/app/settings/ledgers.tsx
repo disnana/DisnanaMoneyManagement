@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View, type GestureResponderEvent } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import type { Ledger } from '@dmm/core/types/finance';
 import { LEDGER_COLORS, LEDGER_ICONS, ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
-import { pickNear } from '@/lib/pick';
+import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
@@ -65,9 +65,9 @@ export default function Ledgers() {
     reset();
   };
 
-  const remove = async (event: GestureResponderEvent, ledger: Ledger) => {
+  const remove = async (ledger: Ledger) => {
     swipeRows.current.get(ledger.id)?.close();
-    const destination = await pickNear(event,
+    const destination = await pickOne(
       `「${ledger.name}」を削除し、口座と記録を移動`,
       ledgerOptions(ledgers.filter((item) => item.id !== ledger.id))
     );
@@ -102,7 +102,7 @@ export default function Ledgers() {
                 onSwipeableClose={() => { if (openRow.current === ledger.id) openRow.current = null; }}
                 renderRightActions={canDelete ? () => (
                   <Pressable accessibilityRole="button" accessibilityLabel={`${ledger.name}を削除`}
-                    onPress={(event) => void remove(event, ledger)}
+                    onPress={() => void remove(ledger)}
                     style={{ width: 76, backgroundColor: '#B91C1C', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                     <SymbolView name={{ ios: 'trash', android: 'delete' }} size={19} tintColor="#fff" />
                     <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>削除</Text>
@@ -133,7 +133,7 @@ export default function Ledgers() {
               <Text style={{ color: p.text, fontSize: 17, fontWeight: '700' }}>{editing ? `${editing.name}を編集` : '新しいグループ'}</Text>
               <View style={{ flexDirection: 'row' }}>
                 {editing && canDelete ? (
-                  <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="編集中のグループを削除" onPress={(event) => void remove(event, editing)} />
+                  <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="編集中のグループを削除" onPress={() => void remove(editing)} />
                 ) : null}
                 <HeaderAction name={{ ios: 'xmark', android: 'close' }} label="編集を閉じる" onPress={reset} />
               </View>
@@ -144,15 +144,15 @@ export default function Ledgers() {
                 value={name} onChangeText={setName} maxLength={40}
                 style={{ minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 }} />
               <Row title="アイコン" right={LEDGER_ICONS.find(({ id }) => id === (icon ?? kind))?.label ?? '既定'}
-                icon={ledgerIcon({ kind, icon })} iconColor={color} chevron onPress={async (event) => {
-                  const choice = await pickNear(event, 'アイコン', LEDGER_ICONS.map((item) => ({
+                icon={ledgerIcon({ kind, icon })} iconColor={color} chevron onPress={async () => {
+                  const choice = await pickOne('アイコン', LEDGER_ICONS.map((item) => ({
                     ...item, color, selected: item.id === (icon ?? kind),
                   })));
                   if (choice !== null) setIcon(choice);
                 }} />
               <Row title="色" right={LEDGER_COLORS.find(({ id }) => id === (color ?? ''))?.label ?? 'カスタム'}
-                icon={COLOR_ICON} iconColor={color} chevron onPress={async (event) => {
-                  const choice = await pickNear(event, '色', LEDGER_COLORS.map((item) => ({
+                icon={COLOR_ICON} iconColor={color} chevron onPress={async () => {
+                  const choice = await pickOne('色', LEDGER_COLORS.map((item) => ({
                     ...item, icon: COLOR_ICON, color: item.id || undefined, selected: item.id === (color ?? ''),
                   })));
                   if (choice !== null) setColor(choice || undefined);

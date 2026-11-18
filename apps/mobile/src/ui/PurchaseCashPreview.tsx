@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Text, TextInput, View, type GestureResponderEvent } from 'react-native';
+import { Text, TextInput, View } from 'react-native';
 import type { Account } from '@dmm/core/types/finance';
 import { getBankCardWithdrawals } from '@dmm/core/utils/creditCard';
 import { formatJPY, formatMonthLabel, getTodayString, shiftMonth } from '@dmm/core/utils/format';
@@ -7,7 +7,7 @@ import { comparePurchaseCash, type assessPurchase } from '@dmm/core/utils/planni
 import { filterLedger } from '@dmm/core/utils/ledgers';
 import { computeAccountBalances } from '@dmm/core/store/finance';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
-import { pickNear } from '@/lib/pick';
+import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, SectionTitle, Segmented } from './kit';
@@ -35,8 +35,8 @@ export function usePurchaseBank(ledgerId?: string) {
 export function PurchaseBankPicker({ banks, bank, setBankId }: ReturnType<typeof usePurchaseBank>) {
   return (
     <Row title="支払口座" right={bank?.name ?? '対象の口座なし'} chevron={banks.length > 1}
-      onPress={banks.length > 1 ? async (event) => {
-        const choice = await pickNear(event, '支払口座', banks.map((account) => ({
+      onPress={banks.length > 1 ? async () => {
+        const choice = await pickOne('支払口座', banks.map((account) => ({
           id: account.id, label: account.name, icon: ACCOUNT_ICONS.bank, selected: account.id === bank?.id,
         })));
         if (choice) setBankId(choice);
@@ -103,8 +103,8 @@ export function PurchaseCashPreview({ amount, month, ledgerId, bank, banks, budg
     result.free < 0 ? `手元資金が ${formatJPY(-result.free)} 不足` : '',
   ].filter(Boolean);
   const color = (value: number) => value < 0 ? p.danger : p.text;
-  const chooseSavings = async (event: GestureResponderEvent) => {
-    const choice = await pickNear(event, '貯金の出どころ', [
+  const chooseSavings = async () => {
+    const choice = await pickOne('貯金の出どころ', [
       { id: 'none', label: '指定なし', selected: !source },
       ...goals.filter((goal) => goal.currentAmount > 0).map((goal) => ({
         id: `goal:${goal.id}`, label: goal.title, subtitle: '支払口座の中で取り置いている貯金',
