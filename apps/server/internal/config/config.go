@@ -11,7 +11,9 @@ import (
 
 type Config struct {
 	Addr              string        // DMM_ADDR            listen address (default :8080)
-	DBPath            string        // DMM_DB_PATH         SQLite file (default ./dmm.db)
+	DBURL             string        // DMM_DB_URL          sqlite:./dmm.db | postgres://user:pass@host/db | scylla://hosts/keyspace
+	Secret            string        // DMM_SECRET          shared by ALL nodes: seals WebAuthn ceremonies (>= 32 chars)
+	Nodes             []string      // DMM_NODES           public base URLs of every node (subdomains), advertised for client fail-over
 	RPID              string        // DMM_RP_ID           WebAuthn relying party id, e.g. money.example.com
 	RPName            string        // DMM_RP_NAME         shown by the authenticator
 	RPOrigins         []string      // DMM_RP_ORIGINS      allowed web origins, comma separated (https://...)
@@ -28,7 +30,9 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Addr:              env("DMM_ADDR", ":8080"),
-		DBPath:            env("DMM_DB_PATH", "./dmm.db"),
+		DBURL:             env("DMM_DB_URL", "sqlite:./dmm.db"),
+		Secret:            env("DMM_SECRET", ""),
+		Nodes:             list(env("DMM_NODES", "")),
 		RPID:              env("DMM_RP_ID", "localhost"),
 		RPName:            env("DMM_RP_NAME", "DMM"),
 		RPOrigins:         list(env("DMM_RP_ORIGINS", "http://localhost:3000")),

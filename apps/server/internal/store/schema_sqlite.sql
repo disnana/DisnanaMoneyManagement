@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
   id         BLOB PRIMARY KEY,
   name       TEXT NOT NULL,
@@ -25,19 +23,19 @@ CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
 
 -- Append-only log of end-to-end encrypted operations. The server never sees plaintext.
 CREATE TABLE IF NOT EXISTS ops (
-  user_id    BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  seq        INTEGER NOT NULL,
-  id         TEXT NOT NULL,
-  device     TEXT NOT NULL,
-  payload    BLOB NOT NULL,
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (user_id, seq),
+  user_id BLOB NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ts      INTEGER NOT NULL,
+  id      TEXT NOT NULL,
+  device  TEXT NOT NULL,
+  payload BLOB NOT NULL,
+  PRIMARY KEY (user_id, ts, id),
   UNIQUE (user_id, id)
 ) WITHOUT ROWID;
 
 CREATE TABLE IF NOT EXISTS snapshots (
   user_id    BLOB PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  upto_seq   INTEGER NOT NULL,
+  upto_ts    INTEGER NOT NULL,
+  upto_id    TEXT NOT NULL,
   payload    BLOB NOT NULL,
   updated_at INTEGER NOT NULL
 );

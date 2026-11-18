@@ -103,6 +103,69 @@ jobs:
       - run: bunx expo export --platform android --output-dir "$RUNNER_TEMP/export-android"
       - run: bunx expo export --platform ios --output-dir "$RUNNER_TEMP/export-ios"
 
+  server:
+    name: Server · Go tests (SQLite + PostgreSQL ${{ matrix.pg }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ['17', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_USER: dmm
+          POSTGRES_PASSWORD: dmm
+          POSTGRES_DB: dmm_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dmm -d dmm_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: go vet ./...
+      - name: Tests (race detector; the store suite also runs on PostgreSQL)
+        env:
+          DMM_TEST_PG_URL: postgres://dmm:dmm@localhost:5432/dmm_test?sslmode=disable
+        run: go test -race -count=1 ./...
+
+  server-security:
+    name: Server · vulnerability scan & Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: govulncheck (pinned)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Build the image and check it starts instantly
+        run: |
+          docker build -t dmm-server:ci .
+          docker run -d --name dmm -p 8080:8080 \
+            -e DMM_RP_ID=localhost -e DMM_RP_ORIGINS=http://localhost:3000 dmm-server:ci
+          for i in $(seq 1 50); do curl -sf localhost:8080/healthz && break; sleep 0.1; done
+          curl -sf localhost:8080/readyz
+          docker logs dmm
+          docker rm -f dmm
+
   audit:
     name: Security · dependency audit (bun)
     runs-on: ubuntu-latest
@@ -169,7 +232,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [web, e2e, mobile, audit, secrets, workflows]
+    needs: [web, e2e, mobile, server, server-security, audit, secrets, workflows]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs succeeded
