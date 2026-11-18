@@ -4,18 +4,21 @@ import { Platform, Pressable, type PressableProps, useColorScheme, ScrollView, S
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
+import { useDragging } from '@/lib/dragState';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 
 /** Scrollable screen. On iOS the transparent large-title bar insets content automatically. */
 export function Screen({ children, ...rest }: ScrollViewProps & { children: ReactNode }) {
   const p = usePalette();
+  const dragging = useDragging();
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       style={{ flex: 1, backgroundColor: p.bg }}
       contentContainerStyle={{ padding: 16, paddingTop: 8 + metrics.screenPaddingTop, gap: 20, paddingBottom: 48 }}
-      {...rest}>
+      {...rest}
+      scrollEnabled={rest.scrollEnabled !== false && !dragging}>
       {children}
     </ScrollView>
   );

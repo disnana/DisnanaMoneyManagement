@@ -7,14 +7,17 @@ import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { LedgerPicker } from '@/ui/LedgerPicker';
-import { ReorderList } from '@/ui/ReorderList';
+import { ReorderList, SortActions } from '@/ui/ReorderList';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 
 /** Accounts and cards. Total assets live on Home; here the focus is the list itself and its order. */
 export default function Accounts() {
   const p = usePalette();
   const { state, visibleState, accountBalances, reorderAccounts } = useFinance();
-  const [sorting, setSorting] = useState(false);
+  const [snapshot, setSnapshot] = useState<string[]>(); // account order before sorting started
+  const sorting = snapshot !== undefined;
+  const startSorting = () => setSnapshot(state.accounts.map((a) => a.id));
+  const cancelSorting = () => { if (snapshot) reorderAccounts(snapshot); setSnapshot(undefined); };
   const isCard = (type: string) => type === 'credit' || type === 'debit';
   const cards = visibleState.accounts.filter((a) => isCard(a.type));
   const others = visibleState.accounts.filter((a) => !isCard(a.type));
@@ -49,7 +52,9 @@ export default function Accounts() {
   return (
     <Screen>
       <LedgerPicker />
-      <SectionTitle action={sorting ? '完了' : others.length > 1 || cards.length > 1 ? '並び替え' : undefined} onAction={() => setSorting((v) => !v)}>口座</SectionTitle>
+      {sorting
+        ? <SortActions title="口座" onCancel={cancelSorting} onDone={() => setSnapshot(undefined)} />
+        : <SectionTitle action={others.length > 1 || cards.length > 1 ? '並び替え' : undefined} onAction={startSorting}>口座</SectionTitle>}
       {others.length > 0 ? list(others) : null}
       {!sorting ? (
         <Group>

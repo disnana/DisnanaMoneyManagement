@@ -5,7 +5,7 @@ import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { getOrderedCategories } from '@dmm/core/data/categories';
 import { kv } from '@/lib/kv';
-import { ReorderList } from '@/ui/ReorderList';
+import { ReorderList, SortActions } from '@/ui/ReorderList';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -23,7 +23,8 @@ function AnalyticsMonth({ month }: { month: string }) {
   const { visibleState, state, setCategoryOrder } = useFinance();
   const m = computeMonthMetrics(visibleState, month);
   const [sort, setSortState] = useState<'amount' | 'custom'>(() => (kv.getItem('dmm_analytics_sort') === 'custom' ? 'custom' : 'amount'));
-  const setSort = (v: 'amount' | 'custom') => { setSortState(v); kv.setItem('dmm_analytics_sort', v); };
+  const setSort = (v: 'amount' | 'custom') => { setSortState(v); setBefore(undefined); kv.setItem('dmm_analytics_sort', v); };
+  const [before, setBefore] = useState<string[]>(); // category order before the first drag in this session
 
   // "並び順" follows the category order from the settings (and what is changed here); the rest stay by amount
   const fullOrder = getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds).map((c) => c.id);
@@ -32,6 +33,7 @@ function AnalyticsMonth({ month }: { month: string }) {
   const shown = new Set(rows.map((r) => r.categoryId));
   const reorder = (ids: string[]) => {
     let next = 0;
+    if (!before) setBefore(fullOrder);
     setCategoryOrder('expense', fullOrder.map((id) => (shown.has(id) ? ids[next++] : id)));
   };
   const reorderable = sort === 'custom' ? rows.filter((r) => r.categoryId !== 'transfer_fee') : [];
@@ -70,7 +72,9 @@ function AnalyticsMonth({ month }: { month: string }) {
         <Segmented<'amount' | 'custom'> value={sort} onChange={setSort} options={[{ id: 'amount', label: '金額順' }, { id: 'custom', label: '並び順' }]} />
       ) : null}
       {sort === 'custom' && m.categoryBreakdown.length > 1 ? (
-        <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>右の ≡ を押したまま上下にドラッグして並び替えます。</Text>
+        before
+          ? <SortActions title="並び替え中" cancelLabel="元に戻す" onCancel={() => { setCategoryOrder('expense', before); setBefore(undefined); }} onDone={() => setBefore(undefined)} />
+          : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>右の ≡ を押したまま上下にドラッグ。リストの外で離すと取り消し。</Text>
       ) : null}
       {m.categoryBreakdown.length === 0 ? (
         <Group>
