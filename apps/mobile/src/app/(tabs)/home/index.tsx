@@ -1,27 +1,46 @@
 import { router } from 'expo-router';
 import { Text, View } from 'react-native';
-import { computeMonthMetrics } from '@dmm/core/utils/metrics';
-import { formatJPY } from '@dmm/core/utils/format';
+import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeroCard } from '@/ui/HeroCard';
-import { Group, MonthBar, Screen, SectionTitle } from '@/ui/kit';
+import { CreditPaymentCard } from '@/ui/CreditPaymentCard';
+import { LedgerPicker } from '@/ui/LedgerPicker';
+import { Group, SectionTitle } from '@/ui/kit';
+import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
 
 export default function Home() {
+  return <MonthScreen>{(month) => <HomeMonth month={month} />}</MonthScreen>;
+}
+
+function HomeMonth({ month }: { month: string }) {
   const p = usePalette();
-  const { state, totalAssets, month, setMonth } = useFinance();
-  const m = computeMonthMetrics(state, month);
-  const recent = state.transactions
+  const { state, visibleState, accountBalances } = useFinance();
+  const recent = visibleState.transactions
     .filter((t) => t.date.slice(0, 7) === month)
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
+  const statements = visibleState.accounts
+    .filter((account) => account.type === 'credit')
+    .map((card) => computeCreditCardSummary(card, state.transactions, accountBalances[card.id] ?? 0, month));
 
   return (
-    <Screen>
-      <MonthBar month={month} onChange={setMonth} />
+    <>
+      <LedgerPicker />
+      <HeroCard month={month} />
 
-      <HeroCard />
+      {statements.length > 0 ? (
+        <>
+          <SectionTitle>カードの支払い</SectionTitle>
+          <View style={{ gap: 10 }}>
+            {statements.map((statement) => (
+              <CreditPaymentCard key={statement.card.id} statement={statement}
+                onPress={() => router.navigate({ pathname: '/accounts/[id]', params: { id: statement.card.id } }, { withAnchor: true })} />
+            ))}
+          </View>
+        </>
+      ) : null}
 
       <SectionTitle action="すべて" onAction={() => router.navigate('/transactions')}>主な取引</SectionTitle>
       {recent.length === 0 ? (
@@ -37,6 +56,6 @@ export default function Home() {
           ))}
         </Group>
       )}
-    </Screen>
+    </>
   );
 }

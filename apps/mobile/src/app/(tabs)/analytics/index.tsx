@@ -6,16 +6,22 @@ import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { DonutChart } from '@/ui/PieChart';
-import { Group, IconBadge, MonthBar, Screen, SectionTitle } from '@/ui/kit';
+import { LedgerPicker } from '@/ui/LedgerPicker';
+import { Group, IconBadge, SectionTitle } from '@/ui/kit';
+import { MonthScreen } from '@/ui/MonthScreen';
 
 export default function Analytics() {
+  return <MonthScreen>{(month) => <AnalyticsMonth month={month} />}</MonthScreen>;
+}
+
+function AnalyticsMonth({ month }: { month: string }) {
   const p = usePalette();
-  const { state, month, setMonth } = useFinance();
-  const m = computeMonthMetrics(state, month);
+  const { visibleState } = useFinance();
+  const m = computeMonthMetrics(visibleState, month);
 
   return (
-    <Screen>
-      <MonthBar month={month} onChange={setMonth} />
+    <>
+      <LedgerPicker />
 
       <DonutChart
         slices={m.categoryBreakdown.map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
@@ -23,7 +29,7 @@ export default function Analytics() {
         centerValue={formatJPY(m.expense)}
       />
 
-      <SectionTitle>カテゴリ別</SectionTitle>
+      <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
       {m.categoryBreakdown.length === 0 ? (
         <Group>
           <View style={{ padding: 28, alignItems: 'center' }}>
@@ -37,7 +43,7 @@ export default function Analytics() {
               key={c.categoryId}
               onPress={() => router.push({ pathname: '/analytics/category', params: { id: c.categoryId } })}
               style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: pressed ? p.fill : 'transparent' })}>
-              <IconBadge name={categoryIcon(c.categoryId)} color={c.color} />
+              <IconBadge name={categoryIcon(visibleState.customCategories?.find((item) => item.id === c.categoryId)?.icon ?? c.categoryId)} color={c.color} />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>{c.name}</Text>
                 <View style={{ height: 6, borderRadius: 3, backgroundColor: p.fill, marginTop: 6, overflow: 'hidden' }}>
@@ -52,6 +58,6 @@ export default function Analytics() {
           ))}
         </Group>
       )}
-    </Screen>
+    </>
   );
 }

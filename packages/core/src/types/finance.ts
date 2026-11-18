@@ -14,6 +14,15 @@ export type AccountType =
 
 export type AccountUsageScope = 'personal' | 'business' | 'household';
 
+export interface Ledger {
+  id: string;
+  name: string;
+  kind: AccountUsageScope;
+  icon?: string;
+  color?: string;
+  taxExemptions?: Partial<Record<number, number>>;
+}
+
 export type TransactionScope = 'personal' | 'business';
 
 export type ReceiptMethod =
@@ -40,6 +49,8 @@ export interface CategoryDef {
   name: string;
   type: 'expense' | 'income' | 'transfer';
   color: string;
+  icon?: string;
+  memo?: string;
   defaultAccountingSubject?: string;
 }
 
@@ -48,6 +59,7 @@ export interface Account {
   name: string;
   type: AccountType;
   usageScope?: AccountUsageScope; // 個人用 / 業務用 / 家庭用
+  ledgerId?: string;
   initialBalance: number;
   currency?: CurrencyCode; // 通貨 (デフォルト JPY)
   fxRateToJpy?: number; // 参考円換算レート
@@ -57,6 +69,8 @@ export interface Account {
   closingDay?: number; // 1..28 or 31 (月末)
   paymentDay?: number; // 1..28 or 31 (月末)
   paymentMonthOffset?: 1 | 2; // 1: 翌月払い, 2: 翌々月払い
+  paymentWarningDays?: number;
+  confirmedBillings?: Partial<Record<string, number>>;
   creditLimit?: number;
   // Linked bank account (type === 'credit' | 'debit', must reference a 'bank' account)
   linkedBankAccountId?: string;
@@ -76,6 +90,7 @@ export interface Transaction {
   transferFee?: number;
   pointUsed?: number;
   scope?: TransactionScope;
+  ledgerId?: string;
   businessRatio?: number;
   accountingSubject?: string;
   counterparty?: string;
@@ -110,6 +125,7 @@ export interface AdvanceInfo {
 export interface Budget {
   categoryId: string;
   monthlyLimit: number;
+  ledgerId?: string;
 }
 
 export interface RecurringItem {
@@ -131,15 +147,39 @@ export interface SavingsGoal {
   targetAmount: number;
   currentAmount: number;
   targetDate?: string;
+  monthlyContribution?: number;
+  ledgerId?: string;
   note?: string;
 }
 
+export interface PurchaseCandidate {
+  id: string;
+  title: string;
+  categoryId: string;
+  amount: number;
+  foreignPrice?: ForeignPurchasePrice;
+  month: string;
+  ledgerId?: string;
+}
+
+export interface ForeignPurchasePrice {
+  currency: Exclude<CurrencyCode, 'JPY'>;
+  amount: number;
+  yenPerUnit: number;
+  feeJPY: number;
+}
+
 export interface FinanceState {
+  customCategories?: CategoryDef[];
+  categoryOrder?: Partial<Record<'expense' | 'income', string[]>>;
+  hiddenCategoryIds?: string[];
+  ledgers?: Ledger[];
   accounts: Account[];
   transactions: Transaction[];
   budgets: Budget[];
   recurringItems: RecurringItem[];
   savingsGoals: SavingsGoal[];
+  purchaseCandidates?: PurchaseCandidate[];
 }
 
 export type NavSection =

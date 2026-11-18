@@ -1,17 +1,23 @@
 import {
   Account,
   Budget,
+  CategoryDef,
   FinanceState,
+  Ledger,
+  PurchaseCandidate,
   RecurringItem,
   SavingsGoal,
   Transaction,
 } from '../types/finance';
 import { createInitialSeedData } from '../data/seedData';
+import { ALL_CATEGORIES } from '../data/categories';
 import {
   getCurrentMonthKey,
   getEffectiveOutflow,
   getTransferTotalFees,
 } from '../utils/format';
+import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
+import { estimatePurchaseJPY } from '../utils/planning';
 
 export const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
@@ -86,7 +92,38 @@ export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | nul
       Boolean(g && typeof g.id === 'string' && typeof g.title === 'string' && Number.isFinite(Number(g.targetAmount)))
   );
 
+  const ledgers = Array.isArray(parsed.ledgers)
+    ? parsed.ledgers.filter((ledger): ledger is Ledger => Boolean(ledger &&
+      typeof ledger.id === 'string' && typeof ledger.name === 'string' &&
+      (ledger.kind === 'personal' || ledger.kind === 'household' || ledger.kind === 'business')))
+    : undefined;
+  const purchaseCandidates = Array.isArray(parsed.purchaseCandidates)
+    ? parsed.purchaseCandidates.filter((item) => item && typeof item.id === 'string' &&
+      typeof item.title === 'string' && typeof item.categoryId === 'string' &&
+      typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) &&
+      Number.isSafeInteger(item.amount) && item.amount > 0)
+      .map((item) => {
+        if (!item.foreignPrice) return item;
+        const amount = estimatePurchaseJPY(item.foreignPrice);
+        return amount === undefined ? { ...item, foreignPrice: undefined } : { ...item, amount };
+      })
+    : undefined;
+  const readCategoryIds = (value: unknown): string[] | undefined =>
+    Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : undefined;
+  const categoryOrder = { income: readCategoryIds(parsed.categoryOrder?.income), expense: readCategoryIds(parsed.categoryOrder?.expense) };
+  const hiddenCategoryIds = readCategoryIds(parsed.hiddenCategoryIds);
+
   return {
+    ...(ledgers?.length ? { ledgers } : {}),
+    ...(purchaseCandidates?.length ? { purchaseCandidates } : {}),
+    ...(Array.isArray(parsed.customCategories) ? {
+      customCategories: parsed.customCategories.filter((item) => item && typeof item.id === 'string' &&
+        (item.id.startsWith('custom_') || ALL_CATEGORIES.some((category) => category.id === item.id && category.type === item.type)) &&
+        typeof item.name === 'string' && item.name.trim() &&
+        (item.type === 'expense' || item.type === 'income') && typeof item.color === 'string' && /^#[0-9a-f]{6}$/i.test(item.color)),
+    } : {}),
+    ...(categoryOrder.income || categoryOrder.expense ? { categoryOrder } : {}),
+    ...(hiddenCategoryIds ? { hiddenCategoryIds } : {}),
     accounts,
     transactions,
     budgets,
@@ -259,12 +296,16 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const updateAccount = useCallback(
     (id: string, patch: Partial<Omit<Account, 'id'>>) => {
-      setState((prev) => ({
-        ...prev,
-        accounts: prev.accounts.map((acc) =>
-          acc.id === id ? { ...acc, ...patch } : acc
-        ),
-      }));
+      setState((prev) => {
+        const accounts = prev.accounts.map((acc) => acc.id === id ? { ...acc, ...patch } : acc);
+        if (!patch.ledgerId) return { ...prev, accounts };
+        const ledgers = getLedgers(prev);
+        const previousAccounts = new Map(prev.accounts.map((acc) => [acc.id, acc]));
+        const transactions = prev.transactions.map((tx) => tx.accountId === id && !tx.ledgerId
+          ? { ...tx, ledgerId: getTransactionLedger(tx, previousAccounts, ledgers).id }
+          : tx);
+        return { ...prev, accounts, transactions };
+      });
     },
     []
   );
@@ -276,22 +317,93 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const setConfirmedCardBilling = useCallback((id: string, month: string, amount?: number) => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
+    setState((prev) => ({
+      ...prev,
+      accounts: prev.accounts.map((account) => {
+        if (account.id !== id || account.type !== 'credit') return account;
+        const confirmedBillings = { ...account.confirmedBillings };
+        if (amount === undefined) delete confirmedBillings[month];
+        else confirmedBillings[month] = amount;
+        return { ...account, confirmedBillings };
+      }),
+    }));
+  }, []);
+
+  const saveCustomCategory = useCallback((category: Omit<CategoryDef, 'id'>, existingId?: string) => {
+    const id = existingId ?? `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => {
+      const categories = prev.customCategories ?? [];
+      return {
+        ...prev, customCategories: categories.some((item) => item.id === id)
+          ? categories.map((item) => item.id === id ? { ...category, id } : item)
+          : [...categories, { ...category, id }],
+      };
+    });
+  }, []);
+
+  const setCategoryOrder = useCallback((type: 'expense' | 'income', ids: string[]) => {
+    setState((prev) => ({ ...prev, categoryOrder: { ...prev.categoryOrder, [type]: [...new Set(ids)] } }));
+  }, []);
+
+  const setCategoryHidden = useCallback((id: string, hidden: boolean) => {
+    setState((prev) => {
+      const ids = new Set(prev.hiddenCategoryIds);
+      if (hidden) ids.add(id);
+      else ids.delete(id);
+      return { ...prev, hiddenCategoryIds: [...ids] };
+    });
+  }, []);
+
+  const addLedger = useCallback((name: string, kind: Ledger['kind'], appearance?: Pick<Ledger, 'icon' | 'color'>) => {
+    const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind, ...appearance }] }));
+    return id;
+  }, []);
+
+  const updateLedger = useCallback((id: string, changes: Partial<Pick<Ledger, 'name' | 'icon' | 'color'>>) => {
+    setState((prev) => ({
+      ...prev,
+      ledgers: getLedgers(prev).map((ledger) => ledger.id === id ? { ...ledger, ...changes } : ledger),
+    }));
+  }, []);
+
+  const deleteLedger = useCallback((id: string, destinationId: string) => {
+    setState((prev) => removeLedger(prev, id, destinationId));
+  }, []);
+
+  const setLedgerTaxExemption = useCallback((id: string, year: number, amount?: number) => {
+    if (!Number.isInteger(year) || year < 1000 || year > 9999 ||
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
+    setState((prev) => ({
+      ...prev,
+      ledgers: getLedgers(prev).map((ledger) => {
+        if (ledger.id !== id) return ledger;
+        const taxExemptions = { ...ledger.taxExemptions };
+        if (amount === undefined) delete taxExemptions[year];
+        else taxExemptions[year] = amount;
+        return { ...ledger, taxExemptions };
+      }),
+    }));
+  }, []);
+
   const upsertBudget = useCallback((budget: Budget) => {
     setState((prev) => {
-      const exists = prev.budgets.some((b) => b.categoryId === budget.categoryId);
+      const matches = (b: Budget) => b.categoryId === budget.categoryId && b.ledgerId === budget.ledgerId;
+      const exists = prev.budgets.some(matches);
       const nextBudgets = exists
-        ? prev.budgets.map((b) =>
-            b.categoryId === budget.categoryId ? budget : b
-          )
+        ? prev.budgets.map((b) => matches(b) ? budget : b)
         : [...prev.budgets, budget];
       return { ...prev, budgets: nextBudgets };
     });
   }, []);
 
-  const removeBudget = useCallback((categoryId: string) => {
+  const removeBudget = useCallback((categoryId: string, ledgerId?: string) => {
     setState((prev) => ({
       ...prev,
-      budgets: prev.budgets.filter((b) => b.categoryId !== categoryId),
+      budgets: prev.budgets.filter((b) => b.categoryId !== categoryId || b.ledgerId !== ledgerId),
     }));
   }, []);
 
@@ -356,6 +468,33 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const updateSavingsGoal = useCallback((id: string, patch: Partial<Omit<SavingsGoal, 'id' | 'currentAmount'>>) => {
+    setState((prev) => ({
+      ...prev,
+      savingsGoals: prev.savingsGoals.map((goal) => goal.id === id ? { ...goal, ...patch } : goal),
+    }));
+  }, []);
+
+  const savePurchaseCandidate = useCallback((item: Omit<PurchaseCandidate, 'id'>, existingId?: string) => {
+    const id = existingId ?? `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    setState((prev) => {
+      const items = prev.purchaseCandidates ?? [];
+      return {
+        ...prev,
+        purchaseCandidates: existingId
+          ? items.map((candidate) => candidate.id === existingId ? { ...item, id } : candidate)
+          : [...items, { ...item, id }],
+      };
+    });
+  }, []);
+
+  const removePurchaseCandidate = useCallback((id: string) => {
+    setState((prev) => ({
+      ...prev,
+      purchaseCandidates: prev.purchaseCandidates?.filter((item) => item.id !== id),
+    }));
+  }, []);
+
   const contributeToGoal = useCallback((id: string, delta: number) => {
     setState((prev) => ({
       ...prev,
@@ -406,14 +545,25 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     addAccount,
     updateAccount,
     deleteAccount,
+    setConfirmedCardBilling,
+    saveCustomCategory,
+    setCategoryOrder,
+    setCategoryHidden,
+    addLedger,
+    updateLedger,
+    deleteLedger,
+    setLedgerTaxExemption,
     upsertBudget,
     removeBudget,
     addRecurringItem,
     deleteRecurringItem,
     recordRecurringForMonth,
     addSavingsGoal,
+    updateSavingsGoal,
     deleteSavingsGoal,
     contributeToGoal,
+    savePurchaseCandidate,
+    removePurchaseCandidate,
     importState,
     resetToSampleData,
     clearAllData,

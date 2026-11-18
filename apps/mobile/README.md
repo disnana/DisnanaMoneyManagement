@@ -5,19 +5,19 @@ iOS・Android ネイティブアプリ。ロジックは Web 版と共有（`pac
 
 ```
 apps/mobile
-  src/app/            Expo Router（ファイルベース）。(tabs)=ネイティブタブ、add=記録画面
+  src/app/            Expo Router。(tabs)=主要画面、add=記録画面、settings=設定
   src/ui/             共通UI。StackLayout.ios.tsx / StackLayout.tsx など OS 別ファイル
-  src/lib/            theme.ios.ts / theme.ts, pick.ios.ts / pick.tsx, kv.ts / kv.web.ts ...
+  src/lib/            theme.ios.ts / theme.ts, pick.tsx, kv.ts / kv.web.ts ...
 packages/core         型・計算・初期データ・ストア（React/DOM 非依存）
 ```
 
 ## プラットフォーム別の構成
 | 項目 | iOS | Android |
 |---|---|---|
-| タブ | UITabBarController（iOS 26 は Liquid Glass）, SF Symbols | Material 3 ナビゲーションバー, Material Symbols |
-| ナビ | 大見出し＋ブラーのナビゲーションバー（`StackLayout.ios.tsx`） | 標準トップアプリバー（`StackLayout.tsx`） |
-| 記録画面 | ネイティブ formSheet | フルスクリーンモーダル |
-| 選択 | ActionSheetIOS（`pick.ios.ts`） | Material ボトムシート（`pick.tsx`） |
+| タブ | 共通の下部ナビと中央の登録ボタン、SF Symbols | 共通の下部ナビと中央の登録ボタン、Material Symbols |
+| ナビ | ブラー付きのナビゲーションバー（`StackLayout.ios.tsx`） | 標準トップアプリバー（`StackLayout.tsx`） |
+| 記録画面 | スタック遷移、画面端の戻るスワイプ | スタック遷移、システムの戻る操作 |
+| 選択 | 共通の選択リスト（`pick.tsx`） | 共通の選択リスト |
 | テーマ | システム灰色背景・細い区切り線（`theme.ios.ts`） | トーナルサーフェス（`theme.ts`） |
 | 数字キーボード | 「完了」アクセサリバー（`KeyboardDone.ios.tsx`） | なし（システム側に確定キーあり） |
 | ストレージ | expo-sqlite kv-store（同期） | 同左（Web プレビューのみ localStorage） |

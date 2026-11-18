@@ -13,8 +13,8 @@ import { Row } from '@/ui/kit';
 /** One transaction row. Tap = edit, long-press = action list (native action sheet on iOS). */
 export function TxRow({ tx, showDate }: { tx: Transaction; showDate?: boolean }) {
   const p = usePalette();
-  const { accountNameMap, deleteTransaction } = useFinance();
-  const cat = getCategoryById(tx.categoryId);
+  const { state, accountNameMap, deleteTransaction } = useFinance();
+  const cat = getCategoryById(tx.categoryId, state.customCategories);
   const acc = accountNameMap[tx.accountId] ?? '口座';
   const to = tx.toAccountId ? accountNameMap[tx.toAccountId] ?? '口座' : '';
 
@@ -41,7 +41,7 @@ export function TxRow({ tx, showDate }: { tx: Transaction; showDate?: boolean })
 
   return (
     <Row
-      icon={categoryIcon(tx.categoryId)}
+      icon={categoryIcon(cat.icon ?? tx.categoryId)}
       iconColor={cat.color}
       title={tx.title}
       subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${tx.type === 'transfer' ? `${acc} → ${to}` : `${cat.name} · ${acc}`}`}

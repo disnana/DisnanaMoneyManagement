@@ -1,40 +1,30 @@
 import { router } from 'expo-router';
-import { SymbolViewProps } from 'expo-symbols';
 import { formatJPY } from '@dmm/core/utils/format';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
-import type { AccountType } from '@dmm/core/types/finance';
+import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeroCard } from '@/ui/HeroCard';
-import { Group, MonthBar, Row, Screen, SectionTitle } from '@/ui/kit';
-
-const ICONS: Record<AccountType, SymbolViewProps['name']> = {
-  bank: { ios: 'building.columns.fill', android: 'account_balance' },
-  psp: { ios: 'arrow.triangle.2.circlepath', android: 'sync_alt' },
-  foreign_bank: { ios: 'globe', android: 'language' },
-  credit: { ios: 'creditcard.fill', android: 'credit_card' },
-  debit: { ios: 'creditcard', android: 'credit_card' },
-  cash: { ios: 'wallet.pass.fill', android: 'wallet' },
-  emoney: { ios: 'iphone', android: 'smartphone' },
-  investment: { ios: 'chart.line.uptrend.xyaxis', android: 'trending_up' },
-};
+import { LedgerPicker } from '@/ui/LedgerPicker';
+import { Group, Row, SectionTitle } from '@/ui/kit';
+import { MonthScreen } from '@/ui/MonthScreen';
 
 export default function Accounts() {
   const p = usePalette();
-  const { state, accountBalances, month, setMonth } = useFinance();
-  const cards = state.accounts.filter((a) => a.type === 'credit' || a.type === 'debit');
-  const others = state.accounts.filter((a) => a.type !== 'credit' && a.type !== 'debit');
+  const { visibleState, accountBalances } = useFinance();
+  const cards = visibleState.accounts.filter((a) => a.type === 'credit' || a.type === 'debit');
+  const others = visibleState.accounts.filter((a) => a.type !== 'credit' && a.type !== 'debit');
 
-  const rowFor = (a: (typeof state.accounts)[number]) => {
+  const rowFor = (a: (typeof visibleState.accounts)[number]) => {
     const bal = accountBalances[a.id] ?? 0;
     return (
       <Row
         key={a.id}
         chevron
         onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: a.id } })}
-        icon={ICONS[a.type]}
+        icon={ACCOUNT_ICONS[a.type]}
         title={a.name}
-        subtitle={a.institution || ACCOUNT_TYPE_LABELS[a.type]}
+        subtitle={a.institution ? `${ACCOUNT_TYPE_LABELS[a.type]} · ${a.institution}` : ACCOUNT_TYPE_LABELS[a.type]}
         right={a.type === 'debit' ? undefined : formatJPY(bal)}
         rightColor={bal < 0 ? p.danger : undefined}
       />
@@ -42,21 +32,21 @@ export default function Accounts() {
   };
 
   return (
-    <Screen>
-      <MonthBar month={month} onChange={setMonth} />
-      <HeroCard />
-      {others.length > 0 ? (
+    <MonthScreen>
+      {(month) => (
         <>
-          <SectionTitle>口座</SectionTitle>
-          <Group>{others.map(rowFor)}</Group>
+          <LedgerPicker />
+          <HeroCard month={month} />
+          {others.length > 0 ? (
+            <>
+              <SectionTitle>口座</SectionTitle>
+              <Group>{others.map(rowFor)}</Group>
+            </>
+          ) : null}
+          <SectionTitle action="追加" onAction={() => router.push('/accounts/card')}>カード</SectionTitle>
+          {cards.length > 0 ? <Group>{cards.map(rowFor)}</Group> : null}
         </>
-      ) : null}
-      {cards.length > 0 ? (
-        <>
-          <SectionTitle>カード</SectionTitle>
-          <Group>{cards.map(rowFor)}</Group>
-        </>
-      ) : null}
-    </Screen>
+      )}
+    </MonthScreen>
   );
 }

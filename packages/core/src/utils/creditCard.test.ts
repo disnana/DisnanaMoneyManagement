@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeCreditCardSummary, getBillingMonthForDate, getCycleRangeLabel } from './creditCard';
+import { computeCreditCardSummary, getBankCardWithdrawals, getBillingMonthForDate, getCycleRangeLabel, getPaymentWarning } from './creditCard';
 import type { Account, Transaction } from '../types/finance';
 
 describe('getBillingMonthForDate', () => {
@@ -59,11 +59,37 @@ describe('computeCreditCardSummary', () => {
     expect(s.thisMonthGross).toBe(3000);
     expect(s.nextMonthGross).toBe(5000);
     expect(s.thisMonthRemaining).toBe(3000);
+    expect(s.thisMonthUsage).toBe(0);
   });
 
   it('computes available credit from the unpaid balance', () => {
     const s = computeCreditCardSummary(card, [spend('a', '2026-11-10', 30000)], -30000, '2026-12');
     expect(s.availableCredit).toBe(70000);
     expect(s.utilizationRatio).toBeCloseTo(0.3);
+  });
+
+  it('shows a warning for an unpaid upcoming statement across a month boundary', () => {
+    const upcoming = { ...card, closingDay: 31, paymentDay: 1, paymentWarningDays: 3 };
+    const purchase = spend('a', '2026-11-28', 5600);
+    const s = computeCreditCardSummary(upcoming, [purchase], -5600, '2026-11');
+    expect(s.thisMonthUsage).toBe(5600);
+    expect(s.nextMonthRemaining).toBe(5600);
+    expect(getPaymentWarning(s, '2026-11-28')).toBe(3);
+    expect(getPaymentWarning(s, '2026-11-27')).toBeNull();
+    expect(getPaymentWarning({ ...s, nextMonthRemaining: 0 }, '2026-11-28')).toBeNull();
+  });
+
+  it('reserves confirmed unpaid amounts and separate estimates for the chosen bank', () => {
+    const linked = { ...card, linkedBankAccountId: 'bank', confirmedBillings: { '2026-12': 7000 } };
+    const paid: Transaction = {
+      ...spend('payment', '2026-12-10', 2000), type: 'transfer', accountId: 'bank',
+      toAccountId: card.id, targetBillingMonth: '2026-12',
+    };
+    const tx = [spend('confirmed', '2026-11-10', 9900), spend('estimated', '2026-11-20', 3000), paid];
+    expect(getBankCardWithdrawals([linked], tx, 'bank', '2026-12', '2026-12')).toEqual({ confirmed: 5000, estimated: 0 });
+    expect(getBankCardWithdrawals([linked], tx, 'bank', '2026-12', '2027-01')).toEqual({ confirmed: 5000, estimated: 3000 });
+    expect(getBankCardWithdrawals([linked], tx, 'other', '2026-12', '2027-01')).toEqual({ confirmed: 0, estimated: 0 });
+    expect(getBankCardWithdrawals([{ ...linked, confirmedBillings: { '2026-12': 0 } }], tx, 'bank', '2026-12', '2026-12'))
+      .toEqual({ confirmed: 0, estimated: 0 });
   });
 });

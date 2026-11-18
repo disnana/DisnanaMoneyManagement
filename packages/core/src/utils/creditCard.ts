@@ -8,9 +8,12 @@ export interface CreditCardStatementSummary {
   thisMonthGross: number;
   thisMonthSettled: number;
   thisMonthRemaining: number;
+  thisMonthConfirmed: boolean;
+  thisMonthUsage: number;
   nextMonthGross: number;
   nextMonthPrepaid: number;
   nextMonthRemaining: number;
+  nextMonthConfirmed: boolean;
   totalUnpaidBalance: number;
   totalPrepaidCredit: number;
   creditLimit: number;
@@ -51,6 +54,26 @@ export function getCycleRangeLabel(
   return `${pm}/${closingDay + 1} 〜 ${cm}/${closingDay} 利用分`;
 }
 
+/** Days to the calendar due date, when an unpaid statement is within its configured warning window. */
+export function getPaymentWarning(summary: CreditCardStatementSummary, today: string): number | null {
+  const daysBefore = summary.card.paymentWarningDays ?? 0;
+  if (daysBefore <= 0) return null;
+
+  const toUtc = (date: string) => Date.parse(`${date}T00:00:00Z`);
+  for (const [month, amount] of [
+    [summary.currentMonthKey, summary.thisMonthRemaining],
+    [summary.nextMonthKey, summary.nextMonthRemaining],
+  ] as const) {
+    if (amount <= 0) continue;
+    const [year, m] = month.split('-').map(Number);
+    const day = Math.min(summary.card.paymentDay ?? 27, new Date(year, m, 0).getDate());
+    const due = toUtc(`${month}-${String(day).padStart(2, '0')}`);
+    const days = (due - toUtc(today)) / 86_400_000;
+    if (days >= 0 && days <= daysBefore) return days;
+  }
+  return null;
+}
+
 export function computeCreditCardSummary(
   card: Account,
   transactions: Transaction[],
@@ -65,6 +88,7 @@ export function computeCreditCardSummary(
   const nextMonthTransactions: Transaction[] = [];
 
   let thisMonthGross = 0;
+  let thisMonthUsage = 0;
   let nextMonthGross = 0;
 
   let settledThisMonth = 0;
@@ -75,6 +99,7 @@ export function computeCreditCardSummary(
   for (const tx of transactions) {
     if (tx.type === 'expense' && tx.accountId === card.id) {
       const charge = getEffectiveOutflow(tx);
+      if (tx.date.slice(0, 7) === referenceMonthKey) thisMonthUsage += charge;
       const billingMonth = getBillingMonthForDate(tx.date, closingDay, offset);
       if (billingMonth === referenceMonthKey) {
         thisMonthGross += charge;
@@ -100,6 +125,10 @@ export function computeCreditCardSummary(
     }
   }
 
+  const currentConfirmed = confirmedAmount(card.confirmedBillings?.[referenceMonthKey]);
+  const nextConfirmed = confirmedAmount(card.confirmedBillings?.[nextMonthKey]);
+  thisMonthGross = currentConfirmed ?? thisMonthGross;
+  nextMonthGross = nextConfirmed ?? nextMonthGross;
   const totalSettledThisMonth = settledThisMonth + unallocatedPayments;
   const thisMonthRemaining = Math.max(0, thisMonthGross - totalSettledThisMonth);
   const nextMonthRemaining = Math.max(0, nextMonthGross - prepaidNextMonth);
@@ -119,9 +148,12 @@ export function computeCreditCardSummary(
     thisMonthGross,
     thisMonthSettled: totalSettledThisMonth,
     thisMonthRemaining,
+    thisMonthConfirmed: currentConfirmed !== undefined,
+    thisMonthUsage,
     nextMonthGross,
     nextMonthPrepaid: prepaidNextMonth,
     nextMonthRemaining,
+    nextMonthConfirmed: nextConfirmed !== undefined,
     totalUnpaidBalance,
     totalPrepaidCredit,
     creditLimit,
@@ -134,4 +166,38 @@ export function computeCreditCardSummary(
       b.date.localeCompare(a.date)
     ),
   };
+}
+
+function confirmedAmount(amount: number | undefined): number | undefined {
+  return amount !== undefined && Number.isSafeInteger(amount) && amount >= 0 ? amount : undefined;
+}
+
+/** A confirmed statement replaces the estimate for its month. Posted payments reduce either amount. */
+export function getCardWithdrawal(card: Account, transactions: Transaction[], month: string) {
+  const statement = computeCreditCardSummary(card, transactions, 0, month);
+  return {
+    confirmed: statement.thisMonthConfirmed,
+    remaining: statement.thisMonthRemaining,
+  };
+}
+
+export function getBankCardWithdrawals(cards: Account[], posted: Transaction[], bankId: string, currentMonth: string, throughMonth: string) {
+  let confirmed = 0;
+  let estimated = 0;
+  for (const card of cards) {
+    if (card.type !== 'credit' || card.linkedBankAccountId !== bankId) continue;
+    const months = new Set(Object.keys(card.confirmedBillings ?? {}).filter((month) =>
+      /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month <= throughMonth));
+    for (const tx of posted) {
+      if (tx.type !== 'expense' || tx.accountId !== card.id) continue;
+      const month = getBillingMonthForDate(tx.date, card.closingDay, card.paymentMonthOffset);
+      if (month >= currentMonth && month <= throughMonth) months.add(month);
+    }
+    for (const month of months) {
+      const withdrawal = getCardWithdrawal(card, posted, month);
+      if (withdrawal.confirmed) confirmed += withdrawal.remaining;
+      else if (month >= currentMonth) estimated += withdrawal.remaining;
+    }
+  }
+  return { confirmed, estimated };
 }

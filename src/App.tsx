@@ -457,7 +457,7 @@ export default function App() {
 
       {activeSection === 'budgets' && (
         <BudgetsView
-          budgets={state.budgets}
+          budgets={state.budgets.filter((budget) => budget.ledgerId === undefined)}
           transactions={state.transactions}
           selectedMonth={selectedMonth}
           onChangeMonth={setSelectedMonth}

@@ -1,4 +1,5 @@
-import { Text } from 'react-native';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
@@ -7,10 +8,12 @@ import Constants from 'expo-constants';
 import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
+import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 
 export default function Settings() {
   const p = usePalette();
   const [pref, setPref] = useThemePref();
+  const [haptics, setHaptics] = useState(getHapticsEnabled);
   const { state } = useFinance();
   const pendingTotal = getPendingAdvances(state.transactions).reduce((n, t) => n + t.amount, 0);
   return (
@@ -30,8 +33,33 @@ export default function Settings() {
           「自動」は端末の設定に合わせます。
         </Text>
 
+        <SectionTitle>操作</SectionTitle>
+        <Group>
+          <Pressable accessibilityRole="switch" accessibilityLabel="操作時の振動" accessibilityState={{ checked: haptics }}
+            onPress={() => {
+              setHapticsEnabled(!haptics);
+              setHaptics(!haptics);
+            }}
+            style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Text style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: '600' }}>操作時の振動</Text>
+            <View style={{ width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center',
+              alignItems: haptics ? 'flex-end' : 'flex-start', backgroundColor: haptics ? p.tint : p.fill }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: haptics ? p.onTint : p.card }} />
+            </View>
+          </Pressable>
+        </Group>
+
         <SectionTitle>事業・精算</SectionTitle>
         <Group>
+          <Row title="カテゴリ" icon={{ ios: 'tag', android: 'label' }} subtitle="名前・アイコン・色を設定"
+            onPress={() => router.push('/categories')} chevron />
+          <Row
+            icon={{ ios: 'folder', android: 'folder' }}
+            title="家計グループ"
+            subtitle="個人・家庭・事業などを管理"
+            onPress={() => router.push('/settings/ledgers')}
+            chevron
+          />
           <Row
             icon={{ ios: 'arrow.uturn.backward.circle', android: 'undo' }}
             title="立て替え"
@@ -56,6 +84,11 @@ export default function Settings() {
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
         </Text>
+
+        <Group>
+          <Row title="データ管理" icon={{ ios: 'externaldrive', android: 'storage' }}
+            subtitle="初期化・サンプルデータ" chevron onPress={() => router.push('/settings/data')} />
+        </Group>
 
         <SectionTitle>情報</SectionTitle>
         <Group>

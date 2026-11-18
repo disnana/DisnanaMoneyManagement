@@ -1,68 +1,76 @@
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { groupTransactionsByDate } from '@dmm/core/utils/metrics';
+import { Stack, router } from 'expo-router';
+import type { TransactionType } from '@dmm/core/types/finance';
 import { formatJPY, formatMonthLabel } from '@dmm/core/utils/format';
+import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { useFinance } from '@/lib/store';
+import { Group, Segmented } from '@/ui/kit';
+import { TxGroups } from '@/ui/TxGroups';
+import { LedgerPicker } from '@/ui/LedgerPicker';
+import { HeaderAction } from '@/ui/HeaderAction';
+import { MonthScreen } from '@/ui/MonthScreen';
+import { TransactionCalendar } from '@/ui/TransactionCalendar';
 import { usePalette } from '@/lib/theme';
-import { Group, MonthBar, Screen, Segmented } from '@/ui/kit';
-import { TxRow } from '@/ui/TxRow';
 
-type Filter = 'all' | 'expense' | 'income' | 'transfer';
+type Filter = 'all' | TransactionType;
 
 export default function Transactions() {
-  const p = usePalette();
-  const { state, month, setMonth } = useFinance();
-  const [filter, setFilter] = useState<Filter>('all');
+  const [calendar, setCalendar] = useState(false);
+  return (
+    <>
+      <Stack.Screen options={{ headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <HeaderAction name={{ ios: 'magnifyingglass', android: 'search' }} label="取引を検索" onPress={() => router.push('/search')} />
+          <HeaderAction name={{ ios: 'list.bullet', android: 'view_list' }} label="一覧表示" selected={!calendar} onPress={() => setCalendar(false)} />
+          <HeaderAction name={{ ios: 'calendar', android: 'calendar_month' }} label="カレンダー表示" selected={calendar} onPress={() => setCalendar(true)} />
+        </View>
+      ) }} />
+      <MonthScreen>{(month, isPreview) => <TransactionsMonth month={month} calendar={calendar} isPreview={isPreview} />}</MonthScreen>
+    </>
+  );
+}
 
-  const groups = useMemo(() => {
-    const list = state.transactions.filter(
-      (t) => t.date.slice(0, 7) === month && (filter === 'all' || t.type === filter)
-    );
-    return groupTransactionsByDate(list);
-  }, [state.transactions, month, filter]);
+function TransactionsMonth({ month, calendar, isPreview }: { month: string; calendar: boolean; isPreview: boolean }) {
+  const { visibleState, transactionFilter, setTransactionFilter } = useFinance();
+  const p = usePalette();
+  const totals = computeMonthMetrics(visibleState, month);
+  const monthTransactions = useMemo(
+    () => visibleState.transactions.filter((tx) => tx.date.startsWith(month)),
+    [visibleState.transactions, month]
+  );
+  const transactions = transactionFilter === 'all' ? monthTransactions : monthTransactions.filter((tx) => tx.type === transactionFilter);
 
   return (
-    <Screen>
-      <MonthBar month={month} onChange={setMonth} />
-      <Segmented<Filter>
-        value={filter}
-        onChange={setFilter}
+    <>
+      <LedgerPicker />
+      {!calendar ? <Segmented<Filter>
+        value={transactionFilter}
+        onChange={setTransactionFilter}
         options={[
           { id: 'all', label: 'すべて' },
           { id: 'expense', label: '支出' },
           { id: 'income', label: '収入' },
           { id: 'transfer', label: '振替' },
         ]}
-      />
+      /> : null}
 
-      {groups.length === 0 ? (
-        <View style={{ padding: 40, alignItems: 'center' }}>
-          <Text style={{ color: p.textSecondary }}>{formatMonthLabel(month)}の取引はありません</Text>
-        </View>
-      ) : (
-        groups.map((g) => {
-          const d = new Date(`${g.date}T00:00:00`);
-          const weekday = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
-          return (
-            <View key={g.date} style={{ gap: 8 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-                <Text style={{ color: p.textSecondary, fontSize: 13, fontWeight: '700' }}>
-                  {d.getMonth() + 1}月{d.getDate()}日（{weekday}）
-                </Text>
-                <Text style={{ color: p.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] }}>
-                  {g.net >= 0 ? '+' : '-'}
-                  {formatJPY(Math.abs(g.net))}
-                </Text>
-              </View>
-              <Group>
-                {g.items.map((tx) => (
-                  <TxRow key={tx.id} tx={tx} />
-                ))}
-              </Group>
+      <Group>
+        <View style={{ flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, gap: 8 }}>
+          {[{ label: '収入', value: totals.income, color: p.income },
+            { label: '支出', value: totals.expense, color: p.danger },
+            { label: '収支', value: totals.net, color: p.text }].map(({ label, value, color }) => (
+            <View key={label} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+              <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 17, fontWeight: '700' }}>{formatJPY(value)}</Text>
             </View>
-          );
-        })
-      )}
-    </Screen>
+          ))}
+        </View>
+      </Group>
+      {calendar
+        ? <TransactionCalendar month={month} transactions={monthTransactions} isPreview={isPreview} />
+        : <TxGroups transactions={isPreview ? transactions.slice(0, 18) : transactions}
+          empty={`${formatMonthLabel(month)}の該当する取引はありません`} />}
+    </>
   );
 }

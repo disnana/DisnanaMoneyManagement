@@ -1,18 +1,20 @@
 import { Stack } from 'expo-router';
-import { AddButton } from '@/ui/AddButton';
+import { usePalette } from '@/lib/theme';
+import type { TabStackProps } from './StackLayout';
 
-/** iOS: compact inline title over a translucent blurred navigation bar (keeps the top tight). */
-export function TabStack({ title }: { title: string }) {
+/** iOS: inline native title with an opaque header above each screen. */
+export function TabStack({ title, indexOptions }: TabStackProps) {
+  const p = usePalette();
   return (
     <Stack
       screenOptions={{
         headerLargeTitleEnabled: false,
-        headerTransparent: true,
-        headerBlurEffect: 'systemMaterial',
+        headerStyle: { backgroundColor: p.bg },
+        headerTintColor: p.text,
         headerLargeTitleShadowVisible: false,
         headerShadowVisible: false,
       }}>
-      <Stack.Screen name="index" options={{ title, headerRight: () => <AddButton /> }} />
+      <Stack.Screen name="index" options={{ title, ...indexOptions }} />
     </Stack>
   );
 }
