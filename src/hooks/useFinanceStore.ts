@@ -8,12 +8,18 @@ import {
   Transaction,
 } from '../types/finance';
 import { createInitialSeedData } from '../data/seedData';
-import { getCurrentMonthKey, getEffectiveOutflow } from '../utils/format';
+import {
+  getCurrentMonthKey,
+  getEffectiveOutflow,
+  getTransferTotalFees,
+} from '../utils/format';
 
 const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
 const VALID_ACCOUNT_TYPES = new Set([
   'bank',
+  'psp',
+  'foreign_bank',
   'credit',
   'debit',
   'cash',
@@ -154,7 +160,7 @@ export function useFinanceStore() {
         }
       } else if (tx.type === 'transfer') {
         if (map[tx.accountId] !== undefined) {
-          map[tx.accountId] -= tx.amount + (tx.transferFee ?? 0);
+          map[tx.accountId] -= tx.amount + getTransferTotalFees(tx);
         }
         if (tx.toAccountId && map[tx.toAccountId] !== undefined) {
           map[tx.toAccountId] += tx.amount;
@@ -184,6 +190,18 @@ export function useFinanceStore() {
     }));
   }, []);
 
+  const addTransactionsBatch = useCallback((items: Omit<Transaction, 'id'>[]) => {
+    const now = Date.now();
+    const created: Transaction[] = items.map((tx, idx) => ({
+      ...tx,
+      id: `tx_${now}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+    }));
+    setState((prev) => ({
+      ...prev,
+      transactions: [...created, ...prev.transactions],
+    }));
+  }, []);
+
   const updateTransaction = useCallback(
     (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
       setState((prev) => ({
@@ -200,6 +218,13 @@ export function useFinanceStore() {
     setState((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((tx) => tx.id !== id),
+    }));
+  }, []);
+
+  const deleteSettlementGroup = useCallback((groupId: string) => {
+    setState((prev) => ({
+      ...prev,
+      transactions: prev.transactions.filter((tx) => tx.settlementGroupId !== groupId),
     }));
   }, []);
 
@@ -353,8 +378,10 @@ export function useFinanceStore() {
     totalAssets,
     accountNameMap,
     addTransaction,
+    addTransactionsBatch,
     updateTransaction,
     deleteTransaction,
+    deleteSettlementGroup,
     addAccount,
     updateAccount,
     deleteAccount,

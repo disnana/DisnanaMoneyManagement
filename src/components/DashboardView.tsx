@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, CreditCard } from 'lucide-react';
+import { ChevronRight, Plus, CreditCard } from 'lucide-react';
 import { FinanceState, NavSection, Transaction } from '../types/finance';
 import { getCategoryById } from '../data/categories';
 import {
@@ -10,9 +10,11 @@ import {
   formatSignedJPY,
   getCurrentMonthKey,
   getRecentMonths,
+  getTransferTotalFees,
   shiftMonth,
 } from '../utils/format';
 import { computeCreditCardSummary } from '../utils/creditCard';
+import { MonthSwitcherBar } from './MonthSwitcherBar';
 
 interface DashboardViewProps {
   state: FinanceState;
@@ -57,17 +59,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           expense += tx.amount;
           categoryExpenseMap[tx.categoryId] =
             (categoryExpenseMap[tx.categoryId] ?? 0) + tx.amount;
-        } else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-          const fee = tx.transferFee ?? 0;
-          expense += fee;
-          categoryExpenseMap['transfer_fee'] =
-            (categoryExpenseMap['transfer_fee'] ?? 0) + fee;
+        } else if (tx.type === 'transfer') {
+          const fee = getTransferTotalFees(tx);
+          if (fee > 0) {
+            expense += fee;
+            categoryExpenseMap['transfer_fee'] =
+              (categoryExpenseMap['transfer_fee'] ?? 0) + fee;
+          }
         }
       } else if (m === prevMonth) {
         if (tx.type === 'income') prevIncome += tx.amount;
         else if (tx.type === 'expense') prevExpense += tx.amount;
-        else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-          prevExpense += tx.transferFee ?? 0;
+        else if (tx.type === 'transfer') {
+          prevExpense += getTransferTotalFees(tx);
         }
       }
     }
@@ -112,8 +116,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (map[m]) {
         if (tx.type === 'income') map[m].income += tx.amount;
         else if (tx.type === 'expense') map[m].expense += tx.amount;
-        else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-          map[m].expense += tx.transferFee ?? 0;
+        else if (tx.type === 'transfer') {
+          const fee = getTransferTotalFees(tx);
+          if (fee > 0) map[m].expense += fee;
         }
       }
     }
@@ -194,27 +199,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex flex-1 items-center justify-between rounded-xl border border-slate-200 bg-white sm:flex-initial">
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
-              aria-label="前の月"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[108px] px-3 text-center font-mono text-sm font-semibold text-slate-900 tabular-nums whitespace-nowrap">
-              {formatMonthLabel(selectedMonth)}
-            </span>
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 active:scale-95"
-              aria-label="次の月"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <MonthSwitcherBar
+            selectedMonth={selectedMonth}
+            onChangeMonth={onChangeMonth}
+            className="flex-1 sm:flex-initial"
+          />
           {selectedMonth !== currentRealMonth && (
             <button
               type="button"
@@ -697,9 +686,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         >
                           {formatSignedJPY(tx.amount, tx.type)}
                         </div>
-                        {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                        {tx.type === 'transfer' && getTransferTotalFees(tx) > 0 && (
                           <div className="font-mono text-[11px] text-slate-400 tabular-nums">
-                            手数料 {formatJPY(tx.transferFee ?? 0)}
+                            手数料 {formatJPY(getTransferTotalFees(tx))}
                           </div>
                         )}
                         {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (

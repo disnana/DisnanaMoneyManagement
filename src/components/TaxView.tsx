@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Download, Plus, AlertCircle, ChevronRight } from 'lucide-react';
+import { Download, Plus, AlertCircle, ChevronRight, Globe } from 'lucide-react';
 import { Account, Transaction } from '../types/finance';
 import {
   INCOME_TAX_CATEGORY_LABELS,
@@ -8,9 +8,11 @@ import {
 } from '../data/categories';
 import {
   exportTransactionsToCSV,
+  formatForeignCurrency,
   formatFullDate,
   formatJPY,
   getDeductibleBusinessAmount,
+  getTransferTotalFees,
 } from '../utils/format';
 
 interface TaxViewProps {
@@ -19,6 +21,7 @@ interface TaxViewProps {
   accountNameMap: Record<string, string>;
   onOpenAddBusinessExpense: () => void;
   onOpenAddIncome: () => void;
+  onOpenFxPayout: () => void;
   onEditTransaction: (tx: Transaction) => void;
 }
 
@@ -27,6 +30,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
   accountNameMap,
   onOpenAddBusinessExpense,
   onOpenAddIncome,
+  onOpenFxPayout,
   onEditTransaction,
 }) => {
   const availableYears = useMemo(() => {
@@ -54,12 +58,20 @@ export const TaxView: React.FC<TaxViewProps> = ({
     let miscIncomeOnly = 0;
     let totalDeductibleExpense = 0;
 
+    // Foreign & Stripe fee & P&L metrics
+    let fxGrossRevenueJpy = 0;
+    let fxPlatformFeesJpy = 0;
+    let fxStripeConversionFeesJpy = 0;
+    let fxNetDepositJpy = 0;
+    let totalPaymentFeesDeductible = 0;
+
     const incomeByTaxCategory: Record<string, { amount: number; count: number; withholding: number }> = {};
     const incomeByReceiptMethod: Record<string, { amount: number; count: number }> = {};
     const expenseBySubject: Record<string, { gross: number; deductible: number; count: number }> = {};
 
     const giftAndMiscList: Transaction[] = [];
     const businessExpenseList: Transaction[] = [];
+    const fxPayoutList: Transaction[] = [];
 
     for (const tx of yearTransactions) {
       if (tx.type === 'income') {
@@ -89,11 +101,27 @@ export const TaxView: React.FC<TaxViewProps> = ({
         incomeByReceiptMethod[method].count += 1;
 
         if (
+          tx.foreignCurrency ||
+          method === 'stripe_payout' ||
+          method === 'foreign_fx'
+        ) {
+          fxGrossRevenueJpy += tx.amount;
+          const pFee = tx.platformTransferFee ?? 0;
+          const sFee = tx.fxConversionFee ?? 0;
+          fxPlatformFeesJpy += pFee;
+          fxStripeConversionFeesJpy += sFee;
+          fxNetDepositJpy += tx.netJpyAmount ?? Math.max(0, tx.amount - pFee - sFee);
+          fxPayoutList.push(tx);
+        }
+
+        if (
           taxCat === 'miscellaneous' ||
           taxCat === 'business' ||
           method === 'amazon_gift' ||
           method === 'other_gift' ||
-          method === 'points'
+          method === 'points' ||
+          method === 'stripe_payout' ||
+          method === 'foreign_fx'
         ) {
           giftAndMiscList.push(tx);
         }
@@ -105,6 +133,9 @@ export const TaxView: React.FC<TaxViewProps> = ({
             tx.accountingSubject ??
             getCategoryById(tx.categoryId).defaultAccountingSubject ??
             '雑費';
+          if (subj === '支払手数料') {
+            totalPaymentFeesDeductible += deductible;
+          }
           if (!expenseBySubject[subj]) {
             expenseBySubject[subj] = { gross: 0, deductible: 0, count: 0 };
           }
@@ -113,26 +144,26 @@ export const TaxView: React.FC<TaxViewProps> = ({
           expenseBySubject[subj].count += 1;
           businessExpenseList.push(tx);
         }
-      } else if (
-        tx.type === 'transfer' &&
-        (tx.transferFee ?? 0) > 0 &&
-        tx.scope === 'business'
-      ) {
-        const fee = tx.transferFee ?? 0;
-        totalDeductibleExpense += fee;
-        if (!expenseBySubject['支払手数料']) {
-          expenseBySubject['支払手数料'] = { gross: 0, deductible: 0, count: 0 };
+      } else if (tx.type === 'transfer' && tx.scope === 'business') {
+        const fee = getTransferTotalFees(tx);
+        if (fee > 0) {
+          totalDeductibleExpense += fee;
+          totalPaymentFeesDeductible += fee;
+          if (!expenseBySubject['支払手数料']) {
+            expenseBySubject['支払手数料'] = { gross: 0, deductible: 0, count: 0 };
+          }
+          expenseBySubject['支払手数料'].gross += fee;
+          expenseBySubject['支払手数料'].deductible += fee;
+          expenseBySubject['支払手数料'].count += 1;
+          businessExpenseList.push(tx);
         }
-        expenseBySubject['支払手数料'].gross += fee;
-        expenseBySubject['支払手数料'].deductible += fee;
-        expenseBySubject['支払手数料'].count += 1;
-        businessExpenseList.push(tx);
       }
     }
 
-    const estimatedBusinessNet = Math.max(
+    const estimatedBusinessNet = businessAndMiscIncome - totalDeductibleExpense;
+    const otherBusinessExpenses = Math.max(
       0,
-      businessAndMiscIncome - totalDeductibleExpense
+      totalDeductibleExpense - totalPaymentFeesDeductible
     );
 
     return {
@@ -141,7 +172,13 @@ export const TaxView: React.FC<TaxViewProps> = ({
       businessAndMiscIncome,
       miscIncomeOnly,
       totalDeductibleExpense,
+      totalPaymentFeesDeductible,
+      otherBusinessExpenses,
       estimatedBusinessNet,
+      fxGrossRevenueJpy,
+      fxPlatformFeesJpy,
+      fxStripeConversionFeesJpy,
+      fxNetDepositJpy,
       incomeByTaxCategory: Object.entries(incomeByTaxCategory).sort(
         (a, b) => b[1].amount - a[1].amount
       ),
@@ -155,6 +192,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
       businessExpenseList: businessExpenseList.sort((a, b) =>
         b.date.localeCompare(a.date)
       ),
+      fxPayoutList: fxPayoutList.sort((a, b) => b.date.localeCompare(a.date)),
     };
   }, [yearTransactions]);
 
@@ -212,71 +250,86 @@ export const TaxView: React.FC<TaxViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
             <button
               type="button"
-              onClick={onOpenAddIncome}
-              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+              onClick={onOpenFxPayout}
+              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50/70 px-3 text-xs font-semibold text-teal-900 transition-all hover:bg-teal-100 active:scale-[0.98] whitespace-nowrap"
             >
-              <Plus className="h-4 w-4 shrink-0" />
-              <span>報酬・ギフト記録</span>
+              <Globe className="h-4 w-4 shrink-0" />
+              <span>外貨・Stripe入金</span>
             </button>
 
-            <button
-              type="button"
-              onClick={onOpenAddBusinessExpense}
-              className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-3.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
-            >
-              <Plus className="h-4 w-4 shrink-0" />
-              <span>事業経費を登録</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-2.5">
+              <button
+                type="button"
+                onClick={onOpenAddIncome}
+                className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] whitespace-nowrap"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span>報酬・ギフト記録</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenAddBusinessExpense}
+                className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-3.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
+              >
+                <Plus className="h-4 w-4 shrink-0" />
+                <span>事業経費を登録</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* KPI Strip */}
+      {/* KPI Strip: Gross Revenue, Payment Fees, Business Expenses & Net Profit */}
       <section className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4">
         <div className="p-5">
           <div className="text-xs font-medium text-slate-500">
-            {selectedYear}年 総収入額
+            {selectedYear}年 総売上高（事業・雑所得計）
           </div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
-            {formatJPY(taxSummary.totalIncome)}
+            {formatJPY(taxSummary.businessAndMiscIncome)}
           </div>
           <div className="mt-1 text-xs text-slate-500 tabular-nums">
-            うち源泉徴収済 {formatJPY(taxSummary.totalWithholding)}
+            全収入合計 {formatJPY(taxSummary.totalIncome)} · 源泉 {formatJPY(taxSummary.totalWithholding)}
           </div>
         </div>
 
         <div className="p-5">
           <div className="text-xs font-medium text-slate-500">
-            事業・雑所得 収入計
+            支払手数料（外貨移行・Stripe為替）
           </div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
-            {formatJPY(taxSummary.businessAndMiscIncome)}
+          <div className="mt-1.5 font-mono text-2xl font-bold text-red-600 tabular-nums">
+            {formatJPY(taxSummary.totalPaymentFeesDeductible)}
           </div>
           <div className="mt-1 text-xs text-slate-500 tabular-nums">
-            うち雑所得 {formatJPY(taxSummary.miscIncomeOnly)}
+            うち外貨移行 {formatJPY(taxSummary.fxPlatformFeesJpy)} · Stripe為替 {formatJPY(taxSummary.fxStripeConversionFeesJpy)}
           </div>
         </div>
 
         <div className="p-5 sm:border-t sm:border-slate-200 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">
-            算入経費合計（按分後）
+            算入経費合計（手数料＋按分経費）
           </div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-slate-900 tabular-nums">
             {formatJPY(taxSummary.totalDeductibleExpense)}
           </div>
-          <div className="mt-1 text-xs text-slate-500">
-            勘定科目 {taxSummary.expenseBySubject.length}科目
+          <div className="mt-1 text-xs text-slate-500 tabular-nums">
+            その他経費 {formatJPY(taxSummary.otherBusinessExpenses)} · {taxSummary.expenseBySubject.length}科目
           </div>
         </div>
 
         <div className="p-5 sm:border-t sm:border-slate-200 lg:border-t-0">
           <div className="text-xs font-medium text-slate-500">
-            事業・雑 差引所得（目安）
+            純利益 / 差引課税対象所得（目安）
           </div>
-          <div className="mt-1.5 font-mono text-2xl font-bold text-teal-800 tabular-nums">
+          <div
+            className={`mt-1.5 font-mono text-2xl font-bold tabular-nums ${
+              taxSummary.estimatedBusinessNet >= 0 ? 'text-teal-800' : 'text-red-600'
+            }`}
+          >
             {formatJPY(taxSummary.estimatedBusinessNet)}
           </div>
           <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
@@ -291,6 +344,89 @@ export const TaxView: React.FC<TaxViewProps> = ({
           </div>
         </div>
       </section>
+
+      {/* Foreign Currency & Stripe Settlement Audit Section */}
+      {taxSummary.fxPayoutList.length > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 sm:px-6 sm:py-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                外貨・Stripe決済 損益監査明細 ({taxSummary.fxPayoutList.length}件)
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">
+                総売上 {formatJPY(taxSummary.fxGrossRevenueJpy)} − 控除手数料{' '}
+                {formatJPY(taxSummary.fxPlatformFeesJpy + taxSummary.fxStripeConversionFeesJpy)} ＝ 銀行純入金額{' '}
+                {formatJPY(taxSummary.fxNetDepositJpy)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenFxPayout}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-teal-800 hover:bg-slate-50 active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              <span>外貨入金を記録</span>
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {taxSummary.fxPayoutList.map((tx) => {
+              const fee1 = tx.platformTransferFee ?? 0;
+              const fee2 = tx.fxConversionFee ?? 0;
+              const netJpy = tx.netJpyAmount ?? Math.max(0, tx.amount - fee1 - fee2);
+              return (
+                <button
+                  key={tx.id}
+                  type="button"
+                  onClick={() => onEditTransaction(tx)}
+                  className="flex min-h-[64px] w-full flex-col gap-2 px-4 py-3.5 text-left transition-colors hover:bg-slate-50 active:bg-slate-100/70 sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-slate-900 break-words">
+                      {tx.title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-xs text-slate-500 tabular-nums">
+                      <span>{formatFullDate(tx.date)}</span>
+                      {tx.foreignCurrency && tx.foreignGrossAmount !== undefined && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="font-semibold text-slate-700">
+                            {formatForeignCurrency(tx.foreignGrossAmount, tx.foreignCurrency)}
+                          </span>
+                        </>
+                      )}
+                      {tx.fxRate && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>@¥{tx.fxRate}</span>
+                        </>
+                      )}
+                      {(fee1 > 0 || fee2 > 0) && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className="text-red-600">
+                            手数料 -{formatJPY(fee1 + fee2)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center justify-between gap-3 sm:justify-end">
+                    <div className="text-right font-mono tabular-nums">
+                      <div className="text-xs text-slate-500">
+                        総売上 {formatJPY(tx.amount)}
+                      </div>
+                      <div className="text-sm font-bold text-emerald-700">
+                        純入金額 {formatJPY(netJpy)}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Income Tax & Receipt Breakdown */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

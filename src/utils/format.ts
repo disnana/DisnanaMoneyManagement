@@ -1,5 +1,6 @@
-import { Transaction } from '../types/finance';
+import { CurrencyCode, Transaction } from '../types/finance';
 import {
+  CURRENCY_META,
   getCategoryById,
   INCOME_TAX_CATEGORY_LABELS,
   RECEIPT_METHOD_LABELS,
@@ -11,6 +12,15 @@ export function formatJPY(amount: number): string {
   const abs = Math.abs(Math.round(amount));
   const formatted = jpyFormatter.format(abs);
   return amount < 0 ? `-¥${formatted}` : `¥${formatted}`;
+}
+
+export function formatForeignCurrency(amount: number, currency: CurrencyCode): string {
+  const meta = CURRENCY_META[currency] ?? CURRENCY_META.USD;
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: currency === 'JPY' ? 0 : 2,
+    maximumFractionDigits: currency === 'JPY' ? 0 : 2,
+  }).format(Math.abs(amount));
+  return `${amount < 0 ? '-' : ''}${meta.symbol}${formatted} ${meta.code}`;
 }
 
 export function formatSignedJPY(
@@ -90,9 +100,14 @@ export function getEffectiveOutflow(tx: Transaction): number {
   return tx.amount;
 }
 
+export function getTransferTotalFees(tx: Transaction): number {
+  if (tx.type !== 'transfer') return 0;
+  return (tx.transferFee ?? 0) + (tx.platformTransferFee ?? 0) + (tx.fxConversionFee ?? 0);
+}
+
 export function getDeductibleBusinessAmount(tx: Transaction): number {
-  if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && tx.scope === 'business') {
-    return tx.transferFee ?? 0;
+  if (tx.type === 'transfer' && tx.scope === 'business') {
+    return getTransferTotalFees(tx);
   }
   if (tx.type !== 'expense') return 0;
   const ratio = tx.businessRatio ?? (tx.scope === 'business' ? 100 : 0);
@@ -119,6 +134,12 @@ export function exportTransactionsToCSV(
     'ポイント充当(円)',
     '実支払・請求額(円)',
     '振替手数料(円)',
+    '第1段階移行手数料(円)',
+    '第2段階為替・Stripe手数料(円)',
+    '銀行純入金額(円)',
+    '外貨通貨',
+    '外貨額面',
+    '適用為替レート',
     '家事按分率(%)',
     '事業経費算入額(円)',
     '所得区分',
@@ -157,6 +178,12 @@ export function exportTransactionsToCSV(
       String(tx.pointUsed ?? 0),
       String(tx.type === 'expense' ? -netAmount : netAmount),
       String(tx.transferFee ?? 0),
+      String(tx.platformTransferFee ?? 0),
+      String(tx.fxConversionFee ?? 0),
+      String(tx.netJpyAmount ?? ''),
+      tx.foreignCurrency ?? '',
+      tx.foreignGrossAmount !== undefined ? String(tx.foreignGrossAmount) : '',
+      tx.fxRate !== undefined ? String(tx.fxRate) : '',
       String(ratio),
       String(deductible),
       tx.incomeTaxCategory ? INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory] : '',

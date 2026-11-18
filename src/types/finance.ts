@@ -1,7 +1,11 @@
 export type TransactionType = 'expense' | 'income' | 'transfer';
 
+export type CurrencyCode = 'JPY' | 'USD' | 'EUR' | 'GBP' | 'AUD';
+
 export type AccountType =
   | 'bank'
+  | 'psp'
+  | 'foreign_bank'
   | 'credit'
   | 'debit'
   | 'cash'
@@ -14,6 +18,8 @@ export type TransactionScope = 'personal' | 'business';
 
 export type ReceiptMethod =
   | 'bank_transfer'
+  | 'stripe_payout'
+  | 'foreign_fx'
   | 'cash'
   | 'amazon_gift'
   | 'other_gift'
@@ -43,6 +49,8 @@ export interface Account {
   type: AccountType;
   usageScope?: AccountUsageScope; // 個人用 / 業務用 / 家庭用
   initialBalance: number;
+  currency?: CurrencyCode; // 通貨 (デフォルト JPY)
+  fxRateToJpy?: number; // 参考円換算レート
   institution?: string;
   note?: string;
   // Credit card billing & limit settings (type === 'credit')
@@ -76,6 +84,14 @@ export interface Transaction {
   withholdingTax?: number;
   isPrepayment?: boolean;
   targetBillingMonth?: string;
+  // Foreign currency & Stripe multi-stage payout metadata
+  foreignCurrency?: CurrencyCode;
+  foreignGrossAmount?: number;
+  fxRate?: number;
+  platformTransferFee?: number; // 第1段階: 海外プラットフォーム→Stripe移行手数料(円)
+  fxConversionFee?: number; // 第2段階: Stripe為替・出金手数料(円)
+  netJpyAmount?: number; // 銀行最終純入金額(円)
+  settlementGroupId?: string; // 一括入金バッチ識別子
 }
 
 export interface Budget {

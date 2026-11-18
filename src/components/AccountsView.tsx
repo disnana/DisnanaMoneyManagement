@@ -14,11 +14,24 @@ import {
   ChevronUp,
   CheckCircle2,
   Banknote,
+  Globe,
+  Repeat,
 } from 'lucide-react';
-import { Account, AccountType, AccountUsageScope, Transaction } from '../types/finance';
-import { ACCOUNT_TYPE_LABELS, ACCOUNT_USAGE_LABELS } from '../data/categories';
+import {
+  Account,
+  AccountType,
+  AccountUsageScope,
+  CurrencyCode,
+  Transaction,
+} from '../types/finance';
+import {
+  ACCOUNT_TYPE_LABELS,
+  ACCOUNT_USAGE_LABELS,
+  CURRENCY_META,
+} from '../data/categories';
 import {
   formatDayLabel,
+  formatForeignCurrency,
   formatFullDate,
   formatJPY,
   formatMonthLabel,
@@ -44,6 +57,8 @@ interface AccountsViewProps {
 
 const ACCOUNT_ICONS: Record<AccountType, React.ComponentType<{ className?: string }>> = {
   bank: Landmark,
+  psp: Repeat,
+  foreign_bank: Globe,
   credit: CreditCard,
   debit: Banknote,
   cash: Wallet,
@@ -53,12 +68,16 @@ const ACCOUNT_ICONS: Record<AccountType, React.ComponentType<{ className?: strin
 
 const ALL_ACCOUNT_TYPES: AccountType[] = [
   'bank',
+  'psp',
+  'foreign_bank',
   'credit',
   'debit',
   'cash',
   'emoney',
   'investment',
 ];
+
+const CURRENCY_OPTIONS: CurrencyCode[] = ['JPY', 'USD', 'EUR', 'GBP', 'AUD'];
 
 const USAGE_SCOPES: AccountUsageScope[] = ['personal', 'household', 'business'];
 
@@ -80,6 +99,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const [type, setType] = useState<AccountType>('bank');
   const [usageScope, setUsageScope] = useState<AccountUsageScope>('personal');
   const [initialBalance, setInitialBalance] = useState('0');
+  const [currency, setCurrency] = useState<CurrencyCode>('JPY');
+  const [fxRateToJpy, setFxRateToJpy] = useState('152');
   const [institution, setInstitution] = useState('');
   const [note, setNote] = useState('');
 
@@ -167,8 +188,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setEditingAccount(null);
     setName('');
     setType(presetType);
-    setUsageScope('personal');
+    setUsageScope(presetType === 'psp' || presetType === 'foreign_bank' ? 'business' : 'personal');
     setInitialBalance('0');
+    setCurrency(presetType === 'foreign_bank' ? 'USD' : 'JPY');
+    setFxRateToJpy('152');
     setInstitution('');
     setNote('');
     setClosingDay('15');
@@ -185,6 +208,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setType(acc.type);
     setUsageScope(acc.usageScope ?? 'personal');
     setInitialBalance(String(acc.initialBalance));
+    setCurrency(acc.currency ?? 'JPY');
+    setFxRateToJpy(String(acc.fxRateToJpy ?? CURRENCY_META[acc.currency ?? 'USD'].defaultRate));
     setInstitution(acc.institution ?? '');
     setNote(acc.note ?? '');
     setClosingDay(String(acc.closingDay ?? 31));
@@ -202,11 +227,18 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
     const initVal = Number(initialBalance) || 0;
+    const isFxCapable = type === 'psp' || type === 'foreign_bank';
+    const effectiveCurrency: CurrencyCode = isFxCapable ? currency : 'JPY';
     const payload: Omit<Account, 'id'> = {
       name: name.trim(),
       type,
       usageScope,
       initialBalance: type === 'debit' ? 0 : Math.round(initVal),
+      currency: isFxCapable ? effectiveCurrency : undefined,
+      fxRateToJpy:
+        isFxCapable && effectiveCurrency !== 'JPY'
+          ? Math.max(0.1, Number(fxRateToJpy) || CURRENCY_META[effectiveCurrency].defaultRate)
+          : undefined,
       institution: institution.trim() || undefined,
       note: note.trim() || undefined,
       ...(type === 'credit'
@@ -249,6 +281,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2.5">
           <button
             type="button"
+            onClick={() => onOpenPrefilledTransaction({ mode: 'fx_payout' })}
+            className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50/70 px-3.5 text-xs font-semibold text-teal-900 transition-all hover:bg-teal-100 active:scale-[0.98] whitespace-nowrap"
+          >
+            <Globe className="h-4 w-4 shrink-0" />
+            <span>外貨・Stripe入金</span>
+          </button>
+          <button
+            type="button"
             onClick={() => onOpenPrefilledTransaction({ type: 'transfer' })}
             disabled={accounts.length < 2}
             className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
@@ -267,7 +307,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           <button
             type="button"
             onClick={() => openAdd('bank')}
-            className="col-span-2 inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-4 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] sm:col-span-1 whitespace-nowrap"
+            className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-teal-700 px-4 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
           >
             <Plus className="h-4 w-4 shrink-0" />
             <span>口座を追加</span>
@@ -831,7 +871,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       {/* Non-Card Accounts Grid */}
       <section className="space-y-4">
         <h3 className="text-lg font-bold tracking-tight text-slate-900">
-          銀行口座・現金・電子マネー・投資口座
+          銀行口座・決済サービス・外貨・現金・投資口座
         </h3>
 
         {nonCardAccounts.length === 0 ? (
@@ -844,6 +884,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               const Icon = ACCOUNT_ICONS[acc.type] ?? Landmark;
               const balance = accountBalances[acc.id] ?? acc.initialBalance;
               const scopeLabel = ACCOUNT_USAGE_LABELS[acc.usageScope ?? 'personal'];
+              const accCurrency = acc.currency ?? 'JPY';
+              const accRate =
+                acc.fxRateToJpy ?? CURRENCY_META[accCurrency]?.defaultRate ?? 1;
+              const foreignApprox =
+                accCurrency !== 'JPY' && accRate > 0 ? balance / accRate : null;
 
               return (
                 <article
@@ -864,6 +909,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                             <span>{ACCOUNT_TYPE_LABELS[acc.type] ?? acc.type}</span>
                             <span aria-hidden="true">·</span>
                             <span className="font-medium text-teal-800">{scopeLabel}</span>
+                            {accCurrency !== 'JPY' && (
+                              <>
+                                <span aria-hidden="true">·</span>
+                                <span className="font-mono font-medium text-slate-700">
+                                  {accCurrency}
+                                </span>
+                              </>
+                            )}
                             {acc.institution && (
                               <>
                                 <span aria-hidden="true">·</span>
@@ -904,27 +957,50 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                   </div>
 
                   <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3.5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onOpenPrefilledTransaction({
-                          type: 'expense',
-                          accountId: acc.id,
-                          scope: acc.usageScope === 'business' ? 'business' : 'personal',
-                        })
-                      }
-                      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98] whitespace-nowrap"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>この口座で記録</span>
-                    </button>
-                    <span
-                      className={`font-mono text-xl font-bold tabular-nums ${
-                        balance < 0 ? 'text-red-600' : 'text-slate-900'
-                      }`}
-                    >
-                      {formatJPY(balance)}
-                    </span>
+                    {acc.type === 'psp' || acc.type === 'foreign_bank' ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenPrefilledTransaction({
+                            mode: 'fx_payout',
+                            accountId: acc.id,
+                          })
+                        }
+                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50/70 px-3.5 text-xs font-semibold text-teal-800 transition-all hover:bg-teal-100 active:scale-[0.98] whitespace-nowrap"
+                      >
+                        <Globe className="h-3.5 w-3.5" />
+                        <span>一括入金記帳</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenPrefilledTransaction({
+                            type: 'expense',
+                            accountId: acc.id,
+                            scope: acc.usageScope === 'business' ? 'business' : 'personal',
+                          })
+                        }
+                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 text-xs font-semibold text-teal-700 transition-all hover:bg-slate-100 active:scale-[0.98] whitespace-nowrap"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>この口座で記録</span>
+                      </button>
+                    )}
+                    <div className="text-right">
+                      <span
+                        className={`block font-mono text-xl font-bold tabular-nums ${
+                          balance < 0 ? 'text-red-600' : 'text-slate-900'
+                        }`}
+                      >
+                        {formatJPY(balance)}
+                      </span>
+                      {foreignApprox !== null && (
+                        <span className="mt-0.5 block font-mono text-[11px] text-slate-500 tabular-nums">
+                          ≈ {formatForeignCurrency(foreignApprox, accCurrency)} (@¥{accRate})
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </article>
               );
@@ -1039,6 +1115,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                     ? '例: 楽天カード（家庭用）'
                     : type === 'debit'
                     ? '例: 事業用Visaデビット'
+                    : type === 'psp'
+                    ? '例: Stripe決済アカウント'
+                    : type === 'foreign_bank'
+                    ? '例: 海外ドル受取口座'
                     : '例: 三菱UFJ銀行（普通）'
                 }
                 className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
@@ -1050,18 +1130,66 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 htmlFor="acc-inst"
                 className="block text-xs font-medium text-slate-600"
               >
-                金融機関・発行会社（任意）
+                金融機関・サービス名（任意）
               </label>
               <input
                 id="acc-inst"
                 type="text"
                 value={institution}
                 onChange={(e) => setInstitution(e.target.value)}
-                placeholder="例: 三井住友カード、みずほ銀行"
+                placeholder="例: Stripe、Wise、みずほ銀行"
                 className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
               />
             </div>
           </div>
+
+          {/* Foreign Currency Settings for PSP / Foreign Bank */}
+          {(type === 'psp' || type === 'foreign_bank') && (
+            <div className="space-y-3 rounded-xl border border-teal-200 bg-teal-50/40 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-900">
+                <Globe className="h-4 w-4 text-teal-700" />
+                <span>外貨・換算レート設定</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600">
+                    主な取扱通貨
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => {
+                      const nextCur = e.target.value as CurrencyCode;
+                      setCurrency(nextCur);
+                      setFxRateToJpy(String(CURRENCY_META[nextCur].defaultRate));
+                    }}
+                    className="mt-1 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 font-mono text-xs text-slate-900"
+                  >
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {CURRENCY_META[c].label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {currency !== 'JPY' && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600">
+                      参考円換算レート (1 {currency} = 円)
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0.1"
+                      step="0.01"
+                      value={fxRateToJpy}
+                      onChange={(e) => setFxRateToJpy(e.target.value)}
+                      className="mt-1 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 font-mono text-xs font-semibold tabular-nums"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Initial Balance (hidden for debit cards since they link directly to bank) */}
           {type !== 'debit' && (
@@ -1072,7 +1200,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               >
                 {type === 'credit'
                   ? '登録時点の未決済残高（通常 0、負債がある場合はマイナスまたは 0）'
-                  : '開始時残高 (円)'}
+                  : '開始時残高 (円換算額)'}
               </label>
               <input
                 id="acc-init"

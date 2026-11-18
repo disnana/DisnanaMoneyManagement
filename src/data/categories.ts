@@ -2,9 +2,23 @@ import {
   AccountType,
   AccountUsageScope,
   CategoryDef,
+  CurrencyCode,
   IncomeTaxCategory,
   ReceiptMethod,
 } from '../types/finance';
+
+export const CURRENCY_META: Record<
+  CurrencyCode,
+  { code: CurrencyCode; symbol: string; label: string; defaultRate: number }
+> = {
+  JPY: { code: 'JPY', symbol: '¥', label: 'JPY (日本円)', defaultRate: 1 },
+  USD: { code: 'USD', symbol: '$', label: 'USD (米ドル)', defaultRate: 152 },
+  EUR: { code: 'EUR', symbol: '€', label: 'EUR (ユーロ)', defaultRate: 165 },
+  GBP: { code: 'GBP', symbol: '£', label: 'GBP (英ポンド)', defaultRate: 194 },
+  AUD: { code: 'AUD', symbol: 'A$', label: 'AUD (豪ドル)', defaultRate: 100 },
+};
+
+export const FOREIGN_CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'AUD'];
 
 export const EXPENSE_CATEGORIES: CategoryDef[] = [
   { id: 'food', name: '食費', type: 'expense', color: '#0F766E', defaultAccountingSubject: '福利厚生費' },
@@ -17,7 +31,7 @@ export const EXPENSE_CATEGORIES: CategoryDef[] = [
   { id: 'clothing', name: '衣服・美容', type: 'expense', color: '#DB2777', defaultAccountingSubject: '雑費' },
   { id: 'medical', name: '医療・保険', type: 'expense', color: '#DC2626', defaultAccountingSubject: '損害保険料' },
   { id: 'education', name: '書籍・ソフト・研修', type: 'expense', color: '#2563EB', defaultAccountingSubject: '新聞図書費' },
-  { id: 'business_ops', name: '業務委託・広告・機材', type: 'expense', color: '#0D9488', defaultAccountingSubject: '外注費' },
+  { id: 'business_ops', name: '業務委託・広告・手数料', type: 'expense', color: '#0D9488', defaultAccountingSubject: '支払手数料' },
   { id: 'other_expense', name: 'その他支出', type: 'expense', color: '#64748B', defaultAccountingSubject: '雑費' },
 ];
 
@@ -55,6 +69,8 @@ export function getCategoryById(id: string): CategoryDef {
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   bank: '銀行口座',
+  psp: '決済サービス (Stripe等)',
+  foreign_bank: '外貨・海外受取口座',
   credit: 'クレジットカード',
   debit: 'デビットカード',
   cash: '現金・財布',
@@ -70,6 +86,8 @@ export const ACCOUNT_USAGE_LABELS: Record<AccountUsageScope, string> = {
 
 export const RECEIPT_METHOD_LABELS: Record<ReceiptMethod, string> = {
   bank_transfer: '銀行振込',
+  stripe_payout: 'Stripe経由・為替入金',
+  foreign_fx: '外貨プラットフォーム受取',
   cash: '現金',
   amazon_gift: 'Amazonギフト券',
   other_gift: 'その他ギフト券・商品券',

@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { FinanceState, TransactionScope } from '../types/finance';
 import {
   INCOME_TAX_CATEGORY_LABELS,
@@ -12,8 +11,9 @@ import {
   getDeductibleBusinessAmount,
   getEffectiveOutflow,
   getRecentMonths,
-  shiftMonth,
+  getTransferTotalFees,
 } from '../utils/format';
+import { MonthSwitcherBar } from './MonthSwitcherBar';
 
 interface AnalyticsViewProps {
   state: FinanceState;
@@ -226,15 +226,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         expByCategory[tx.categoryId] = (expByCategory[tx.categoryId] ?? 0) + tx.amount;
         expByAccount[tx.accountId] =
           (expByAccount[tx.accountId] ?? 0) + getEffectiveOutflow(tx);
-      } else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-        const fee = tx.transferFee ?? 0;
-        transferFees += fee;
-        if (tx.scope === 'business') {
-          businessDeductible += fee;
-        } else {
-          personalExpense += fee;
+      } else if (tx.type === 'transfer') {
+        const fee = getTransferTotalFees(tx);
+        if (fee > 0) {
+          transferFees += fee;
+          if (tx.scope === 'business') {
+            businessDeductible += fee;
+          } else {
+            personalExpense += fee;
+          }
+          expByCategory['transfer_fee'] = (expByCategory['transfer_fee'] ?? 0) + fee;
         }
-        expByCategory['transfer_fee'] = (expByCategory['transfer_fee'] ?? 0) + fee;
       } else if (tx.type === 'income') {
         totalIncome += tx.amount;
         const taxKey = tx.incomeTaxCategory ?? 'other';
@@ -334,8 +336,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       if (!map[m]) continue;
       if (tx.type === 'income') map[m].income += tx.amount;
       else if (tx.type === 'expense') map[m].expense += tx.amount;
-      else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-        map[m].expense += tx.transferFee ?? 0;
+      else if (tx.type === 'transfer') {
+        const fee = getTransferTotalFees(tx);
+        if (fee > 0) map[m].expense += fee;
       }
     }
 
@@ -425,36 +428,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             ))}
           </div>
 
-          <div className="inline-flex items-center justify-between rounded-xl border border-slate-200 bg-white sm:justify-start">
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 hover:bg-slate-50 active:scale-95"
-              aria-label="前の月"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[104px] px-3 text-center font-mono text-xs font-semibold text-slate-900 tabular-nums whitespace-nowrap">
-              {formatMonthLabel(selectedMonth)}
-            </span>
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 hover:bg-slate-50 active:scale-95"
-              aria-label="次の月"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <MonthSwitcherBar
+            selectedMonth={selectedMonth}
+            onChangeMonth={onChangeMonth}
+            className="w-full sm:w-auto"
+          />
         </div>
       </div>
 
       {/* Summary Strip */}
       <section className="grid grid-cols-1 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-4">
         <div className="p-4 sm:p-5">
-          <div className="text-xs font-medium text-slate-500">総収入 ({periodTitle})</div>
+          <div className="text-xs font-medium text-slate-500">総売上・収入 ({periodTitle})</div>
           <div className="mt-1.5 font-mono text-2xl font-bold text-emerald-700 tabular-nums">
             {formatJPY(analyticsSummary.totalIncome)}
+          </div>
+          <div className="mt-1 text-xs text-slate-500 tabular-nums">
+            純収支（手取り残）{' '}
+            <strong
+              className={`font-mono ${
+                analyticsSummary.totalIncome - analyticsSummary.totalOutflow >= 0
+                  ? 'text-teal-800'
+                  : 'text-red-600'
+              }`}
+            >
+              {formatJPY(analyticsSummary.totalIncome - analyticsSummary.totalOutflow)}
+            </strong>
           </div>
         </div>
         <div className="p-4 sm:p-5">
@@ -464,7 +463,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
           {analyticsSummary.transferFees > 0 && (
             <div className="mt-1 text-xs text-slate-500 tabular-nums">
-              うち振替手数料 {formatJPY(analyticsSummary.transferFees)}
+              うち振替・為替手数料 {formatJPY(analyticsSummary.transferFees)}
             </div>
           )}
         </div>

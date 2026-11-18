@@ -5,6 +5,7 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryById } from '../data/
 import { formatFullDate, formatJPY, formatMonthLabel } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ResponsiveSheet } from './ResponsiveSheet';
+import { MonthSwitcherBar } from './MonthSwitcherBar';
 
 interface PlanningViewProps {
   recurringItems: RecurringItem[];
@@ -13,6 +14,7 @@ interface PlanningViewProps {
   accounts: Account[];
   accountNameMap: Record<string, string>;
   selectedMonth: string;
+  onChangeMonth: (monthKey: string) => void;
   onAddRecurring: (item: Omit<RecurringItem, 'id'>) => void;
   onDeleteRecurring: (id: string) => void;
   onRecordRecurring: (item: RecurringItem, monthKey: string) => void;
@@ -28,6 +30,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
   accounts,
   accountNameMap,
   selectedMonth,
+  onChangeMonth,
   onAddRecurring,
   onDeleteRecurring,
   onRecordRecurring,
@@ -137,19 +140,25 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
               家賃やサブスク、給与を登録しておくと、{formatMonthLabel(selectedMonth)}分をワンクリックで記帳できます
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setRecType('expense');
-              setRecCategoryId(EXPENSE_CATEGORIES[3].id);
-              setRecAccountId(accounts[0]?.id ?? '');
-              setRecModalOpen(true);
-            }}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4" />
-            <span>定期項目を追加</span>
-          </button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2.5 sm:w-auto sm:justify-end">
+            <MonthSwitcherBar
+              selectedMonth={selectedMonth}
+              onChangeMonth={onChangeMonth}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setRecType('expense');
+                setRecCategoryId(EXPENSE_CATEGORIES[3].id);
+                setRecAccountId(accounts[0]?.id ?? '');
+                setRecModalOpen(true);
+              }}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4" />
+              <span>定期項目を追加</span>
+            </button>
+          </div>
         </div>
 
         {/* Recurring Monthly Balance Strip */}

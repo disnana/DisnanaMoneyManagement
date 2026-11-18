@@ -18,11 +18,13 @@ import {
 } from '../data/categories';
 import {
   exportTransactionsToCSV,
+  formatForeignCurrency,
   formatFullDate,
   formatJPY,
   formatMonthLabel,
   formatSignedJPY,
   getEffectiveOutflow,
+  getTransferTotalFees,
 } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -33,7 +35,39 @@ interface TransactionsViewProps {
   selectedMonth: string;
   onEditTransaction: (tx: Transaction) => void;
   onDeleteTransaction: (id: string) => void;
+  onDeleteSettlementGroup?: (groupId: string) => void;
   onOpenAddTransaction: () => void;
+}
+
+function buildDetailParts(tx: Transaction): string[] {
+  const detailParts: string[] = [];
+  if (tx.counterparty) detailParts.push(tx.counterparty);
+  if (tx.foreignCurrency && tx.foreignGrossAmount !== undefined) {
+    const fxText = formatForeignCurrency(tx.foreignGrossAmount, tx.foreignCurrency);
+    detailParts.push(tx.fxRate ? `${fxText} @ ¥${tx.fxRate}` : fxText);
+  }
+  if (tx.netJpyAmount !== undefined && tx.type === 'income') {
+    detailParts.push(`銀行純入金 ${formatJPY(tx.netJpyAmount)}`);
+  }
+  if (tx.type === 'income') {
+    if (tx.receiptMethod) {
+      detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
+    }
+    if (tx.incomeTaxCategory) {
+      detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
+    }
+  }
+  if (tx.type === 'expense' && tx.scope === 'business') {
+    detailParts.push(tx.accountingSubject ?? '経費');
+    if ((tx.businessRatio ?? 100) < 100) {
+      detailParts.push(`按分${tx.businessRatio}%`);
+    }
+  }
+  if (tx.type === 'transfer' && tx.isPrepayment) {
+    detailParts.push('先払い・繰上返済');
+  }
+  if (tx.memo) detailParts.push(tx.memo);
+  return detailParts;
 }
 
 export const TransactionsView: React.FC<TransactionsViewProps> = ({
@@ -43,6 +77,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   selectedMonth,
   onEditTransaction,
   onDeleteTransaction,
+  onDeleteSettlementGroup,
   onOpenAddTransaction,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,8 +155,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     for (const tx of filtered) {
       if (tx.type === 'income') income += tx.amount;
       else if (tx.type === 'expense') expense += tx.amount;
-      else if (tx.type === 'transfer' && (tx.transferFee ?? 0) > 0) {
-        expense += tx.transferFee ?? 0;
+      else if (tx.type === 'transfer') {
+        expense += getTransferTotalFees(tx);
       }
     }
     return { income, expense, net: income - expense };
@@ -350,26 +385,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   ? accountNameMap[tx.toAccountId] ?? '不明な口座'
                   : '';
 
-                const detailParts: string[] = [];
-                if (tx.counterparty) detailParts.push(tx.counterparty);
-                if (tx.type === 'income') {
-                  if (tx.receiptMethod) {
-                    detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
-                  }
-                  if (tx.incomeTaxCategory) {
-                    detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
-                  }
-                }
-                if (tx.type === 'expense' && tx.scope === 'business') {
-                  detailParts.push(tx.accountingSubject ?? '経費');
-                  if ((tx.businessRatio ?? 100) < 100) {
-                    detailParts.push(`按分${tx.businessRatio}%`);
-                  }
-                }
-                if (tx.type === 'transfer' && tx.isPrepayment) {
-                  detailParts.push('先払い・繰上返済');
-                }
-                if (tx.memo) detailParts.push(tx.memo);
+                const detailParts = buildDetailParts(tx);
+                const totalTransferFees = getTransferTotalFees(tx);
 
                 return (
                   <div key={tx.id} className="px-4 py-3.5">
@@ -418,9 +435,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           >
                             {formatSignedJPY(tx.amount, tx.type)}
                           </div>
-                          {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                          {tx.type === 'income' &&
+                            tx.netJpyAmount !== undefined &&
+                            tx.netJpyAmount !== tx.amount && (
+                              <div className="text-[11px] text-teal-700">
+                                純入金 {formatJPY(tx.netJpyAmount)}
+                              </div>
+                            )}
+                          {totalTransferFees > 0 && (
                             <div className="text-[11px] text-slate-500">
-                              手数料 {formatJPY(tx.transferFee ?? 0)}
+                              手数料 {formatJPY(totalTransferFees)}
                             </div>
                           )}
                           {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
@@ -495,26 +519,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       ? accountNameMap[tx.toAccountId] ?? '不明な口座'
                       : '';
 
-                    const detailParts: string[] = [];
-                    if (tx.counterparty) detailParts.push(tx.counterparty);
-                    if (tx.type === 'income') {
-                      if (tx.receiptMethod) {
-                        detailParts.push(RECEIPT_METHOD_LABELS[tx.receiptMethod]);
-                      }
-                      if (tx.incomeTaxCategory) {
-                        detailParts.push(INCOME_TAX_CATEGORY_LABELS[tx.incomeTaxCategory]);
-                      }
-                    }
-                    if (tx.type === 'expense' && tx.scope === 'business') {
-                      detailParts.push(tx.accountingSubject ?? '経費');
-                      if ((tx.businessRatio ?? 100) < 100) {
-                        detailParts.push(`按分${tx.businessRatio}%`);
-                      }
-                    }
-                    if (tx.type === 'transfer' && tx.isPrepayment) {
-                      detailParts.push('先払い・繰上返済');
-                    }
-                    if (tx.memo) detailParts.push(tx.memo);
+                    const detailParts = buildDetailParts(tx);
+                    const totalTransferFees = getTransferTotalFees(tx);
 
                     return (
                       <tr
@@ -555,9 +561,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           >
                             {formatSignedJPY(tx.amount, tx.type)}
                           </div>
-                          {tx.type === 'transfer' && (tx.transferFee ?? 0) > 0 && (
+                          {tx.type === 'income' &&
+                            tx.netJpyAmount !== undefined &&
+                            tx.netJpyAmount !== tx.amount && (
+                              <div className="text-[11px] text-teal-700">
+                                銀行純入金 {formatJPY(tx.netJpyAmount)}
+                              </div>
+                            )}
+                          {totalTransferFees > 0 && (
                             <div className="text-[11px] text-slate-500">
-                              手数料 {formatJPY(tx.transferFee ?? 0)}
+                              手数料 {formatJPY(totalTransferFees)}
                             </div>
                           )}
                           {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
@@ -602,14 +615,33 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         title="この取引を削除しますか？"
         description={
           deletingTx
-            ? `「${deletingTx.title}」（${formatJPY(
-                deletingTx.amount
-              )} / ${formatFullDate(
-                deletingTx.date
-              )}）を削除します。口座残高も自動で再計算されます。`
+            ? deletingTx.settlementGroupId
+              ? `「${deletingTx.title}」（${formatJPY(
+                  deletingTx.amount
+                )} / ${formatFullDate(
+                  deletingTx.date
+                )}）を削除します。この取引は外貨・Stripe一括入金の連動レコードです。`
+              : `「${deletingTx.title}」（${formatJPY(
+                  deletingTx.amount
+                )} / ${formatFullDate(
+                  deletingTx.date
+                )}）を削除します。口座残高も自動で再計算されます。`
             : ''
         }
-        confirmLabel="削除する"
+        confirmLabel={deletingTx?.settlementGroupId ? 'この1件のみ削除' : '削除する'}
+        secondaryLabel={
+          deletingTx?.settlementGroupId && onDeleteSettlementGroup
+            ? '連動セットごと削除'
+            : undefined
+        }
+        onSecondaryConfirm={
+          deletingTx?.settlementGroupId && onDeleteSettlementGroup
+            ? () => {
+                onDeleteSettlementGroup(deletingTx.settlementGroupId!);
+                setDeletingTx(null);
+              }
+            : undefined
+        }
         danger={true}
         onConfirm={() => {
           if (deletingTx) {

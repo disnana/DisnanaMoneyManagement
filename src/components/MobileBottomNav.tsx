@@ -56,7 +56,7 @@ const MORE_ITEMS: {
   {
     id: 'tax',
     label: '経費・税務処理',
-    description: 'ギフト券・雑所得・家事按分・確定申告用CSV',
+    description: '外貨・Stripe収益・支払手数料・確定申告用CSV',
     icon: FileText,
   },
 ];
@@ -79,7 +79,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     <>
       <nav
         aria-label="モバイルナビゲーション"
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur-md pb-safe lg:hidden"
+        className="shrink-0 z-30 border-t border-slate-200 bg-white pb-safe lg:hidden"
       >
         <div className="mx-auto grid h-14 max-w-xl grid-cols-5 items-stretch">
           {PRIMARY_TABS.map((tab) => {

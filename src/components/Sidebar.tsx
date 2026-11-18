@@ -43,9 +43,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenDataModal,
 }) => {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
-      <div className="sticky top-0 flex h-screen flex-col justify-between bg-white">
-        <div className="overflow-y-auto">
+    <aside className="hidden h-full w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
+      <div className="flex h-full flex-col justify-between bg-white">
+        <div className="overflow-y-auto overscroll-y-contain">
           <div className="flex min-h-16 items-center border-b border-slate-200 px-5 py-3">
             <button
               type="button"

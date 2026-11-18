@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  secondaryLabel?: string;
+  onSecondaryConfirm?: () => void;
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -19,6 +21,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   description,
   confirmLabel = '削除する',
   cancelLabel = 'キャンセル',
+  secondaryLabel,
+  onSecondaryConfirm,
   danger = true,
   onConfirm,
   onCancel,
@@ -86,7 +90,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               </button>
             </div>
 
-            <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
+            <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2.5">
               <button
                 type="button"
                 onClick={onCancel}
@@ -94,6 +98,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               >
                 {cancelLabel}
               </button>
+              {secondaryLabel && onSecondaryConfirm && (
+                <button
+                  type="button"
+                  onClick={onSecondaryConfirm}
+                  className="min-h-[44px] whitespace-nowrap rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.98]"
+                >
+                  {secondaryLabel}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onConfirm}

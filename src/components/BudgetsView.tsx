@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Budget, Transaction } from '../types/finance';
 import { EXPENSE_CATEGORIES, getCategoryById } from '../data/categories';
-import { formatJPY, formatMonthLabel, shiftMonth } from '../utils/format';
+import { formatJPY } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ResponsiveSheet } from './ResponsiveSheet';
+import { MonthSwitcherBar } from './MonthSwitcherBar';
 
 interface BudgetsViewProps {
   budgets: Budget[];
@@ -109,27 +110,10 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         </div>
 
         <div className="flex w-full flex-wrap items-center justify-between gap-2.5 sm:w-auto sm:justify-end">
-          <div className="inline-flex items-center rounded-xl border border-slate-200 bg-white">
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, -1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-l-xl text-slate-600 transition-colors hover:bg-slate-50 active:scale-95"
-              aria-label="前の月"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[100px] px-2.5 text-center font-mono text-sm font-semibold text-slate-900 tabular-nums whitespace-nowrap">
-              {formatMonthLabel(selectedMonth)}
-            </span>
-            <button
-              type="button"
-              onClick={() => onChangeMonth(shiftMonth(selectedMonth, 1))}
-              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-r-xl text-slate-600 transition-colors hover:bg-slate-50 active:scale-95"
-              aria-label="次の月"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <MonthSwitcherBar
+            selectedMonth={selectedMonth}
+            onChangeMonth={onChangeMonth}
+          />
 
           <button
             type="button"

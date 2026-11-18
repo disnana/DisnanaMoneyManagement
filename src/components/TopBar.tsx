@@ -22,7 +22,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAddTransaction,
 }) => {
   return (
-    <header className="sticky top-0 z-30 flex h-13 sm:h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 backdrop-blur-md px-4 sm:px-8 pt-safe">
+    <header className="shrink-0 z-30 flex h-13 sm:h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 sm:px-8 pt-safe">
       <div className="min-w-0">
         <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-tight truncate">
           {SECTION_LABELS[activeSection]}
