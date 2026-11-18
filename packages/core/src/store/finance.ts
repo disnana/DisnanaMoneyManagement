@@ -108,13 +108,15 @@ export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | nul
         return amount === undefined ? { ...item, foreignPrice: undefined } : { ...item, amount };
       })
     : undefined;
-  const readCategoryIds = (value: unknown): string[] | undefined =>
+  const readIds = (value: unknown): string[] | undefined =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : undefined;
-  const categoryOrder = { income: readCategoryIds(parsed.categoryOrder?.income), expense: readCategoryIds(parsed.categoryOrder?.expense) };
-  const hiddenCategoryIds = readCategoryIds(parsed.hiddenCategoryIds);
+  const categoryOrder = { income: readIds(parsed.categoryOrder?.income), expense: readIds(parsed.categoryOrder?.expense) };
+  const hiddenCategoryIds = readIds(parsed.hiddenCategoryIds);
+  const ledgerOrder = readIds(parsed.ledgerOrder);
 
   return {
     ...(ledgers?.length ? { ledgers } : {}),
+    ...(ledgerOrder?.length ? { ledgerOrder } : {}),
     ...(purchaseCandidates?.length ? { purchaseCandidates } : {}),
     ...(Array.isArray(parsed.customCategories) ? {
       customCategories: parsed.customCategories.filter((item) => item && typeof item.id === 'string' &&
@@ -366,6 +368,13 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     });
   }, []);
 
+  const setLedgerOrder = useCallback((ids: string[]) => {
+    setState((prev) => {
+      const existing = new Set(getLedgers(prev).map((ledger) => ledger.id));
+      return { ...prev, ledgerOrder: [...new Set(ids.filter((id) => existing.has(id)))] };
+    });
+  }, []);
+
   const addLedger = useCallback((name: string, kind: Ledger['kind'], appearance?: Pick<Ledger, 'icon' | 'color'>) => {
     const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind, ...appearance }] }));
@@ -560,6 +569,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     reorderAccounts,
     setCategoryHidden,
     addLedger,
+    setLedgerOrder,
     updateLedger,
     deleteLedger,
     setLedgerTaxExemption,

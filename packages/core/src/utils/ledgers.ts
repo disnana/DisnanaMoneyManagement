@@ -10,6 +10,14 @@ export function getLedgers(state: FinanceState): readonly Ledger[] {
   return state.ledgers?.length ? state.ledgers : DEFAULT_LEDGERS;
 }
 
+export function getOrderedLedgers(state: FinanceState): readonly Ledger[] {
+  const ledgers = getLedgers(state);
+  const order = state.ledgerOrder;
+  if (!order?.length) return ledgers;
+  const rank = new Map(order.map((id, index) => [id, index]));
+  return [...ledgers].sort((a, b) => (rank.get(a.id) ?? order.length) - (rank.get(b.id) ?? order.length));
+}
+
 export function getLedgerTaxExemption(ledger: Ledger, year: number): { amount: number; sourceYear?: number } {
   let amount = 0;
   let sourceYear: number | undefined;

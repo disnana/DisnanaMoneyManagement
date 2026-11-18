@@ -9,8 +9,9 @@ import { getBillingMonthForDate } from '@dmm/core/utils/creditCard';
 import { getTransactionLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { categoryIcon } from '@/lib/categoryIcons';
-import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
-import { pickCategory } from '@/lib/categoryPicker';
+import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
+import { useLedgerPicker } from '@/lib/ledgerPicker';
+import { useCategoryPicker } from '@/lib/categoryPicker';
 import { useFinance } from '@/lib/store';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
@@ -45,6 +46,8 @@ function dateLabel(date: string): string {
 
 export default function AddScreen() {
   const p = usePalette();
+  const pickLedger = useLedgerPicker();
+  const pickCategory = useCategoryPicker();
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
   const { id } = params;
   const closing = useRef(false);
@@ -302,13 +305,13 @@ export default function AddScreen() {
         </View>
         <Group>
           {type !== 'transfer' ? fieldRow('カテゴリ', categoryId ? category.name : '選択',
-            () => pickCategory(type, categoryId, state, setCategoryId),
+            () => pickCategory(type, categoryId, setCategoryId),
             { name: categoryIcon(category.icon ?? category.id), color: category.color }) : null}
           {accountRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法',
             account, setAccountId, type === 'transfer' ? toAccountId : undefined)}
           {type === 'transfer' ? accountRow('入金先', destination, setToAccountId, accountId) : null}
           {fieldRow('家計グループ', ledger.name, async () => {
-            const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledger.id));
+            const choice = await pickLedger(ledger.id);
             const group = ledgers.find((item) => item.id === choice);
             if (group) {
               setLedgerId(group.id);

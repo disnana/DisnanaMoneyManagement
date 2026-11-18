@@ -4,7 +4,8 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { formatDayLabel } from '@dmm/core/utils/format';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
-import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
+import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
+import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -21,6 +22,7 @@ export default function CardSettings() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, ledgers, activeLedger, addAccount, updateAccount } = useFinance();
   const p = usePalette();
+  const pickLedger = useLedgerPicker();
   const existing = state.accounts.find((account) => account.id === id);
   const card = existing?.type === 'credit' || existing?.type === 'debit' ? existing : undefined;
   const banks = state.accounts.filter((account) => account.type === 'bank');
@@ -113,7 +115,7 @@ export default function CardSettings() {
               />
               <Row title="家計グループ" right={ledger?.name ?? '選択'} chevron icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)}
                 onPress={async () => {
-                  const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledgerId));
+                  const choice = await pickLedger(ledgerId);
                   if (choice) setLedgerId(choice);
                 }} />
               <Row title="引落口座" right={bank?.name ?? '未選択'} chevron={!fixedBank}

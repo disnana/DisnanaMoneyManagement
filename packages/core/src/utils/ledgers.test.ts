@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FinanceState } from '../types/finance';
 import { computeAccountBalances, loadInitialState, STORAGE_KEY } from '../store/finance';
-import { filterLedger, getLedgers, getLedgerTaxExemption, removeLedger } from './ledgers';
+import { filterLedger, getLedgers, getLedgerTaxExemption, getOrderedLedgers, removeLedger } from './ledgers';
 import { computeTaxSummary } from './tax';
 
 const savedState: FinanceState = {
@@ -26,6 +26,18 @@ describe('finance groups', () => {
     expect(business.accounts).toEqual([]);
     expect(computeTaxSummary(business.transactions).totalDeductibleExpense).toBe(1000);
     expect(computeAccountBalances(savedState)).toEqual({ bank: 7000 });
+  });
+
+  it('reloads the display order without changing how older records are assigned', () => {
+    const state: FinanceState = {
+      ...savedState,
+      ledgers: [{ id: 'second_home', name: '家庭用2', kind: 'household' }, ...getLedgers(savedState)],
+      ledgerOrder: ['household', 'missing', 'business', 'second_home'],
+    };
+    const loaded = loadInitialState({ getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null, setItem: () => {} });
+    expect(getOrderedLedgers(loaded).map((ledger) => ledger.id)).toEqual(['household', 'business', 'second_home', 'personal']);
+    expect(filterLedger(loaded, 'second_home').transactions.map((tx) => tx.id)).toEqual(['groceries']);
+    expect(filterLedger(loaded, 'household').transactions).toEqual([]);
   });
 
   it('moves saved records to a selected group when deleting a group and retains their tax fields on reload', () => {

@@ -9,13 +9,15 @@ const light: Palette = {
   card: '#FFFFFF',
   fill: 'rgba(118,118,128,0.12)',
   text: '#000000',
-  textSecondary: 'rgba(60,60,67,0.75)', // 0.6 (system secondaryLabel) is only 3.4:1 on white; 0.75 reaches 5.1:1 (WCAG AA 4.5:1)
+  textSecondary: '#52525C',
   separator: 'rgba(60,60,67,0.18)',
+  outline: '#81838D',
+  sectionHeader: '#DFE1E8',
   tint: '#0F766E',
   onTint: '#FFFFFF',
   income: '#0759AF', // accessible blue on grouped backgrounds
   expense: '#000000',
-  danger: '#D70015', // Apple's accessible red; #FF3B30 is only 3.6:1 on white
+  danger: '#B80017',
 };
 
 const dark: Palette = {
@@ -23,13 +25,15 @@ const dark: Palette = {
   card: '#1C1C1E',
   fill: 'rgba(118,118,128,0.24)',
   text: '#FFFFFF',
-  textSecondary: 'rgba(235,235,245,0.6)',
+  textSecondary: '#B1B1BC',
   separator: 'rgba(84,84,88,0.6)',
+  outline: '#787882',
+  sectionHeader: '#333339',
   tint: '#2DD4BF',
   onTint: '#00201C',
   income: '#78B9FF',
   expense: '#FFFFFF',
-  danger: '#FF453A',
+  danger: '#FF786E',
 };
 
 export function usePalette(): Palette {

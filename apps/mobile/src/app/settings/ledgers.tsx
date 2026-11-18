@@ -7,6 +7,7 @@ import type { Ledger } from '@dmm/core/types/finance';
 import { LEDGER_COLORS, LEDGER_ICONS, ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
+import { getOrderedLedgers } from '@dmm/core/utils/ledgers';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, IconBadge, Row, Screen, Segmented } from '@/ui/kit';
@@ -20,7 +21,8 @@ const COLOR_ICON = { ios: 'circle.fill', android: 'circle' } as const;
 
 export default function Ledgers() {
   const p = usePalette();
-  const { ledgers, activeLedger, setActiveLedgerId, addLedger, updateLedger, deleteLedger } = useFinance();
+  const { state, activeLedger, setActiveLedgerId, addLedger, updateLedger, deleteLedger } = useFinance();
+  const ledgers = getOrderedLedgers(state);
   const [editing, setEditing] = useState<Ledger>();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');

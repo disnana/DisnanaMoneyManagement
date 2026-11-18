@@ -18,12 +18,14 @@ export interface PickOption {
   color?: string;
   selected?: boolean;
   destructive?: boolean;
+  reorderable?: false;
 }
 
 interface PickerPresentation {
   description?: string;
   layout?: 'divided';
   searchLabel?: string;
+  reorderTitle?: string;
   onReorder?: (ids: string[]) => void;
 }
 
@@ -103,20 +105,22 @@ export function PickerHost() {
     `${option.label} ${option.subtitle ?? ''} ${option.searchText ?? ''}`.normalize('NFKC').toLowerCase().includes(normalized)
   );
 
-  const searchable = req.options.length >= 8;
+  const movable = req.options.filter((option) => option.reorderable !== false);
+  const searchable = movable.length >= 8;
   const divided = req.layout === 'divided';
-  const divider = p.separator === 'transparent' ? p.fill : p.separator;
+  const divider = p.outline;
   const searchLabel = req.searchLabel ?? '候補を検索';
   const saveOrder = () => {
     if (!draft) return;
     const ids = draft.map((item) => item.id);
-    if (ids.some((id, index) => id !== req.options[index].id)) req.onReorder?.(ids);
-    setReq({ ...req, options: draft });
+    if (ids.some((id, index) => id !== movable[index].id)) req.onReorder?.(ids);
+    let index = 0;
+    setReq({ ...req, options: req.options.map((option) => option.reorderable === false ? option : draft[index++]) });
     setDraft(undefined);
   };
   const optionContent = (option: PickOption) => (
     <>
-      {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} /> : null}
+      {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} filled={divided} /> : null}
       <View style={{ flex: 1, gap: 2 }}>
         <Text numberOfLines={divided ? 2 : undefined} style={{ color: option.destructive ? p.danger : p.text, fontSize: 16, fontWeight: option.selected ? '700' : '500' }}>
           {option.label}
@@ -137,7 +141,7 @@ export function PickerHost() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingRight: 8, minHeight: 57 }}>
             <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 19, fontWeight: '700' }}>
-              {draft ? '口座の並び替え' : req.title ?? '選択'}
+              {draft ? req.reorderTitle ?? '口座の並び替え' : req.title ?? '選択'}
             </Text>
             {draft ? (
               <>
@@ -152,11 +156,11 @@ export function PickerHost() {
               </>
             ) : (
               <>
-                {req.onReorder && req.options.length > 1 ? (
+                {req.onReorder && movable.length > 1 ? (
                   <Pressable accessibilityRole="button" onPress={() => {
                     Keyboard.dismiss();
                     setQuery('');
-                    setDraft(req.options);
+                    setDraft(movable);
                   }} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
                     <Text style={{ color: p.tint, fontSize: 14, fontWeight: '600' }}>並び替え</Text>
                   </Pressable>

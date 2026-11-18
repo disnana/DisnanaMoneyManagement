@@ -10,7 +10,7 @@ import { TxRow } from '@/ui/TxRow';
 export function TxGroups({ transactions, empty, dayCards }: { transactions: Transaction[]; empty: string; dayCards?: boolean }) {
   const p = usePalette();
   const groups = groupTransactionsByDate(transactions);
-  const divider = p.separator === 'transparent' ? p.fill : p.separator;
+  const divider = p.outline;
   if (groups.length === 0) {
     return (
       <View style={{ padding: 40, alignItems: 'center' }}>
@@ -29,7 +29,7 @@ export function TxGroups({ transactions, empty, dayCards }: { transactions: Tran
             <View key={g.date} style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
               borderWidth: StyleSheet.hairlineWidth, borderColor: divider, overflow: 'hidden' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                paddingHorizontal: 14, paddingVertical: 9, backgroundColor: p.fill,
+                paddingHorizontal: 14, paddingVertical: 9, backgroundColor: p.sectionHeader,
                 borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text accessibilityRole="header" accessibilityLabel={`${d.getMonth() + 1}月${d.getDate()}日 ${weekday}曜日`}
@@ -40,7 +40,7 @@ export function TxGroups({ transactions, empty, dayCards }: { transactions: Tran
                 </View>
                 <View style={{ flexShrink: 1, flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
                   <Text style={{ color: p.textSecondary, fontSize: 11 }}>日計</Text>
-                  <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, color: p.text, fontSize: 14,
+                  <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, color: g.net < 0 ? p.danger : p.income, fontSize: 14,
                     fontWeight: '600', fontVariant: ['tabular-nums'] }}>{total}</Text>
                 </View>
               </View>

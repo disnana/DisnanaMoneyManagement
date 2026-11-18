@@ -11,6 +11,8 @@ export interface Palette {
   text: string;
   textSecondary: string;
   separator: string;
+  outline: string;
+  sectionHeader: string;
   tint: string;
   onTint: string;
   income: string;
@@ -25,6 +27,8 @@ const light: Palette = {
   text: '#16201F',
   textSecondary: '#5B6B69',
   separator: 'transparent',
+  outline: '#818B89',
+  sectionHeader: '#DCE6E4',
   tint: '#0F766E',
   onTint: '#FFFFFF',
   income: '#0759AF',
@@ -39,6 +43,8 @@ const dark: Palette = {
   text: '#E6EEEC',
   textSecondary: '#9DB0AD',
   separator: 'transparent',
+  outline: '#71827E',
+  sectionHeader: '#303E3B',
   tint: '#5EEAD4',
   onTint: '#00201C',
   income: '#78B9FF',

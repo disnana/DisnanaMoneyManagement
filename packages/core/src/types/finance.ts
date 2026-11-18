@@ -190,6 +190,7 @@ export interface FinanceState {
   categoryOrder?: Partial<Record<'expense' | 'income', string[]>>;
   hiddenCategoryIds?: string[];
   ledgers?: Ledger[];
+  ledgerOrder?: string[];
   accounts: Account[];
   transactions: Transaction[];
   budgets: Budget[];

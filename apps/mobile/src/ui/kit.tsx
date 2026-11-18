@@ -52,18 +52,28 @@ export function Group({ children }: { children: ReactNode }) {
   );
 }
 
-export function IconBadge({ name, color, size = 40 }: { name: SymbolViewProps['name']; color: string; size?: number }) {
+function iconOnColor(hex: string) {
+  const channels = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255);
+  const [r, g, b] = channels.map((value) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.179 ? '#000000' : '#FFFFFF';
+}
+
+export function IconBadge({ name, color, size = 40, filled = false }: {
+  name: SymbolViewProps['name']; color: string; size?: number; filled?: boolean;
+}) {
   return (
     <View
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: `${color}24`,
+        backgroundColor: filled ? color : `${color}24`,
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <SymbolView name={name} size={size * 0.48} tintColor={color} />
+      <SymbolView name={name} size={size * 0.48} tintColor={filled ? iconOnColor(color) : color} />
     </View>
   );
 }
@@ -71,6 +81,7 @@ export function IconBadge({ name, color, size = 40 }: { name: SymbolViewProps['n
 export function Row({
   icon,
   iconColor,
+  iconFilled,
   title,
   subtitle,
   detail,
@@ -83,6 +94,7 @@ export function Row({
 }: {
   icon?: SymbolViewProps['name'];
   iconColor?: string;
+  iconFilled?: boolean;
   title: string;
   subtitle?: string;
   detail?: string;
@@ -108,7 +120,7 @@ export function Row({
         gap: compact ? 8 : 12,
         backgroundColor: pressed ? p.fill : 'transparent',
       })}>
-      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} size={compact ? 32 : undefined} /> : null}
+      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} filled={iconFilled} size={compact ? 32 : undefined} /> : null}
       <View style={{ flex: 1 }}>
         <Text numberOfLines={2} style={{ color: p.text, fontSize: 16, fontWeight: '600', fontFamily }}>
           {title}
@@ -136,10 +148,12 @@ export function Segmented<T extends string>({
   value,
   options,
   onChange,
+  prominent = false,
 }: {
   value: T;
   options: { id: T; label: string }[];
   onChange: (v: T) => void;
+  prominent?: boolean;
 }) {
   const p = usePalette();
   const dark = useColorScheme() === 'dark';
@@ -166,12 +180,12 @@ export function Segmented<T extends string>({
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: metrics.controlRadius,
-                backgroundColor: active ? (dark ? 'rgba(255,255,255,0.2)' : p.card) : 'transparent',
+                backgroundColor: active ? (prominent ? p.tint : dark ? 'rgba(255,255,255,0.2)' : p.card) : 'transparent',
                 ...(active
                   ? { shadowColor: '#000', shadowOpacity: dark ? 0 : 0.14, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: dark ? 0 : 2 }
                   : null),
               }}>
-              <Text style={{ color: active ? p.text : p.textSecondary, fontSize: 14, fontWeight: active ? '700' : '500' }}>{o.label}</Text>
+              <Text style={{ color: active ? (prominent ? p.onTint : p.text) : p.textSecondary, fontSize: 14, fontWeight: active ? '700' : '500' }}>{o.label}</Text>
             </Pressable>
           </View>
         );

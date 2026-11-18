@@ -46,6 +46,7 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
     <Row
       icon={categoryIcon(cat.icon ?? tx.categoryId)}
       iconColor={cat.color}
+      iconFilled
       title={tx.title}
       subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${accounts}`}
       detail={showMemo ? tx.memo?.trim() : undefined}

@@ -45,6 +45,7 @@ function TransactionsMonth({ month, calendar, isPreview }: { month: string; cale
     <>
       <LedgerPicker />
       {!calendar ? <Segmented<Filter>
+        prominent
         value={transactionFilter}
         onChange={setTransactionFilter}
         options={[

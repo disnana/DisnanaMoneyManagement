@@ -6,9 +6,10 @@ import type { CurrencyCode, ForeignPurchasePrice } from '@dmm/core/types/finance
 import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { PRIORITY_LABELS } from '@dmm/core/utils/purchasePlan';
 import { assessPurchaseForMonth, estimatePurchaseJPY, FOREIGN_PURCHASE_CURRENCIES } from '@dmm/core/utils/planning';
-import { pickCategory } from '@/lib/categoryPicker';
+import { useCategoryPicker } from '@/lib/categoryPicker';
 import { categoryIcon } from '@/lib/categoryIcons';
-import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
+import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
+import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -26,6 +27,8 @@ export default function PurchaseEditor() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, month, activeLedger, ledgers, savePurchaseCandidate } = useFinance();
   const p = usePalette();
+  const pickLedger = useLedgerPicker();
+  const pickCategory = useCategoryPicker();
   const existing = state.purchaseCandidates?.find((item) => item.id === id);
   const oldPrice = existing?.foreignPrice;
   const [title, setTitle] = useState(existing?.title ?? '');
@@ -101,16 +104,13 @@ export default function PurchaseEditor() {
               <PlanningInput label="買いたいもの" value={title} onChange={setTitle} />
               <Row title="家計グループ" right={ledger?.name ?? '選択なし'} chevron
                 icon={ledger ? ledgerIcon(ledger) : ALL_LEDGER_ICON} iconColor={ledgerColor(ledger)} onPress={async () => {
-                const choice = await pickOne('家計グループ', [
-                  { id: '', label: '選択なし', icon: ALL_LEDGER_ICON, selected: !ledgerId },
-                  ...ledgerOptions(ledgers, ledgerId),
-                ]);
+                const choice = await pickLedger(ledgerId, '選択なし');
                 if (choice !== null) setLedgerId(choice || undefined);
               }} />
               <Row title="カテゴリ" right={selectedCategory?.name ?? '選択'} chevron
                 icon={selectedCategory ? categoryIcon(selectedCategory.icon ?? selectedCategory.id) : { ios: 'tag', android: 'label' }}
                 iconColor={selectedCategory?.color}
-                onPress={() => void pickCategory('expense', category, state, setCategory)} />
+                onPress={() => void pickCategory('expense', category, setCategory)} />
               <PlanningInput label={currency === 'JPY' ? '見込み価格（円）' : `見込み価格（${currency}）`}
                 value={amount} onChange={setAmount} yen={currency === 'JPY'} decimal={currency !== 'JPY'} />
             </Group>

@@ -4,7 +4,8 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import type { Account, AccountType } from '@dmm/core/types/finance';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
-import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
+import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
+import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -18,6 +19,7 @@ export default function AccountEditor() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, ledgers, activeLedger, addAccount, updateAccount, deleteAccount } = useFinance();
   const p = usePalette();
+  const pickLedger = useLedgerPicker();
   const existing = state.accounts.find((a) => a.id === id);
   const editing = existing && existing.type !== 'credit' && existing.type !== 'debit' ? existing : undefined;
   const [type, setType] = useState<AccountType>(editing?.type ?? 'bank');
@@ -75,7 +77,7 @@ export default function AccountEditor() {
                 value={balance} onChangeText={(v) => setBalance(v.normalize('NFKC').replace(/[^0-9-]/g, '').replace(/(?!^)-/g, '').slice(0, 13))} style={inputStyle} />
               <Row title="家計グループ" right={ledger?.name ?? '選択'} chevron icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)}
                 onPress={async () => {
-                  const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledgerId));
+                  const choice = await pickLedger(ledgerId);
                   if (choice) setLedgerId(choice);
                 }} />
             </Group>

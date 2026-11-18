@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
 import { categoryIcon } from '@/lib/categoryIcons';
-import { pickCategory } from '@/lib/categoryPicker';
+import { useCategoryPicker } from '@/lib/categoryPicker';
 import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -17,6 +17,7 @@ export default function BudgetEditor() {
   const { categoryId, ledgerId } = useLocalSearchParams<{ categoryId?: string; ledgerId?: string }>();
   const { ledgers, state, upsertBudget, removeBudget } = useFinance();
   const p = usePalette();
+  const pickCategory = useCategoryPicker();
   const ledger = ledgers.find((item) => item.id === ledgerId);
   const scopedBudgets = state.budgets.filter((item) => item.ledgerId === ledgerId);
   const initial = scopedBudgets.find((item) => item.categoryId === categoryId);
@@ -58,7 +59,7 @@ export default function BudgetEditor() {
             <Row title="カテゴリ" right={selected?.name ?? '選択'} chevron={!categoryId}
               icon={selected ? categoryIcon(selected.icon ?? selected.id) : { ios: 'tag', android: 'label' }}
               iconColor={selected?.color}
-              onPress={categoryId ? undefined : () => void pickCategory('expense', category, state, (id) => {
+              onPress={categoryId ? undefined : () => void pickCategory('expense', category, (id) => {
                 const budget = scopedBudgets.find((item) => item.categoryId === id);
                 setCategory(id);
                 setAmount(budget ? String(budget.monthlyLimit) : '');

@@ -5,8 +5,8 @@ import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary, getCycleRangeLabel } from '@dmm/core/utils/creditCard';
 import { formatDayLabel, formatJPY, formatMonthLabel, getEffectiveOutflow } from '@dmm/core/utils/format';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
-import { ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
-import { pickOne } from '@/lib/pick';
+import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
+import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, SectionTitle } from '@/ui/kit';
@@ -28,6 +28,7 @@ export default function AccountDetail() {
 
 function AccountMonth({ id, month, isPreview }: { id: string; month: string; isPreview: boolean }) {
   const p = usePalette();
+  const pickLedger = useLedgerPicker();
   const { state, accountBalances, ledgers, updateAccount } = useFinance();
   const account = state.accounts.find((a) => a.id === id);
   const list = useMemo(
@@ -58,7 +59,7 @@ function AccountMonth({ id, month, isPreview }: { id: string; month: string; isP
             <Group>
               <Row title="家計グループ" right={ledger?.name} chevron
                 icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)} onPress={async () => {
-                const choice = await pickOne('家計グループ', ledgerOptions(ledgers, ledger?.id));
+                const choice = await pickLedger(ledger?.id);
                 if (choice) updateAccount(account.id, { ledgerId: choice });
               }} />
             </Group>
