@@ -4,3 +4,4 @@ export * from './data/seedData';
 export * from './utils/format';
 export * from './utils/creditCard';
 export * from './store/finance';
+export * from './utils/metrics';

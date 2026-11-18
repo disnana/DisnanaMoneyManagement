@@ -167,7 +167,13 @@ export function computeAccountBalances(state: FinanceState): Record<string, numb
   }
 
 /** React is injected so this package never bundles its own copy (web and RN each pass theirs). */
-export type ReactHooks = Pick<typeof import('react'), 'useState' | 'useEffect' | 'useMemo' | 'useCallback'>;
+export interface ReactHooks {
+  useState<S>(initial: S | (() => S)): [S, (value: S | ((prev: S) => S)) => void];
+  useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
+  useMemo<T>(factory: () => T, deps: readonly unknown[]): T;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  useCallback<T extends (...args: any[]) => any>(callback: T, deps: readonly unknown[]): T;
+}
 
 export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter) {
   const { useState, useEffect, useMemo, useCallback } = react;
