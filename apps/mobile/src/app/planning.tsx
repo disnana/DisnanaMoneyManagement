@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router } from 'expo-router';
-import { getCategoryById } from '@dmm/core/data/categories';
+import { getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
 import type { SavingsGoal } from '@dmm/core/types/finance';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
@@ -38,7 +38,11 @@ function Budgets() {
   const { state, activeLedger, visibleState, month } = useFinance();
   const p = usePalette();
   const ledgerId = activeLedger?.id;
-  const budgets = state.budgets.filter((item) => item.ledgerId === ledgerId);
+  const categories = getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds);
+  const ranks = new Map(categories.map((category, index) => [category.id, index]));
+  const rank = (id: string) => ranks.get(id) ?? categories.length;
+  const budgets = state.budgets.filter((item) => item.ledgerId === ledgerId)
+    .sort((a, b) => rank(a.categoryId) - rank(b.categoryId));
   const spending = useMonthlySpending({ visibleState, month });
   const openEditor = (categoryId?: string) => {
     router.push({ pathname: '/budget-editor', params: { categoryId, ledgerId } });

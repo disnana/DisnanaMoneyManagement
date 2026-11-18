@@ -33,6 +33,7 @@ export default function Accounts() {
     const bal = accountBalances[a.id] ?? 0;
     return (
       <Row
+        compact
         chevron={!sorting}
         onPress={sorting ? undefined : () => router.push({ pathname: '/accounts/[id]', params: { id: a.id } })}
         icon={ACCOUNT_ICONS[a.type]}

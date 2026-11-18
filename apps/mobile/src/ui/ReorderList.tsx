@@ -6,7 +6,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { tick } from '@/lib/haptics';
 import { metrics, usePalette } from '@/lib/theme';
 
-const ROW_HEIGHT = 76;
+const ROW_HEIGHT = 68;
 
 type DragState = {
   from: SharedValue<number>;
@@ -64,25 +64,25 @@ function ReorderRow({ label, index, count, drag, move, children }: {
   });
 
   return (
-    <Animated.View style={[{ height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center',
-      borderBottomColor: p.separator, borderBottomWidth: index < count - 1 ? StyleSheet.hairlineWidth : 0 }, animation]}>
-      {count > 1 ? (
-        <GestureDetector gesture={gesture} touchAction="none">
+    <GestureDetector gesture={gesture} touchAction={count > 1 ? "none" : "pan-y"}>
+      <Animated.View collapsable={false} style={[{ height: ROW_HEIGHT, flexDirection: 'row', alignItems: 'center',
+        borderBottomColor: p.separator, borderBottomWidth: index < count - 1 ? StyleSheet.hairlineWidth : 0 }, animation]}>
+        {count > 1 ? (
           <View accessible accessibilityRole="adjustable" accessibilityLabel={`${label}の並び順`}
             accessibilityValue={{ min: 1, max: count, now: index + 1 }} accessibilityHint="長押ししてドラッグ"
             accessibilityActions={[{ name: 'increment', label: '後ろへ移動' }, { name: 'decrement', label: '前へ移動' }]}
             onAccessibilityAction={({ nativeEvent }) => move(index, index + (nativeEvent.actionName === 'increment' ? 1 : -1))}
-            style={{ width: 44, height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+            style={{ width: 36, height: ROW_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
             <View style={{ width: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 3 }}>
               {Array.from({ length: 6 }, (_, dot) => (
                 <View key={dot} style={{ width: 3, height: 3, borderRadius: 2, backgroundColor: p.textSecondary }} />
               ))}
             </View>
           </View>
-        </GestureDetector>
-      ) : null}
-      <View style={{ flex: 1 }}>{children}</View>
-    </Animated.View>
+        ) : null}
+        <View style={{ flex: 1 }}>{children}</View>
+      </Animated.View>
+    </GestureDetector>
   );
 }
 

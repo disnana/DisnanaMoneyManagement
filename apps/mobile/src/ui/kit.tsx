@@ -77,6 +77,7 @@ export function Row({
   onPress,
   onLongPress,
   chevron,
+  compact,
 }: {
   icon?: SymbolViewProps['name'];
   iconColor?: string;
@@ -87,6 +88,7 @@ export function Row({
   onPress?: PressableProps['onPress'];
   onLongPress?: () => void;
   chevron?: boolean;
+  compact?: boolean;
 }) {
   const p = usePalette();
   return (
@@ -95,15 +97,15 @@ export function Row({
       onLongPress={onLongPress}
       android_ripple={{ color: p.fill }}
       style={({ pressed }) => ({
-        minHeight: metrics.rowMinHeight,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
+        minHeight: compact ? 52 : metrics.rowMinHeight,
+        paddingHorizontal: compact ? 10 : 16,
+        paddingVertical: compact ? 6 : 10,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        gap: compact ? 8 : 12,
         backgroundColor: pressed ? p.fill : 'transparent',
       })}>
-      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} /> : null}
+      {icon ? <IconBadge name={icon} color={iconColor ?? p.tint} size={compact ? 32 : undefined} /> : null}
       <View style={{ flex: 1 }}>
         <Text numberOfLines={2} style={{ color: p.text, fontSize: 16, fontWeight: '600', fontFamily }}>
           {title}

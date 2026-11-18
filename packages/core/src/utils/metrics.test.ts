@@ -25,7 +25,8 @@ describe('computeMonthMetrics', () => {
   it('sums income and expense for one month only', () => {
     const m = computeMonthMetrics(
       state([
-        t({ type: 'income', amount: 10000, categoryId: 'salary' }),
+        t({ type: 'income', amount: 7500, categoryId: 'salary' }),
+        t({ type: 'income', amount: 2500, categoryId: 'other' }),
         t({ amount: 3000 }),
         t({ amount: 1000, categoryId: 'daily' }),
         t({ amount: 9999, date: '2026-10-31' }), // other month
@@ -33,6 +34,10 @@ describe('computeMonthMetrics', () => {
       '2026-11'
     );
     expect(m).toMatchObject({ income: 10000, expense: 4000, net: 6000 });
+    expect(m.incomeCategoryBreakdown).toMatchObject([
+      { categoryId: 'salary', amount: 7500, share: 0.75 },
+      { categoryId: 'other', amount: 2500, share: 0.25 },
+    ]);
   });
 
   it('counts transfer fees as expense under a dedicated category', () => {
