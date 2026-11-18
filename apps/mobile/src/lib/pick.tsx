@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -7,19 +7,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { usePalette } from '@/lib/theme';
 import { IconBadge } from '@/ui/kit';
+import { ReorderList } from '@/ui/ReorderList';
 
 export interface PickOption {
   id: string;
   label: string;
   subtitle?: string;
+  searchText?: string;
   icon?: SymbolViewProps['name'];
   color?: string;
   selected?: boolean;
   destructive?: boolean;
 }
 
-interface Request {
+interface PickerPresentation {
   description?: string;
+  layout?: 'divided';
+  searchLabel?: string;
+  onReorder?: (ids: string[]) => void;
+}
+
+interface Request extends PickerPresentation {
   title?: string;
   options: PickOption[];
   resolve: (id: string | null) => void;
@@ -27,11 +35,11 @@ interface Request {
 
 let listener: ((r: Request | null) => void) | null = null;
 
-export function pickOne(title: string | undefined, options: PickOption[], description?: string): Promise<string | null> {
+export function pickOne(title: string | undefined, options: PickOption[], presentation?: PickerPresentation): Promise<string | null> {
   return new Promise((resolve) => {
     if (!listener) return resolve(null);
     Keyboard.dismiss();
-    listener({ title, options, description, resolve });
+    listener({ title, options, ...presentation, resolve });
   });
 }
 
@@ -41,6 +49,7 @@ export function PickerHost() {
   const [req, setReq] = useState<Request | null>(null);
   const pending = useRef<Request | null>(null);
   const [query, setQuery] = useState('');
+  const [draft, setDraft] = useState<PickOption[]>();
   const dragOffset = useSharedValue(0);
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dragOffset.value }] }));
 
@@ -50,6 +59,7 @@ export function PickerHost() {
       pending.current = request;
       dragOffset.value = 0;
       setQuery('');
+      setDraft(undefined);
       setReq(request);
     };
     return () => {
@@ -63,6 +73,7 @@ export function PickerHost() {
     pending.current?.resolve(id);
     pending.current = null;
     setReq(null);
+    setDraft(undefined);
   }, []);
   const sheetDrag = usePanGesture({
     maxPointers: 1,
@@ -89,10 +100,34 @@ export function PickerHost() {
   if (!req) return null;
   const normalized = query.trim().normalize('NFKC').toLowerCase();
   const options = req.options.filter((option) =>
-    `${option.label} ${option.subtitle ?? ''}`.normalize('NFKC').toLowerCase().includes(normalized)
+    `${option.label} ${option.subtitle ?? ''} ${option.searchText ?? ''}`.normalize('NFKC').toLowerCase().includes(normalized)
   );
 
   const searchable = req.options.length >= 8;
+  const divided = req.layout === 'divided';
+  const divider = p.separator === 'transparent' ? p.fill : p.separator;
+  const searchLabel = req.searchLabel ?? '候補を検索';
+  const saveOrder = () => {
+    if (!draft) return;
+    const ids = draft.map((item) => item.id);
+    if (ids.some((id, index) => id !== req.options[index].id)) req.onReorder?.(ids);
+    setReq({ ...req, options: draft });
+    setDraft(undefined);
+  };
+  const optionContent = (option: PickOption) => (
+    <>
+      {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} /> : null}
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text numberOfLines={divided ? 2 : undefined} style={{ color: option.destructive ? p.danger : p.text, fontSize: 16, fontWeight: option.selected ? '700' : '500' }}>
+          {option.label}
+        </Text>
+        {option.subtitle ? <Text numberOfLines={draft ? 1 : undefined} style={{ color: p.textSecondary, fontSize: 12 }}>{option.subtitle}</Text> : null}
+      </View>
+      {option.selected ? (
+        <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={18} tintColor={p.tint} />
+      ) : null}
+    </>
+  );
   const content = (
     <>
       <GestureDetector gesture={sheetDrag} touchAction="none">
@@ -102,12 +137,36 @@ export function PickerHost() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingRight: 8, minHeight: 57 }}>
             <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 19, fontWeight: '700' }}>
-              {req.title ?? '選択'}
+              {draft ? '口座の並び替え' : req.title ?? '選択'}
             </Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={() => close(null)}
-              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-              <SymbolView name={{ ios: 'xmark', android: 'close' }} size={19} tintColor={p.text} />
-            </Pressable>
+            {draft ? (
+              <>
+                <Pressable accessibilityRole="button" onPress={() => setDraft(undefined)}
+                  style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+                  <Text style={{ color: p.textSecondary, fontSize: 14 }}>キャンセル</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={saveOrder}
+                  style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+                  <Text style={{ color: p.tint, fontSize: 15, fontWeight: '700' }}>完了</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                {req.onReorder && req.options.length > 1 ? (
+                  <Pressable accessibilityRole="button" onPress={() => {
+                    Keyboard.dismiss();
+                    setQuery('');
+                    setDraft(req.options);
+                  }} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+                    <Text style={{ color: p.tint, fontSize: 14, fontWeight: '600' }}>並び替え</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={() => close(null)}
+                  style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+                  <SymbolView name={{ ios: 'xmark', android: 'close' }} size={19} tintColor={p.text} />
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </GestureDetector>
@@ -116,38 +175,52 @@ export function PickerHost() {
           {req.description}
         </Text>
       ) : null}
-      {searchable ? (
-        <TextInput accessibilityLabel="候補を検索" placeholder="候補を検索" placeholderTextColor={p.textSecondary}
+      {draft ? (
+        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 20, paddingBottom: 8 }}>
+          行を長押しして上下に移動
+        </Text>
+      ) : searchable ? (
+        <TextInput accessibilityLabel={searchLabel} placeholder={searchLabel} placeholderTextColor={p.textSecondary}
           value={query} onChangeText={setQuery} clearButtonMode="while-editing"
           style={{ minHeight: 44, paddingHorizontal: 14, marginHorizontal: 16, marginBottom: 8,
             borderRadius: 12, backgroundColor: p.fill, color: p.text, fontSize: 15 }} />
       ) : null}
       <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 10 }}>
-        {options.map((option) => (
-          <Pressable key={option.id} accessibilityRole="button" accessibilityState={{ selected: option.selected }}
-            onPress={() => close(option.id)}
-            style={({ pressed }) => ({
-              paddingHorizontal: 10, minHeight: 52, paddingVertical: 8, flexDirection: 'row',
-              alignItems: 'center', gap: 12, borderRadius: 12, backgroundColor: pressed || option.selected ? p.fill : 'transparent',
-              borderWidth: req.description ? 1 : 0, borderColor: option.selected ? p.tint : 'transparent',
-              marginBottom: req.description ? 6 : 0,
-            })}>
-            {option.icon ? <IconBadge name={option.icon} color={option.color || p.tint} size={36} /> : null}
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ color: option.destructive ? p.danger : p.text, fontSize: 16, fontWeight: option.selected ? '700' : '500' }}>
-                {option.label}
-              </Text>
-              {option.subtitle ? <Text style={{ color: p.textSecondary, fontSize: 12 }}>{option.subtitle}</Text> : null}
-            </View>
-            {option.selected ? (
-              <SymbolView name={{ ios: 'checkmark', android: 'check' }} size={18} tintColor={p.tint} />
-            ) : null}
-          </Pressable>
-        ))}
-        {options.length === 0 ? (
+        contentContainerStyle={{ paddingHorizontal: divided ? 16 : 12, paddingBottom: 10 }}>
+        {draft ? (
+          <ReorderList items={draft} getLabel={(option) => option.label}
+            renderItem={(option) => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 12 }}>
+                {optionContent(option)}
+              </View>
+            )}
+            onReorder={(ids) => setDraft((current) => {
+              if (!current) return current;
+              const byId = new Map(current.map((option) => [option.id, option]));
+              const updated = ids.flatMap((id) => byId.get(id) ?? []);
+              return updated.length === current.length ? updated : current;
+            })} />
+        ) : options.length > 0 ? options.map((option, index) => (
+          <View key={option.id}>
+            {divided && index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginHorizontal: 10, backgroundColor: divider }} /> : null}
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: option.selected }}
+              aria-pressed={divided ? Boolean(option.selected) : undefined} onPress={() => close(option.id)}
+              style={({ pressed }) => ({
+                paddingHorizontal: 10, minHeight: divided ? 54 : 52, paddingVertical: 8, flexDirection: 'row',
+                alignItems: 'center', gap: 12, borderRadius: 12,
+                backgroundColor: pressed || option.selected ? p.fill : 'transparent',
+                borderWidth: req.description ? 1 : 0, borderColor: option.selected ? p.tint : 'transparent',
+                marginBottom: req.description ? 6 : 0,
+              })}>
+              {divided && option.selected ? (
+                <View style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2, backgroundColor: p.tint }} />
+              ) : null}
+              {optionContent(option)}
+            </Pressable>
+          </View>
+        )) : (
           <Text style={{ padding: 16, color: p.textSecondary }}>一致する候補がありません</Text>
-        ) : null}
+        )}
       </ScrollView>
     </>
   );

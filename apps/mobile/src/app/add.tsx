@@ -48,7 +48,7 @@ export default function AddScreen() {
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
   const { id } = params;
   const closing = useRef(false);
-  const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, showSavedTransaction } = useFinance();
+  const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, reorderAccounts, showSavedTransaction } = useFinance();
   const accountsById = useMemo(() => new Map(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
   const paymentCard = state.accounts.find((a) => a.id === params.toAccountId && a.type === 'credit');
@@ -129,8 +129,23 @@ export default function AddScreen() {
     }
     const currentId = label === '入金先' && type === 'transfer' ? toAccountId : accountId;
     const choice = await pickOne(label, choices.map((a) => ({
-      id: a.id, label: a.name, subtitle: ACCOUNT_TYPE_LABELS[a.type], icon: ACCOUNT_ICONS[a.type], selected: a.id === currentId,
-    })));
+      id: a.id,
+      label: a.name,
+      subtitle: a.institution && !a.name.includes(a.institution) ? a.institution : undefined,
+      searchText: ACCOUNT_TYPE_LABELS[a.type],
+      icon: ACCOUNT_ICONS[a.type],
+      color: a.type === 'bank' || a.type === 'foreign_bank' ? p.income
+        : a.type === 'credit' ? '#8167BF' : p.tint,
+      selected: a.id === currentId,
+    })), {
+      layout: 'divided',
+      searchLabel: '口座名・金融機関を検索',
+      onReorder: (ids) => {
+        const included = new Set(ids);
+        let next = 0;
+        reorderAccounts(state.accounts.map((account) => included.has(account.id) ? ids[next++] : account.id));
+      },
+    });
     if (choice) setter(choice);
   };
 
@@ -359,7 +374,7 @@ export default function AddScreen() {
                     tick();
                     const choice = await pickOne('所得区分', entries.map(([id, label]) => ({
                       id, label, subtitle: TAX_CATEGORY_GUIDE[id], selected: id === taxSelection,
-                    })), '税務集計に使う区分です。副業の所得区分などは、収入の実態に応じて確認してください。');
+                    })), { description: '税務集計に使う区分です。副業の所得区分などは、収入の実態に応じて確認してください。' });
                     if (choice) setTaxCat(choice as IncomeTaxCategory);
                   }}
                   style={({ pressed }) => ({
