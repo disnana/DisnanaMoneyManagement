@@ -86,7 +86,7 @@ jobs:
         run: |
           PKG=node_modules/expo-modules-jsi/apple/Package.swift
           grep -n 'swiftLanguageModes' "$PKG"
-          sed -i 's/swiftLanguageModes: \[\.v6\]/swiftLanguageModes: [.v5]/' "$PKG"
+          sed -i.bak 's/swiftLanguageModes: \[\.v6\]/swiftLanguageModes: [.v5]/' "$PKG"
           grep -n 'swiftLanguageModes' "$PKG"
       - name: Generate native project
         run: bunx expo prebuild --platform ios
