@@ -28,12 +28,45 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install dependencies
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun global install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-cache-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-cache-
+
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Cache TypeScript & Vite build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache
+            node_modules/.vite
+          key: ${{ runner.os }}-build-cache-${{ github.ref_name }}-${{ hashFiles('tsconfig.json', 'vite.config.ts', 'src/**', 'index.html') }}
+          restore-keys: |
+            ${{ runner.os }}-build-cache-${{ github.ref_name }}-
+            ${{ runner.os }}-build-cache-
+
+      - name: Install dependencies with Bun
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
+          if [ -f bun.lock ] || [ -f bun.lockb ]; then
+            bun install --frozen-lockfile
           else
-            npm install
+            bun install
           fi
 
       - name: Resolve GitHub Pages base path
@@ -46,13 +79,15 @@ jobs:
             echo "value=/${REPO_NAME}/" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Typecheck
-        run: npm run lint
+      - name: Typecheck (incremental cache)
+        run: |
+          mkdir -p .cache
+          bunx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc.tsbuildinfo
 
       - name: Build PWA
         env:
           VITE_BASE_PATH: ${{ steps.base_path.outputs.value }}
-        run: npm run build
+        run: bun run build
 
       - name: Create SPA 404 fallback
         run: cp dist/index.html dist/404.html
