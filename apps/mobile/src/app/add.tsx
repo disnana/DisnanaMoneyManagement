@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Alert, KeyboardAvoidingView, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, useColorScheme, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import type { Transaction, TransactionType } from '@dmm/core/types/finance';
@@ -117,14 +117,14 @@ export default function AddScreen() {
   );
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: p.bg }}>
+    <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Stack.Screen
         options={{
           title: editing ? '取引を編集' : '収支を記録',
         }}
       />
 
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 24 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 24 }}>
         <Segmented<TransactionType>
           value={type}
           onChange={changeType}
@@ -180,9 +180,7 @@ export default function AddScreen() {
           {input(title, setTitle, '内容（任意）')}
           {input(memo, setMemo, 'メモ（任意）')}
         </Group>
-      </ScrollView>
-
-      <View style={{ paddingHorizontal: 16, paddingBottom: 20, gap: 4 }}>
+      <View style={{ gap: 4, marginTop: 4 }}>
         <Pressable
           onPress={() => save(false)}
           android_ripple={{ color: 'rgba(255,255,255,0.25)' }}
@@ -202,6 +200,8 @@ export default function AddScreen() {
           </Pressable>
         ) : null}
       </View>
-    </KeyboardAvoidingView>
+      </ScrollView>
+
+    </View>
   );
 }

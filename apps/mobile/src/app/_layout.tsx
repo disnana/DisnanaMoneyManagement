@@ -36,6 +36,7 @@ export default function RootLayout() {
                 // Native navigation header inside the sheet (no hand-laid title that could collide with the grabber)
                 headerShown: true,
                 title: '収支を記録',
+                contentStyle: { backgroundColor: p.bg },
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: p.bg },
                 headerTintColor: p.text,
