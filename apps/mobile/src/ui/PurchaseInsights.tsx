@@ -10,7 +10,7 @@ import { Group, Row, SectionTitle } from '@/ui/kit';
 
 const AMBER = '#F59E0B';
 
-/** Budget pie, instalment plan and "when can I buy it" for one purchase (candidate or draft). */
+/** Instalment plan and "when can I buy it" for one purchase (candidate or draft). */
 export function PurchaseInsights({ amount, month, ledgerId, categoryId, installment, bank }: {
   amount?: number;
   month: string;
@@ -22,56 +22,14 @@ export function PurchaseInsights({ amount, month, ledgerId, categoryId, installm
   const p = usePalette();
   const { state, accountBalances } = useFinance();
 
-  const before = useMemo(() => budgetOverview(state, month, ledgerId), [state, month, ledgerId]);
-  const after = useMemo(
-    () => budgetOverview(state, month, ledgerId, categoryId && amount ? { categoryId, amount } : undefined),
-    [state, month, ledgerId, categoryId, amount]
-  );
   const plan = amount && installment && installment.count > 1 ? installmentPlan(amount, installment.count, installment.annualRatePct) : undefined;
 
   const balance = bank ? accountBalances[bank.id] ?? 0 : undefined;
   const surplus = useMemo(() => averageMonthlyNet(state, getCurrentMonthKey(), 3, ledgerId ?? null), [state, ledgerId]);
   const months = amount && balance !== undefined ? monthsUntilAffordable(amount, balance, surplus) : undefined;
 
-  const overAfter = after.spent > after.limit;
-  const added = Math.max(0, after.spent - before.spent);
-  const slices = after.limit > 0 ? [
-    { id: 'spent', value: before.spent, color: before.spent > before.limit ? p.danger : p.tint },
-    { id: 'plan', value: added, color: overAfter ? p.danger : AMBER },
-    // anything left is drawn as the empty track
-  ] : [];
-  const remainingAfter = Math.max(0, after.limit - after.spent);
-
   return (
     <>
-      {after.limit > 0 ? (
-        <>
-          <SectionTitle>{`${formatMonthLabel(month)}の予算の使い方`}</SectionTitle>
-          <View style={{ backgroundColor: p.card, borderRadius: 15, padding: 16, gap: 14 }}>
-            <DonutChart size={180} thickness={22}
-              slices={remainingAfter > 0 ? [...slices, { id: 'left', value: remainingAfter, color: p.fill }] : slices}
-              centerLabel={overAfter ? '予算超過' : '購入後の使用率'}
-              centerValue={`${Math.round(after.ratio * 100)}%`} />
-            <View style={{ gap: 6 }}>
-              <Legend color={before.spent > before.limit ? p.danger : p.tint} label="いまの支出" value={formatJPY(before.spent)} />
-              {added > 0 ? <Legend color={overAfter ? p.danger : AMBER} label="この購入" value={`+${formatJPY(added)}`} /> : null}
-              <Legend color={p.fill} label={overAfter ? '予算を超える額' : '予算の残り'} value={formatJPY(overAfter ? after.spent - after.limit : remainingAfter)} strong />
-            </View>
-            {after.items.some((i) => i.over) ? (
-              <View style={{ gap: 4 }}>
-                {after.items.filter((i) => i.over).map((i) => (
-                  <Text key={i.categoryId} style={{ color: p.danger, fontSize: 13 }}>
-                    {i.name}：{formatJPY(i.spent - i.limit)} 超過（予算 {formatJPY(i.limit)}）
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        </>
-      ) : (
-        <Text style={{ color: p.textSecondary, fontSize: 13 }}>この家計グループに予算を設定すると、購入後の使い過ぎを円グラフで確認できます。</Text>
-      )}
-
       {plan && amount ? (
         <>
           <SectionTitle>分割払いの目安</SectionTitle>
@@ -115,5 +73,63 @@ function Legend({ color, label, value, strong }: { color: string; label: string;
       <Text style={{ flex: 1, color: p.textSecondary, fontSize: 14 }}>{label}</Text>
       <Text style={{ color: p.text, fontSize: 15, fontWeight: strong ? '700' : '600', fontVariant: ['tabular-nums'] }}>{value}</Text>
     </View>
+  );
+}
+
+/**
+ * The "am I overspending?" picture: a ring of this month's budget use with the planned purchase(s) added,
+ * and a plain verdict (safe / careful / over) so the cost of buying is felt before deciding.
+ */
+export function BudgetPie({ month, ledgerId, extras, title }: {
+  month: string;
+  ledgerId?: string;
+  extras: { categoryId: string; amount: number }[];
+  title?: string;
+}) {
+  const p = usePalette();
+  const { state } = useFinance();
+  const before = useMemo(() => budgetOverview(state, month, ledgerId), [state, month, ledgerId]);
+  const after = useMemo(() => budgetOverview(state, month, ledgerId, extras), [state, month, ledgerId, extras]);
+  if (after.limit <= 0) {
+    return <Text style={{ color: p.textSecondary, fontSize: 13 }}>この家計グループに予算を設定すると、購入後の使い過ぎを円グラフで確認できます。</Text>;
+  }
+  const added = Math.max(0, after.spent - before.spent);
+  const over = after.spent > after.limit;
+  const careful = !over && after.ratio >= 0.8;
+  const tone = over ? p.danger : careful ? AMBER : p.income;
+  const overBy = after.spent - after.limit;
+  const slices = [
+    { id: 'spent', value: before.spent, color: before.spent > before.limit ? p.danger : p.tint },
+    { id: 'plan', value: added, color: over ? p.danger : AMBER },
+    ...(over ? [] : [{ id: 'left', value: after.limit - after.spent, color: p.fill }]),
+  ];
+  return (
+    <>
+      <SectionTitle>{title ?? `${formatMonthLabel(month)}の予算の使い方`}</SectionTitle>
+      <View style={{ backgroundColor: p.card, borderRadius: 15, padding: 16, gap: 14 }}>
+        <View style={{ borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: tone + '22' }}>
+          <Text style={{ color: tone, fontSize: 16, fontWeight: '800' }}>
+            {over ? `予算を ${formatJPY(overBy)} 超えます` : careful ? `予算の ${Math.round(after.ratio * 100)}% を使います` : `予算内です（残り ${formatJPY(after.limit - after.spent)}）`}
+          </Text>
+          {over ? <Text style={{ color: p.text, fontSize: 13, marginTop: 2 }}>今月は見送るか、来月に回すことも考えてみましょう。</Text> : null}
+        </View>
+        <DonutChart size={200} thickness={24} slices={slices}
+          centerLabel={over ? '予算超過' : '購入後の使用率'} centerValue={`${Math.round(after.ratio * 100)}%`} />
+        <View style={{ gap: 6 }}>
+          <Legend color={before.spent > before.limit ? p.danger : p.tint} label="いまの支出" value={formatJPY(before.spent)} />
+          {added > 0 ? <Legend color={over ? p.danger : AMBER} label="この購入" value={`+${formatJPY(added)}`} /> : null}
+          <Legend color={p.fill} label="今月の予算の合計" value={formatJPY(after.limit)} strong />
+        </View>
+        {after.items.some((i) => i.over) ? (
+          <View style={{ gap: 4 }}>
+            {after.items.filter((i) => i.over).map((i) => (
+              <Text key={i.categoryId} style={{ color: p.danger, fontSize: 13 }}>
+                {i.name}：{formatJPY(i.spent - i.limit)} 超過（予算 {formatJPY(i.limit)}）
+              </Text>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </>
   );
 }

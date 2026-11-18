@@ -61,14 +61,15 @@ export function budgetOverview(
   state: FinanceState,
   month: string,
   ledgerId: string | null | undefined,
-  extra?: { categoryId: string; amount: number }
+  extra?: { categoryId: string; amount: number } | { categoryId: string; amount: number }[]
 ): BudgetOverview {
   const metrics = computeMonthMetrics(filterLedger(state, ledgerId ?? null), month);
   const spentBy = new Map(metrics.categoryBreakdown.map((c) => [c.categoryId, c.amount]));
+  const extras = extra === undefined ? [] : Array.isArray(extra) ? extra : [extra];
   const budgets = state.budgets.filter((b) => (b.ledgerId ?? undefined) === (ledgerId ?? undefined));
   const items = budgets.map((b) => {
     const cat = getCategoryById(b.categoryId, state.customCategories);
-    const spent = (spentBy.get(b.categoryId) ?? 0) + (extra?.categoryId === b.categoryId ? extra.amount : 0);
+    const spent = (spentBy.get(b.categoryId) ?? 0) + extras.filter((e) => e.categoryId === b.categoryId).reduce((n, e) => n + e.amount, 0);
     return { categoryId: b.categoryId, name: cat.name, color: cat.color, limit: b.monthlyLimit, spent, over: spent > b.monthlyLimit };
   }).sort((a, b) => b.spent / (b.limit || 1) - a.spent / (a.limit || 1));
   const limit = items.reduce((s, i) => s + i.limit, 0);

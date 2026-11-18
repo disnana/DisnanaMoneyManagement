@@ -8,6 +8,7 @@ import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { filterLedger } from '@dmm/core/utils/ledgers';
 import { assessPurchase, isPlanningDate, planSavings } from '@dmm/core/utils/planning';
 import { PRIORITY_LABELS, sortCandidates } from '@dmm/core/utils/purchasePlan';
+import { BudgetPie } from '@/ui/PurchaseInsights';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -211,6 +212,10 @@ function Purchases() {
           </Group>
         );
       })}
+      {candidates.length > 0 ? (
+        <BudgetPie month={month} ledgerId={ledgerId} title={candidates.length > 1 ? '候補をすべて買った場合の予算' : undefined}
+          extras={candidates.map((item) => ({ categoryId: item.categoryId, amount: item.amount }))} />
+      ) : null}
       {candidates.length > 1 ? (
         <>
           <SectionTitle>候補をすべて買う場合</SectionTitle>

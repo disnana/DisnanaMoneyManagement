@@ -15,7 +15,7 @@ import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
 import { PlanningInput } from '@/ui/PlanningForm';
-import { PurchaseInsights } from '@/ui/PurchaseInsights';
+import { BudgetPie, PurchaseInsights } from '@/ui/PurchaseInsights';
 import { PurchaseBankPicker, PurchaseCashPreview, usePurchaseBank } from '@/ui/PurchaseCashPreview';
 
 const CURRENCIES = ['JPY', ...FOREIGN_PURCHASE_CURRENCIES] as const;
@@ -142,6 +142,7 @@ export default function PurchaseEditor() {
           <Screen keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets
             style={{ flex: 1, backgroundColor: p.bg, display: tab === 'estimate' ? 'flex' : 'none' }}
             contentContainerStyle={{ padding: 16, paddingBottom: 32, gap: 14 }}>
+            {category && purchaseAmount ? <BudgetPie month={targetMonth} ledgerId={ledgerId} extras={[{ categoryId: category, amount: purchaseAmount }]} /> : null}
             <Group>
               <PurchaseBankPicker {...payment} />
               {purchaseAmount ? <Row title="購入予定額" right={formatJPY(purchaseAmount)} /> : null}

@@ -8,7 +8,7 @@ import { buildPurchaseTransaction, PRIORITY_LABELS } from '@dmm/core/utils/purch
 import { getTodayString } from '@dmm/core/utils/format';
 import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
-import { PurchaseInsights } from '@/ui/PurchaseInsights';
+import { BudgetPie, PurchaseInsights } from '@/ui/PurchaseInsights';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
@@ -52,6 +52,7 @@ export default function PurchaseCompare() {
                 {formatForeignCurrency(price.amount, price.currency)} · レート {price.yenPerUnit}円{price.feeJPY ? ` · 手数料 ${formatJPY(price.feeJPY)}` : ''}
               </Text> : null}
             </View>
+            <BudgetPie month={candidate.month} ledgerId={candidate.ledgerId} extras={[{ categoryId: candidate.categoryId, amount: candidate.amount }]} />
             <Group><PurchaseBankPicker {...payment} /></Group>
             <PurchaseCashPreview amount={candidate.amount} month={candidate.month} ledgerId={candidate.ledgerId} bank={payment.bank} banks={payment.banks}
               budget={assessPurchaseForMonth(state, candidate.month, candidate.categoryId, candidate.amount, candidate.ledgerId)}

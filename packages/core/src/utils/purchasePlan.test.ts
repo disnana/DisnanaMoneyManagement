@@ -57,6 +57,8 @@ describe('budgetOverview', () => {
     const plan = budgetOverview(s, '2026-11', undefined, { categoryId: 'food', amount: 3000 });
     expect(plan).toMatchObject({ spent: 11000, overCount: 1 });
     expect(plan.items[0]).toMatchObject({ categoryId: 'food', over: true });
+    // several planned purchases can be counted together
+    expect(budgetOverview(s, '2026-11', undefined, [{ categoryId: 'food', amount: 1000 }, { categoryId: 'daily', amount: 6000 }])).toMatchObject({ spent: 15000, overCount: 1 });
   });
 });
 
