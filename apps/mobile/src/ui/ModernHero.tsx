@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { formatJPY } from '@dmm/core/utils/format';
 import { usePalette } from '@/lib/theme';
 
 export function ModernHero({ children }: { children: ReactNode }) {
@@ -18,5 +19,20 @@ export function ModernHero({ children }: { children: ReactNode }) {
       </View>
       <View style={{ padding: 18, gap: 12 }}>{children}</View>
     </View>
+  );
+}
+
+export function ModernHeroAmount({ amount, color }: { amount: number; color: string }) {
+  const { width, fontScale } = useWindowDimensions();
+  const formatted = formatJPY(amount);
+  // Account for screen gutters and hero padding before scaling long monetary values.
+  const availableWidth = width - 72;
+  const fontSize = Math.min(45, Math.floor(availableWidth / (formatted.length * 0.66 * fontScale)));
+
+  return (
+    <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}
+      style={{ color, fontSize, fontWeight: '800', fontVariant: ['tabular-nums'], letterSpacing: -0.5 }}>
+      {formatted}
+    </Text>
   );
 }

@@ -18,7 +18,7 @@ export function LedgerPill() {
         const choice = await pickLedger(activeLedger?.id, 'すべて');
         if (choice !== null) setActiveLedgerId(choice || null);
       }}
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16,
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingVertical: 4, paddingHorizontal: 12, borderRadius: 16,
         backgroundColor: pressed ? p.separator : p.fill })}>
       <SymbolView name={activeLedger ? ledgerIcon(activeLedger) : ALL_LEDGER_ICON} size={13} tintColor={ledgerColor(activeLedger) ?? p.tint} />
       <Text numberOfLines={1} style={{ color: p.text, fontSize: 13, fontWeight: '700', maxWidth: 120 }}>{activeLedger?.name ?? 'すべて'}</Text>

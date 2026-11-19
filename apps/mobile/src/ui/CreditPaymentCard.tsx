@@ -6,7 +6,7 @@ import { useAppearanceStyle, type AppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
 import { IconBadge, MonthBar } from './kit';
 import { PlanningProgress } from './PlanningSummary';
-import { ModernHero } from './ModernHero';
+import { ModernHero, ModernHeroAmount } from './ModernHero';
 
 function warningLabel(days: number) {
   return days === 0 ? '今日が支払日' : `支払日まであと${days}日`;
@@ -214,8 +214,8 @@ function StyledCreditPaymentCard({ appearance, statement, onChangeMonth, onRecor
       <>
         {monthBar}
         <ModernHero>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <View style={{ flexGrow: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <IconBadge name={{ ios: 'creditcard', android: 'credit_card' }} color={p.tint} size={34} />
               <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>支払残額</Text>
             </View>
@@ -223,8 +223,7 @@ function StyledCreditPaymentCard({ appearance, statement, onChangeMonth, onRecor
               paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, overflow: 'hidden',
               fontSize: 12, fontWeight: '700' }}>{status}</Text>
           </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: paymentColor, fontSize: 45, fontWeight: '800',
-            fontVariant: ['tabular-nums'], letterSpacing: -1.5 }}>{formatJPY(thisMonthRemaining)}</Text>
+          <ModernHeroAmount amount={thisMonthRemaining} color={paymentColor} />
           <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8, rowGap: 4 }}>
             <Text style={{ color: p.text, fontWeight: '700', fontSize: 13, backgroundColor: p.card,
               borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' }}>{dueDay}</Text>
