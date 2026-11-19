@@ -1,5 +1,5 @@
-import { useLayoutEffect, useState, type ComponentProps, type ReactNode } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { useEffect, useLayoutEffect, useState, type ComponentProps, type ReactNode } from 'react';
+import { Platform, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
@@ -20,6 +20,10 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
 }) {
   const { month, setMonth } = useFinance();
   const reduceMotion = useAppReducedMotion();
+  const animateSwipe = Platform.OS === 'android' || !reduceMotion;
+  const deferPreviews = Platform.OS === 'android' && reduceMotion;
+  const [previewsReady, setPreviewsReady] = useState(false);
+  const renderPreviews = animateSwipe && (!deferPreviews || previewsReady);
   const { width } = useWindowDimensions();
   const [firstMonth] = useState(() => monthNumber(month));
   const pageIndex = monthNumber(month) - firstMonth;
@@ -32,6 +36,14 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
     position.value = pageIndex;
     settling.value = false;
   }, [pageIndex, position, settling]);
+
+  useEffect(() => {
+    if (!deferPreviews || previewsReady) return;
+    const request = requestIdleCallback(() => setPreviewsReady(true), { timeout: 180 });
+    return () => cancelIdleCallback(request);
+  }, [deferPreviews, previewsReady]);
+
+  const preparePreviews = () => setPreviewsReady(true);
 
   const changeMonth = (delta: number) => {
     tick();
@@ -46,10 +58,11 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
     onActivate: () => {
       'worklet';
       if (!settling.value) cancelAnimation(position);
+      if (animateSwipe && !renderPreviews) scheduleOnRN(preparePreviews);
     },
     onUpdate: ({ translationX }) => {
       'worklet';
-      if (!reduceMotion && !settling.value) position.value = pageIndex - Math.min(1, Math.max(-1, translationX / width));
+      if (animateSwipe && !settling.value) position.value = pageIndex - Math.min(1, Math.max(-1, translationX / width));
     },
     onDeactivate: ({ canceled, translationX, translationY, velocityX }) => {
       'worklet';
@@ -59,7 +72,7 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
       const turn = !canceled && (distance >= 28 || flick) && distance > Math.abs(translationY) * 1.15;
       const direction = translationX > 0 ? -1 : 1;
       settling.value = turn;
-      if (reduceMotion) {
+      if (!animateSwipe) {
         if (turn) scheduleOnRN(changeMonth, direction);
         return;
       }
@@ -76,7 +89,7 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
     <GestureDetector gesture={swipe} touchAction="pan-y">
       <View style={{ flex: 1, overflow: 'hidden' }}>
         <Animated.View style={[{ flex: 1 }, track]}>
-          {(reduceMotion ? [0] : [-1, 0, 1]).map((delta) => {
+          {(renderPreviews ? [-1, 0, 1] : [0]).map((delta) => {
             const pageMonth = shiftMonth(month, delta);
             const isPreview = delta !== 0;
             return (

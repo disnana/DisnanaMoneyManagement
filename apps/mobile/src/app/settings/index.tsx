@@ -44,7 +44,7 @@ export default function Settings() {
 
         <SectionTitle>操作</SectionTitle>
         <Group>
-          <SettingsSwitchRow title="モーションを抑える" subtitle="タップや画面切り替え、月送りの動きを減らす"
+          <SettingsSwitchRow title="モーションを抑える" subtitle={Platform.OS === 'android' ? 'タップや画面切り替えの動きを減らす' : 'タップや画面切り替え、月送りの動きを減らす'}
             checked={reduceMotion} onChange={setReduceMotion} />
           <SettingsSwitchRow title="操作時の振動" checked={haptics} onChange={(enabled) => {
             setHapticsEnabled(enabled);

@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import { useLayoutEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
 import { Pressable, Text } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -49,20 +49,40 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
   );
 }
 
+function FocusedTab({ children, requestedMonth, onMonthReset }: {
+  children: ReactNode;
+  requestedMonth?: string;
+  onMonthReset: () => void;
+}) {
+  const { month, setMonth } = useFinance();
+
+  useLayoutEffect(() => {
+    if (!requestedMonth) return;
+    setMonth(requestedMonth);
+    onMonthReset();
+  }, [requestedMonth, onMonthReset, setMonth]);
+
+  // A tab button resets the destination month only, after the old tab is removed.
+  return requestedMonth && month !== requestedMonth ? null : children;
+}
+
 export default function TabsLayout() {
   const p = usePalette();
-  const { setMonth } = useFinance();
+  const [pendingReset, setPendingReset] = useState<{ tab: Tab; month: string }>();
   const tab = (name: Tab, label: string, icon: SymbolViewProps['name']) => (
     <TabTrigger name={name} href={`/${name}`} resetOnFocus asChild>
-      <TabButton label={label} icon={icon} onSwitch={() => setMonth(getCurrentMonthKey())} />
+      <TabButton label={label} icon={icon} onSwitch={() => setPendingReset({ tab: name, month: getCurrentMonthKey() })} />
     </TabTrigger>
   );
 
   return (
     <Tabs style={{ flex: 1, backgroundColor: p.bg }} options={{ backBehavior: 'history' }}>
       <TabSlot renderFn={(descriptor, { isFocused, detachInactiveScreens }) => isFocused ? (
-        <NativeScreen enabled={detachInactiveScreens} activityState={2} style={{ flex: 1 }}>
-          {descriptor.render()}
+        <NativeScreen enabled={detachInactiveScreens} activityState={2} style={{ flex: 1, backgroundColor: p.bg }}>
+          <FocusedTab requestedMonth={pendingReset?.tab === descriptor.route.name ? pendingReset.month : undefined}
+            onMonthReset={() => setPendingReset(undefined)}>
+            {descriptor.render()}
+          </FocusedTab>
         </NativeScreen>
       ) : null} />
       <TabList asChild>

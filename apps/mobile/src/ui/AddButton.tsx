@@ -19,7 +19,7 @@ export function AddButton() {
       style={({ pressed }) => ({
         width: 54, height: 54, marginHorizontal: 5, borderRadius: 27,
         alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
-        transform: reduceMotion ? undefined : [{ scale: pressed ? 0.94 : 1 }],
+        transform: [{ scale: !reduceMotion && pressed ? 0.94 : 1 }],
       })}>
       <SymbolView name={{ ios: 'plus', android: 'add' }} size={27} tintColor={p.onTint} />
     </Pressable>

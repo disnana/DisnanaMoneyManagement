@@ -20,7 +20,7 @@ export function HeaderAction({ name, label, onPress, selected, accent, circular,
         width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.45 : 1,
         // position only (size and colours unchanged): the custom circle fills the whole 44pt bar and touches the
         // status-bar / Dynamic Island band above it, so nudge it down a little on iOS
-        transform: circular && Platform.OS === 'ios' ? [{ translateY: 6 }] : undefined,
+        transform: [{ translateY: circular && Platform.OS === 'ios' ? 6 : 0 }],
         borderRadius: accent ? 22 : 12, backgroundColor: !circular && (selected || pressed) ? p.fill : 'transparent',
       })}>
       {({ pressed }) => circular ? (
