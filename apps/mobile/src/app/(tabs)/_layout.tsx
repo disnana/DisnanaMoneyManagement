@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Screen as NativeScreen } from 'react-native-screens';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -19,12 +20,13 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
   onSwitch: () => void;
 }) {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   const emphasis = useSharedValue(0);
   const restColor = isFocused ? p.fill : 'transparent';
   const pressedColor = `${p.tint}42`;
   const capsule = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(emphasis.value, [0, 1], [restColor, pressedColor]),
-    transform: [{ scale: 1 - emphasis.value * 0.05 }],
+    transform: [{ scale: reduceMotion ? 1 : 1 - emphasis.value * 0.05 }],
   }));
   const color = isFocused ? p.tint : p.textSecondary;
   return (
@@ -34,10 +36,10 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
         onPress?.(event);
       }}
       onPressIn={() => {
-        emphasis.value = withTiming(1, { duration: 65 });
+        emphasis.value = reduceMotion ? 1 : withTiming(1, { duration: 65 });
         tick();
       }}
-      onPressOut={() => { emphasis.value = withTiming(0, { duration: 185 }); }}
+      onPressOut={() => { emphasis.value = reduceMotion ? 0 : withTiming(0, { duration: 185 }); }}
       style={{ flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
       <Animated.View style={[{ width: 52, height: 30, maxWidth: '100%', borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, capsule]}>
         <SymbolView name={icon} size={21} tintColor={color} />

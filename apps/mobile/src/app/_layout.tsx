@@ -7,6 +7,7 @@ import { FinanceProvider } from '@/lib/store';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import '@/lib/themePref';
 
@@ -15,6 +16,7 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const scheme = useColorScheme();
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
 
   useEffect(() => {
     // Storage is synchronous, so the first frame already has data
@@ -26,7 +28,7 @@ export default function RootLayout() {
     <LockGate>
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <FinanceProvider>
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" />
           {(['categories', 'category-editor', 'category-detail', 'planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm'] as const).map((name) => (

@@ -3,8 +3,9 @@ import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
 import { GestureDetector, GestureHandlerRootView, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import { IconBadge } from '@/ui/kit';
 import { ReorderList } from '@/ui/ReorderList';
@@ -47,6 +48,7 @@ export function pickOne(title: string | undefined, options: PickOption[], presen
 
 export function PickerHost() {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   const { height } = useWindowDimensions();
   const [req, setReq] = useState<Request | null>(null);
   const pending = useRef<Request | null>(null);
@@ -94,7 +96,7 @@ export function PickerHost() {
       if (!canceled && (translationY >= 48 || (translationY >= 18 && velocityY >= 500))) {
         scheduleOnRN(close, null);
       } else {
-        dragOffset.value = withTiming(0, { duration: 150 });
+        dragOffset.value = reduceMotion ? 0 : withTiming(0, { duration: 150 });
       }
     },
   });
@@ -230,20 +232,27 @@ export function PickerHost() {
     </>
   );
 
+  const android = Platform.OS === 'android';
+  const sheet = (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' }}>
+        <Pressable accessibilityLabel="選択を閉じる" onPress={() => close(null)} style={{ flex: 1 }} />
+        <Animated.View style={[{ height: height * 0.76, flexShrink: 1 }, sheetStyle]}>
+          <SafeAreaView edges={['bottom', 'left', 'right']} accessibilityViewIsModal
+            style={{ flex: 1, backgroundColor: p.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+            {content}
+          </SafeAreaView>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </GestureHandlerRootView>
+  );
+
   return (
-    <Modal transparent animationType="none" visible onRequestClose={() => close(null)}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.42)' }}>
-          <Pressable accessibilityLabel="選択を閉じる" onPress={() => close(null)} style={{ flex: 1 }} />
-          <Animated.View style={[{ height: height * 0.76, flexShrink: 1 }, sheetStyle]}>
-            <SafeAreaView edges={['bottom', 'left', 'right']} accessibilityViewIsModal
-              style={{ flex: 1, backgroundColor: p.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
-              {content}
-            </SafeAreaView>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </GestureHandlerRootView>
+    <Modal transparent animationType="none" visible onRequestClose={() => close(null)}
+      statusBarTranslucent={android} navigationBarTranslucent={android}>
+      {/* Android hosts the modal in its own window, so read the insets there. */}
+      {android ? <SafeAreaProvider>{sheet}</SafeAreaProvider> : sheet}
     </Modal>
   );
 }

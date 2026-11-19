@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { tick } from '@/lib/haptics';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { metrics, usePalette } from '@/lib/theme';
 
 export function CalendarDialog({ title, value, onCancel, onApply, children }: {
@@ -11,8 +12,9 @@ export function CalendarDialog({ title, value, onCancel, onApply, children }: {
   children: ReactNode;
 }) {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   return (
-    <Modal transparent visible animationType="fade" onRequestClose={onCancel}>
+    <Modal transparent visible animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={onCancel}>
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
         <Pressable accessible={false} onPress={onCancel} style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.58)' }]} />
         <View accessibilityViewIsModal role="dialog" aria-label={title}

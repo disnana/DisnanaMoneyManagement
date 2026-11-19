@@ -4,6 +4,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { shiftMonth } from '@dmm/core/utils/format';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
 import { MonthBar, Screen } from './kit';
@@ -18,6 +19,7 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
   showMonthBar?: boolean;
 }) {
   const { month, setMonth } = useFinance();
+  const reduceMotion = useAppReducedMotion();
   const { width } = useWindowDimensions();
   const [firstMonth] = useState(() => monthNumber(month));
   const pageIndex = monthNumber(month) - firstMonth;
@@ -47,7 +49,7 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
     },
     onUpdate: ({ translationX }) => {
       'worklet';
-      if (!settling.value) position.value = pageIndex - Math.min(1, Math.max(-1, translationX / width));
+      if (!reduceMotion && !settling.value) position.value = pageIndex - Math.min(1, Math.max(-1, translationX / width));
     },
     onDeactivate: ({ canceled, translationX, translationY, velocityX }) => {
       'worklet';
@@ -57,6 +59,10 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
       const turn = !canceled && (distance >= 28 || flick) && distance > Math.abs(translationY) * 1.15;
       const direction = translationX > 0 ? -1 : 1;
       settling.value = turn;
+      if (reduceMotion) {
+        if (turn) scheduleOnRN(changeMonth, direction);
+        return;
+      }
       position.value = withTiming(turn ? pageIndex + direction : pageIndex, {
         duration: turn ? 165 : 135,
         easing: Easing.out(Easing.cubic),
@@ -70,7 +76,7 @@ export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<Co
     <GestureDetector gesture={swipe} touchAction="pan-y">
       <View style={{ flex: 1, overflow: 'hidden' }}>
         <Animated.View style={[{ flex: 1 }, track]}>
-          {[-1, 0, 1].map((delta) => {
+          {(reduceMotion ? [0] : [-1, 0, 1]).map((delta) => {
             const pageMonth = shiftMonth(month, delta);
             const isPreview = delta !== 0;
             return (

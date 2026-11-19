@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Switch, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
+import { useMotionPreference } from '@/lib/motionPref';
 import { useFinance } from '@/lib/store';
 import Constants from 'expo-constants';
 import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
@@ -19,6 +20,7 @@ function openLegalPage(page: 'terms' | 'privacy') {
 export default function Settings() {
   const p = usePalette();
   const [pref, setPref] = useThemePref();
+  const [reduceMotion, setReduceMotion] = useMotionPreference();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
   const lockOn = useLockEnabled();
   const { state } = useFinance();
@@ -42,6 +44,14 @@ export default function Settings() {
 
         <SectionTitle>操作</SectionTitle>
         <Group>
+          <View style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>モーションを抑える</Text>
+              <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: 2 }}>画面切り替えや月送りの動きを減らす</Text>
+            </View>
+            <Switch accessibilityLabel="モーションを抑える" value={reduceMotion} onValueChange={setReduceMotion}
+              trackColor={{ false: p.fill, true: p.tint }} />
+          </View>
           <Pressable accessibilityRole="switch" accessibilityLabel="操作時の振動" accessibilityState={{ checked: haptics }}
             onPress={() => {
               setHapticsEnabled(!haptics);

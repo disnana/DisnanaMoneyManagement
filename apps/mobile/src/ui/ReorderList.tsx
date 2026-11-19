@@ -4,6 +4,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { tick } from '@/lib/haptics';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { metrics, usePalette } from '@/lib/theme';
 
 const ROW_HEIGHT = 68;
@@ -52,12 +53,13 @@ function ReorderRow({ label, index, count, drag, move, children }: {
       }
     },
   });
+  const reduceMotion = useAppReducedMotion();
   const animation = useAnimatedStyle(() => {
     const active = from.value === index;
     const displacement = from.value >= 0 && index > from.value && index <= target.value ? -ROW_HEIGHT
       : from.value >= 0 && index < from.value && index >= target.value ? ROW_HEIGHT : 0;
     return {
-      transform: [{ translateY: active ? offset.value : from.value < 0 ? 0 : withTiming(displacement, { duration: 115 }) }],
+      transform: [{ translateY: active ? offset.value : from.value < 0 || reduceMotion ? displacement : withTiming(displacement, { duration: 115 }) }],
       zIndex: active ? 2 : 0,
       backgroundColor: active ? p.fill : p.card,
     };

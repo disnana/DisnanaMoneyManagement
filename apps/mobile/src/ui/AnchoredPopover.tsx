@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Modal, Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 
 export type PopoverAnchor = { x: number; y: number };
@@ -13,6 +14,7 @@ export function AnchoredPopover({ anchor, onClose, children, width: preferredWid
   initialHeight?: number;
 }) {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   const window = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [height, setHeight] = useState(initialHeight);
@@ -26,7 +28,7 @@ export function AnchoredPopover({ anchor, onClose, children, width: preferredWid
   const top = Math.max(topEdge, Math.min(y + 14 + height <= bottomEdge ? y + 14 : y - height - 14, bottomEdge - height));
 
   return (
-    <Modal transparent statusBarTranslucent animationType="fade" visible onRequestClose={onClose}>
+    <Modal transparent statusBarTranslucent animationType={reduceMotion ? 'none' : 'fade'} visible onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.42)' }}>
         <Pressable accessible={false} onPress={onClose} style={{ position: 'absolute', inset: 0 }} />
         <View accessibilityViewIsModal onLayout={({ nativeEvent }) => setHeight(nativeEvent.layout.height)}

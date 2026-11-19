@@ -9,6 +9,7 @@ import type { CategoryDef } from '@dmm/core/types/finance';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { tick } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { AnchoredPopover, type PopoverAnchor } from '@/ui/AnchoredPopover';
@@ -57,12 +58,13 @@ function CategoryRow({ category, index, count, from, target, offset, move, menu 
       }
     },
   });
+  const reduceMotion = useAppReducedMotion();
   const animation = useAnimatedStyle(() => {
     const active = from.value === index;
     const displacement = from.value >= 0 && index > from.value && index <= target.value ? -ROW_HEIGHT
       : from.value >= 0 && index < from.value && index >= target.value ? ROW_HEIGHT : 0;
     return {
-      transform: [{ translateY: active ? offset.value : from.value < 0 ? 0 : withTiming(displacement, { duration: 115 }) }],
+      transform: [{ translateY: active ? offset.value : from.value < 0 || reduceMotion ? displacement : withTiming(displacement, { duration: 115 }) }],
       zIndex: active ? 2 : 0,
       backgroundColor: active ? p.fill : p.card,
     };
