@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
-import { formatJPY, formatMonthLabel, getEffectiveOutflow } from '@dmm/core/utils/format';
+import { formatJPY, getEffectiveOutflow } from '@dmm/core/utils/format';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { useCurrentBalances } from '@/lib/currentBalances';
@@ -70,22 +70,14 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
         </Text>
       </View>
 
-      <MonthBar month={month} onChange={setMonth} />
       {summary ? (
-        <AccountSummaryGroup>
-          <CreditPaymentCard statement={summary} onRecord={() => router.push({
+        <CreditPaymentCard statement={summary} onChangeMonth={setMonth}
+          onEditBilling={() => router.push({ pathname: '/accounts/billing', params: { id, month } })}
+          onRecord={() => router.push({
             pathname: '/add',
             params: { accountId: bank?.id, toAccountId: id, billingMonth: month, amount: String(summary.thisMonthRemaining) },
           })} />
-          <Row compact title={summary.thisMonthConfirmed ? '請求額（確定）' : '請求額（見込み）'} right={formatJPY(summary.thisMonthGross)} />
-          <Row compact title="支払い記帳済み" right={formatJPY(summary.thisMonthSettled)} />
-          <Row compact title={summary.thisMonthConfirmed ? '確定額を編集' : '確定額を入力'} chevron
-            onPress={() => router.push({ pathname: '/accounts/billing', params: { id, month } })} />
-          <Row compact title={`${formatMonthLabel(summary.nextMonthKey)}の支払残額`} right={formatJPY(summary.nextMonthRemaining)} />
-          <Row compact title={`${formatMonthLabel(month)}に使った額`} right={formatJPY(summary.thisMonthUsage)} />
-          {summary.creditLimit > 0 ? <Row compact title="利用可能額" right={formatJPY(summary.availableCredit)} /> : null}
-        </AccountSummaryGroup>
-      ) : null}
+      ) : <MonthBar month={month} onChange={setMonth} />}
 
       <SectionTitle action="設定" onAction={() => router.push({ pathname: card ? '/accounts/card' : '/accounts/account', params: { id } })}>
         {card ? 'カード情報' : '口座情報'}
