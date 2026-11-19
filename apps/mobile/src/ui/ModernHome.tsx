@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -10,10 +10,13 @@ import { formatJPY, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { tick } from '@/lib/haptics';
+import { homeLayouts, useHomeAssetVisibility, useHomeLayout } from '@/lib/homePreferences';
+import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from './HeaderAction';
-import { LedgerPill } from './LedgerPill';
+import { AccountSummaryGroup, AccountSummaryRow } from './AccountSummaryRow';
+import { HomeAssetsHeading, hiddenAssetsLabel } from './HomeAssets';
 import { ModernFeature, ModernHeroAmount, featureColors } from './ModernHero';
 import { IconBadge, MonthBar } from './kit';
 
@@ -80,7 +83,100 @@ function AssetsTrend({ assets }: { assets: number }) {
   );
 }
 
-export function ModernHomeOverview({ assets }: { assets: number }) {
+export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
+  assets: number; accounts: Account[]; balances: Record<string, number>; onOpen: (id: string) => void;
+}) {
+  const p = usePalette();
+  const [layout, setLayout] = useHomeLayout();
+  const { state } = useFinance();
+  const switchLayout = async () => {
+    const choice = await pickOne('ホームのレイアウト', homeLayouts.map((item) => ({
+      ...item, selected: item.id === layout,
+    })), { layout: 'divided' });
+    const selected = homeLayouts.find(({ id }) => id === choice);
+    if (selected) setLayout(selected.id);
+  };
+  const rail = <ModernAccountRail accounts={accounts} balances={balances} onOpen={onOpen} />;
+
+  return (
+    <>
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 5 }}>
+        <Text accessibilityRole="header" style={{ flex: 1, fontSize: 34, fontWeight: '800', color: p.text, letterSpacing: -0.8 }}>ホーム</Text>
+        <HeaderAction name={{ ios: 'rectangle.3.group', android: 'dashboard_customize' }} label="ホームのレイアウト" circular inContent
+          onPress={switchLayout} />
+        <HeaderAction name={{ ios: 'list.clipboard', android: 'assignment' }} label="予算・計画" circular inContent
+          onPress={() => router.push('/planning')} />
+        <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="設定" circular inContent
+          onPress={() => router.push('/settings')} />
+      </SafeAreaView>
+
+      {layout === 'trend' ? (
+        <>
+          <ModernAssets assets={assets} emphasis="trend" />
+          <ModernCashFlow />
+          {rail}
+        </>
+      ) : layout === 'month' ? (
+        <>
+          <ModernCashFlow prominent />
+          <View style={{ backgroundColor: p.card, borderRadius: 18, borderCurve: 'continuous', paddingHorizontal: 14, paddingBottom: 13 }}>
+            <ModernAssets assets={assets} emphasis="compact" />
+          </View>
+          {rail}
+        </>
+      ) : (
+        <>
+          <View style={{ backgroundColor: p.card, borderRadius: 25, borderCurve: 'continuous', paddingHorizontal: 10, paddingBottom: 7 }}>
+            <View style={{ paddingHorizontal: 8, paddingTop: 7, paddingBottom: 13 }}>
+              <ModernAssets assets={assets} emphasis="wallet" />
+            </View>
+            <WalletAccounts
+              accounts={accounts}
+              balances={balances}
+              bankAccounts={state.accounts}
+              onOpen={onOpen}
+            />
+          </View>
+          <ModernCashFlow />
+        </>
+      )}
+    </>
+  );
+}
+
+function ModernAssets({ assets, emphasis }: { assets: number; emphasis: 'trend' | 'compact' | 'wallet' }) {
+  const p = usePalette();
+  const [hidden] = useHomeAssetVisibility();
+
+  if (emphasis === 'trend') {
+    return (
+      <ModernFeature>
+        <HomeAssetsHeading onDark />
+        {hidden ? (
+          <Text accessibilityLabel={hiddenAssetsLabel} style={[money, { color: featureColors.secondary, fontSize: 32 }]}>••••••</Text>
+        ) : (
+          <>
+            <ModernHeroAmount amount={assets} color={assets < 0 ? featureColors.negative : featureColors.positive} />
+            <AssetsTrend assets={assets} />
+          </>
+        )}
+      </ModernFeature>
+    );
+  }
+
+  return (
+    <>
+      <HomeAssetsHeading />
+      <Text accessibilityLabel={hidden ? hiddenAssetsLabel : undefined} numberOfLines={1} adjustsFontSizeToFit
+        style={[money, { color: hidden ? p.textSecondary : assets < 0 ? p.danger : p.income,
+          fontSize: emphasis === 'wallet' ? 36 : 25, letterSpacing: -0.4 }]}>
+        {hidden ? '••••••' : formatJPY(assets)}
+      </Text>
+    </>
+  );
+}
+
+function ModernCashFlow({ prominent = false }: { prominent?: boolean }) {
   const p = usePalette();
   const { month, setMonth, setTransactionFilter, visibleState } = useFinance();
   const { income, expense, net } = computeMonthMetrics(visibleState, month);
@@ -93,32 +189,16 @@ export function ModernHomeOverview({ assets }: { assets: number }) {
   const stacked = width / fontScale < 310;
 
   return (
-    <>
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 5 }}>
-        <Text accessibilityRole="header" style={{ flex: 1, fontSize: 34, fontWeight: '800', color: p.text, letterSpacing: -0.8 }}>ホーム</Text>
-        <HeaderAction name={{ ios: 'list.clipboard', android: 'assignment' }} label="予算・計画" circular inContent
-          onPress={() => router.push('/planning')} />
-        <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="設定" circular inContent
-          onPress={() => router.push('/settings')} />
-      </SafeAreaView>
-
-      <ModernFeature>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text accessibilityRole="header" style={{ color: featureColors.secondary, fontSize: 14, fontWeight: '600' }}>現在の総資産</Text>
-          <LedgerPill onDark />
-        </View>
-        <ModernHeroAmount amount={assets} color={assets < 0 ? featureColors.negative : featureColors.positive} />
-        <AssetsTrend assets={assets} />
-      </ModernFeature>
-
-      <View style={{ paddingHorizontal: 3, gap: 8 }}>
+      <View style={[{ paddingHorizontal: 3, gap: 8 }, prominent && {
+        backgroundColor: p.card, borderRadius: 24, borderCurve: 'continuous', padding: 15, borderLeftWidth: 4, borderLeftColor: p.tint,
+      }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: 4 }}>
           <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '800', color: p.text }}>月の収支</Text>
           <MonthBar month={month} onChange={setMonth} compact />
         </View>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', columnGap: 8 }}>
           <Text numberOfLines={1} adjustsFontSizeToFit style={[money, { flexShrink: 1, color: net < 0 ? p.danger : p.income,
-            fontSize: 30, letterSpacing: -0.5 }]}>
+            fontSize: prominent ? 38 : 30, letterSpacing: -0.5 }]}>
             {net > 0 ? '+' : ''}{formatJPY(net)}
           </Text>
           <Pressable accessibilityRole="button" accessibilityLabel="選択月の取引を見る"
@@ -136,7 +216,8 @@ export function ModernHomeOverview({ assets }: { assets: number }) {
         </View>
         <View style={{ flexDirection: stacked ? 'column' : 'row', gap: 10 }}>
           {activity.map(({ label, amount, icon, color }) => (
-            <View key={label} style={{ flex: stacked ? undefined : 1, flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <View key={label} style={[{ flex: stacked ? undefined : 1, flexDirection: 'row', alignItems: 'center', gap: 7 },
+              prominent && { backgroundColor: p.fill, borderRadius: 13, padding: 7 }]}>
               <IconBadge name={icon} color={color} size={31} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
@@ -147,11 +228,10 @@ export function ModernHomeOverview({ assets }: { assets: number }) {
           ))}
         </View>
       </View>
-    </>
   );
 }
 
-export function ModernAccountRail({ accounts, balances, onOpen }: {
+function ModernAccountRail({ accounts, balances, onOpen }: {
   accounts: Account[]; balances: Record<string, number>; onOpen: (id: string) => void;
 }) {
   const p = usePalette();
@@ -159,13 +239,7 @@ export function ModernAccountRail({ accounts, balances, onOpen }: {
   const tileWidth = Math.min(218, Math.round(width * (fontScale > 1.3 ? 0.62 : 0.415)));
   return (
     <View style={{ gap: 10 }}>
-      <View style={{ paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Text accessibilityRole="header" style={{ color: p.text, fontSize: 20, fontWeight: '800', flexShrink: 1 }}>口座別残高</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="口座を見る" onPress={() => router.navigate('/accounts')}
-          style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}>
-          <Text style={{ color: p.tint, fontWeight: '700', fontSize: 13 }}>口座を見る</Text>
-        </Pressable>
-      </View>
+      <AccountsHeading />
       {accounts.length ? (
         <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false}
           style={{ marginHorizontal: -16 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 9 }}
@@ -196,6 +270,47 @@ export function ModernAccountRail({ accounts, balances, onOpen }: {
       ) : (
         <Text style={{ color: p.textSecondary, fontSize: 14 }}>この家計グループに表示する口座がありません</Text>
       )}
+    </View>
+  );
+}
+
+function AccountsHeading() {
+  const p = usePalette();
+  return (
+    <View style={{ paddingHorizontal: 3, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+      <Text accessibilityRole="header" style={{ color: p.text, fontSize: 20, fontWeight: '800', flexShrink: 1 }}>口座別残高</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="口座を見る" onPress={() => router.navigate('/accounts')}
+        style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}>
+        <Text style={{ color: p.tint, fontWeight: '700', fontSize: 13 }}>口座を見る</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function WalletAccounts({ accounts, balances, bankAccounts, onOpen }: {
+  accounts: Account[]; balances: Record<string, number>; bankAccounts: Account[]; onOpen: (id: string) => void;
+}) {
+  const p = usePalette();
+  const [expanded, setExpanded] = useState(false);
+  const rows: ReactNode = (expanded ? accounts : accounts.slice(0, 3)).map((account) => (
+    <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0}
+      linkedBank={bankAccounts.find(({ id }) => id === account.linkedBankAccountId)} flat onPress={() => onOpen(account.id)} />
+  ));
+
+  return (
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.separator, paddingHorizontal: 6 }}>
+      <AccountsHeading />
+      {accounts.length ? <AccountSummaryGroup flat>{rows}</AccountSummaryGroup> : (
+        <Text style={{ color: p.textSecondary, paddingHorizontal: 4, paddingBottom: 10 }}>この家計グループに表示する口座がありません</Text>
+      )}
+      {accounts.length > 3 ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded((value) => !value)}
+          style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', alignItems: 'center', opacity: pressed ? 0.65 : 1 })}>
+          <Text style={{ color: p.tint, fontWeight: '700', fontSize: 13 }}>
+            {expanded ? '口座を折りたたむ' : `残りの${accounts.length - 3}口座を見る`}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

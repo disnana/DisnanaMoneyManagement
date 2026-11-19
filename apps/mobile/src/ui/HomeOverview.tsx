@@ -7,7 +7,8 @@ import { useAppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
 import { HeroCard, MonthlyCashFlow } from './HeroCard';
 import { MonthBar, SectionTitle } from './kit';
-import { LedgerPill } from './LedgerPill';
+import { useHomeAssetVisibility } from '@/lib/homePreferences';
+import { HomeAssetsHeading, hiddenAssetsLabel } from './HomeAssets';
 
 export function HomeOverview({ month, assets }: { month: string; assets: number }) {
   const [appearance] = useAppearanceStyle();
@@ -31,6 +32,7 @@ function StyledOverview({ appearance, month, assets }: {
   assets: number;
 }) {
   const p = usePalette();
+  const [hidden] = useHomeAssetVisibility();
   const { visibleState, setMonth } = useFinance();
   const { income, expense, net } = computeMonthMetrics(visibleState, month);
   const activity = [
@@ -39,19 +41,18 @@ function StyledOverview({ appearance, month, assets }: {
   ];
   const netColor = net < 0 ? p.danger : p.income;
   const netAmount = `${net > 0 ? '+' : ''}${formatJPY(net)}`;
-  const assetsColor = assets < 0 ? p.danger : p.income;
+  const assetsColor = hidden ? p.textSecondary : assets < 0 ? p.danger : p.income;
   const moneyStyle = { fontWeight: '800' as const, fontVariant: ['tabular-nums'] as ['tabular-nums'] };
 
   if (appearance === 'classic') {
     return (
       <CardSurface>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10 }}>
-          <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 15, fontWeight: '700' }}>現在の総資産</Text>
-          <LedgerPill />
+        <View style={{ paddingHorizontal: 14 }}>
+          <HomeAssetsHeading />
         </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit
+        <Text accessibilityLabel={hidden ? hiddenAssetsLabel : undefined} numberOfLines={1} adjustsFontSizeToFit
           style={[moneyStyle, { color: assetsColor, fontSize: 29, paddingHorizontal: 14, paddingBottom: 12 }]}>
-          {formatJPY(assets)}
+          {hidden ? '••••••' : formatJPY(assets)}
         </Text>
         <CardHeader style={{ borderTopColor: p.outline, borderTopWidth: StyleSheet.hairlineWidth }}>
           <MonthBar month={month} onChange={setMonth} />
@@ -80,12 +81,9 @@ function StyledOverview({ appearance, month, assets }: {
   return (
     <>
       <CardSurface style={{ padding: 18, gap: 10, backgroundColor: p.sectionHeader }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-          <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700', flexShrink: 1 }}>現在の総資産</Text>
-          <LedgerPill />
-        </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit
-          style={[moneyStyle, { color: assetsColor, fontSize: 35 }]}>{formatJPY(assets)}</Text>
+        <HomeAssetsHeading />
+        <Text accessibilityLabel={hidden ? hiddenAssetsLabel : undefined} numberOfLines={1} adjustsFontSizeToFit
+          style={[moneyStyle, { color: assetsColor, fontSize: 35 }]}>{hidden ? '••••••' : formatJPY(assets)}</Text>
       </CardSurface>
       <CardSurface style={{ paddingHorizontal: 16, paddingBottom: 15 }}>
         <MonthBar month={month} onChange={setMonth} />

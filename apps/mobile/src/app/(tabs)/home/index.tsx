@@ -10,7 +10,7 @@ import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
 import { HomeOverview } from '@/ui/HomeOverview';
-import { ModernAccountRail, ModernHomeOverview } from '@/ui/ModernHome';
+import { ModernHomeSections } from '@/ui/ModernHome';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
@@ -36,8 +36,7 @@ export default function Home() {
   if (flat) {
     return (
       <Screen contentInsetAdjustmentBehavior="never">
-        <ModernHomeOverview assets={assets} />
-        <ModernAccountRail accounts={accounts} balances={balances} onOpen={openAccount} />
+        <ModernHomeSections assets={assets} accounts={accounts} balances={balances} onOpen={openAccount} />
         <HomeActivity month={month} balances={balances} flat />
       </Screen>
     );

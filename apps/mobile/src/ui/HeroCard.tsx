@@ -3,23 +3,22 @@ import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { LedgerPill } from '@/ui/LedgerPill';
+import { useHomeAssetVisibility } from '@/lib/homePreferences';
+import { HomeAssetsHeading, hiddenAssetsLabel } from './HomeAssets';
 import { MonthBar } from '@/ui/kit';
 import { CardHeader, CardSurface } from './CardSurface';
 
 export function HeroCard({ assets }: { assets: number }) {
   const p = usePalette();
+  const [hidden] = useHomeAssetVisibility();
 
   return (
     <CardSurface>
       <View style={{ backgroundColor: `${p.tint}0A`, paddingHorizontal: 18, paddingVertical: 14, gap: 8 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text accessibilityRole="header" style={{ color: p.text, flexShrink: 1, fontSize: 15, fontWeight: '700' }}>現在の総資産</Text>
-          <LedgerPill />
-        </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit
-          style={{ color: assets < 0 ? p.danger : p.income, fontSize: 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-          {formatJPY(assets)}
+        <HomeAssetsHeading />
+        <Text accessibilityLabel={hidden ? hiddenAssetsLabel : undefined} numberOfLines={1} adjustsFontSizeToFit
+          style={{ color: hidden ? p.textSecondary : assets < 0 ? p.danger : p.income, fontSize: 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+          {hidden ? '••••••' : formatJPY(assets)}
         </Text>
       </View>
     </CardSurface>
