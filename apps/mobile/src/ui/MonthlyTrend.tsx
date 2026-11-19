@@ -5,6 +5,7 @@ import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format'
 import type { Transaction } from '@dmm/core/types/finance';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { AnalyticsMonthCard } from '@/ui/AnalyticsMonthCard';
 import { Group } from '@/ui/kit';
 
 export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 'expense' }) {
@@ -32,8 +33,8 @@ export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 
 
   return (
     <>
-      <Group>
-        <View style={{ padding: 14, gap: 10 }}>
+      <AnalyticsMonthCard month={month}>
+        <View style={{ gap: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
             <Text style={{ color: p.textSecondary, fontSize: 13 }}>過去12か月の{label}</Text>
             <Text style={{ color: p.text, fontSize: 13 }}>{formatJPY(values.reduce((sum, item) => sum + item.amount, 0))}</Text>
@@ -61,7 +62,7 @@ export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 
             })}
           </View>
         </View>
-      </Group>
+      </AnalyticsMonthCard>
       <Group>
         {values.slice().reverse().map(({ key, amount }) => (
           <View key={key} style={{ paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between' }}>

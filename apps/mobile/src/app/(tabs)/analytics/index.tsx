@@ -9,6 +9,7 @@ import { ReorderList, SortActions } from '@/ui/ReorderList';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { AnalyticsMonthCard } from '@/ui/AnalyticsMonthCard';
 import { DonutChart } from '@/ui/PieChart';
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { Group, IconBadge, SectionTitle, Segmented } from '@/ui/kit';
@@ -35,7 +36,7 @@ export default function Analytics() {
     kv.setItem('dmm_analytics_sort', value);
   };
   return (
-    <MonthScreen>{(month, isPreview) => (
+    <MonthScreen showMonthBar={false}>{(month, isPreview) => (
       <>
         <LedgerPicker />
         <Segmented value={mode} onChange={setMode} options={MODES} />
@@ -96,11 +97,13 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
 
   return (
     <>
-      <DonutChart
-        slices={breakdown.filter((c) => c.amount > 0).map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
-        centerLabel={label}
-        centerValue={formatJPY(m[kind])}
-      />
+      <AnalyticsMonthCard month={month}>
+        <DonutChart
+          slices={breakdown.filter((c) => c.amount > 0).map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
+          centerLabel={label}
+          centerValue={formatJPY(m[kind])}
+        />
+      </AnalyticsMonthCard>
 
       <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
       {breakdown.length > 1 ? (
