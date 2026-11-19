@@ -19,6 +19,7 @@ import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
 import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import { CardHeader, CardSurface } from '@/ui/CardSurface';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
@@ -89,6 +90,7 @@ export default function AddScreen() {
   const [advanceOn, setAdvanceOn] = useState(Boolean(editing?.advance));
   const [advanceFor, setAdvanceFor] = useState(editing?.advance?.for ?? '');
   const isBusiness = scope === 'business' && !advanceOn;
+  const businessRatio = Math.min(100, Math.max(0, Math.round(Number(ratio) || 0)));
   const ledger = getTransactionLedger({ accountId, ledgerId, scope }, accountsById, ledgers);
 
   const customCategories = state.customCategories;
@@ -206,7 +208,7 @@ export default function AddScreen() {
       memo: memo.trim() || undefined,
       scope: advanceOn ? 'personal' : scope,
       businessRatio: isBusiness && type === 'expense'
-        ? Math.min(100, Math.max(0, Math.round(Number(ratio) || 0))) : undefined,
+        ? businessRatio : undefined,
       accountingSubject: isBusiness && type === 'expense'
         ? subject || category.defaultAccountingSubject : undefined,
       counterparty: counterparty.trim() || undefined,
@@ -374,6 +376,7 @@ export default function AddScreen() {
           <Group>
             <View style={{ padding: 8 }}>
               <Segmented<TransactionScope>
+                prominent
                 value={scope}
                 onChange={setScope}
                 options={[
@@ -382,17 +385,6 @@ export default function AddScreen() {
                 ]}
               />
             </View>
-            {isBusiness && type === 'expense' ? (
-              <>
-                {fieldRow('勘定科目', subject || category.defaultAccountingSubject || '選択', async () => {
-                  const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((x) => ({ id: x, label: x })));
-                  if (choice) setSubject(choice);
-                })}
-                <TransactionInput label="事業で使った割合" icon={{ ios: 'percent', android: 'percent' }} unit="%"
-                  value={ratio} onChangeText={(value) => setRatio(value.replace(/[^0-9]/g, ''))}
-                  keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
-              </>
-            ) : null}
             {type === 'income' ? (
               <>
                 <Pressable accessibilityRole="button"
@@ -425,11 +417,57 @@ export default function AddScreen() {
                   placeholder="明細に記載の税額" keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
               </>
             ) : null}
-            {scope === 'business' ? (
+            {scope === 'business' && !(isBusiness && type === 'expense') ? (
               <TransactionInput label="取引先" icon={{ ios: 'person.crop.rectangle', android: 'badge' }} optional
                 value={counterparty} onChangeText={setCounterparty} placeholder="会社名など" />
             ) : null}
           </Group>
+        ) : null}
+
+        {isBusiness && type === 'expense' ? (
+          <CardSurface>
+            <CardHeader style={{ paddingHorizontal: 14, paddingVertical: 10 }}>
+              <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>経費の内訳</Text>
+            </CardHeader>
+            <View style={{ padding: 12, gap: 10 }}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`勘定科目 ${subject || category.defaultAccountingSubject || '未設定'}`}
+                onPress={async () => {
+                  Keyboard.dismiss();
+                  tick();
+                  const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((name) => ({
+                    id: name, label: name, selected: name === (subject || category.defaultAccountingSubject),
+                  })), { layout: 'divided' });
+                  if (choice) setSubject(choice);
+                }}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10,
+                  borderWidth: 1, borderColor: p.outline, paddingHorizontal: 12, minHeight: 56,
+                  backgroundColor: pressed ? p.fill : p.card })}>
+                <SymbolView name={{ ios: 'tag', android: 'label' }} size={16} tintColor={p.tint} />
+                <View style={{ flex: 1, gap: 2, paddingVertical: 6 }}>
+                  <Text style={{ color: p.textSecondary, fontSize: 12 }}>勘定科目</Text>
+                  <Text style={{ color: p.text, fontSize: 16, fontWeight: '700' }}>{subject || category.defaultAccountingSubject || '選択する'}</Text>
+                </View>
+                <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={p.tint} />
+              </Pressable>
+              <View style={{ borderRadius: 10, borderWidth: 1, borderColor: p.outline, backgroundColor: p.card }}>
+                <TransactionInput label="事業で使った割合" icon={{ ios: 'percent', android: 'percent' }} unit="%"
+                  value={ratio} onChangeText={(value) => {
+                    const digits = value.normalize('NFKC').replace(/[^0-9]/g, '');
+                    setRatio(digits ? String(Math.min(100, Number(digits))) : '');
+                  }} accessibilityHint="0から100まで入力"
+                  keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, backgroundColor: p.fill }}>
+                <Text style={{ color: p.textSecondary, fontSize: 13 }}>経費算入額</Text>
+                <Text accessibilityLiveRegion="polite" style={{ color: p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                  {formatJPY(Math.round((Number(amount) || 0) * (businessRatio / 100)))}
+                </Text>
+              </View>
+              <TransactionInput label="取引先" icon={{ ios: 'person.crop.rectangle', android: 'badge' }} optional
+                value={counterparty} onChangeText={setCounterparty} placeholder="会社名など" />
+            </View>
+          </CardSurface>
         ) : null}
 
         {type === 'expense' ? (
