@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import type { Transaction } from '@dmm/core/types/finance';
 import { getCategoryById } from '@dmm/core/data/categories';
-import { formatJPY, formatSignedJPY, formatShortDate } from '@dmm/core/utils/format';
+import { formatJPY, formatSignedJPY, formatShortDate, getEffectiveOutflow, getTransferTotalFees } from '@dmm/core/utils/format';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
@@ -41,6 +41,11 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
 
   const accounts = tx.type === 'transfer' ? `${acc} → ${to}`
     : showMemo ? `${acc} · ${cat.name}` : `${cat.name} · ${acc}`;
+  const points = tx.pointUsed ?? 0;
+  const pointDetail = points > 0
+    ? `ポイント充当 ${formatJPY(points)} · ${tx.type === 'transfer' ? '出金' : '実支払'} ${formatJPY(getEffectiveOutflow(tx) + getTransferTotalFees(tx))}`
+    : '';
+  const memo = showMemo ? tx.memo?.trim() : undefined;
 
   return (
     <Row
@@ -49,7 +54,7 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
       iconFilledInDark
       title={tx.title}
       subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${accounts}`}
-      detail={showMemo ? tx.memo?.trim() : undefined}
+      detail={[pointDetail, memo].filter(Boolean).join('\n') || undefined}
       right={tx.amount === 0 ? formatJPY(0) : formatSignedJPY(tx.amount, tx.type)}
       rightColor={tx.amount === 0 || tx.type === 'income' ? p.income : tx.type === 'expense' ? p.danger : p.text}
       onPress={() => router.push({ pathname: '/add', params: { id: tx.id } })}

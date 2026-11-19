@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { STORAGE_KEY, computeAccountBalances, loadInitialState, sanitizeState } from './finance';
 import type { FinanceState } from '../types/finance';
+import { computeCreditCardSummary } from '../utils/creditCard';
 
 const base = (): FinanceState => ({
   accounts: [
@@ -51,6 +52,29 @@ describe('computeAccountBalances', () => {
     const b = computeAccountBalances(s);
     expect(b.bank).toBe(100000 - 20000 - 220);
     expect(b.cash).toBe(25000);
+  });
+
+  it.each([
+    { points: 1000, fee: 220, bankBalance: 90780 },
+    { points: 10000, fee: 0, bankBalance: 100000 },
+  ])('settles the full card bill when $points yen are covered by points', ({ points, fee, bankBalance }) => {
+    const s = base();
+    const card = { id: 'card', name: 'card', type: 'credit' as const, initialBalance: 0, closingDay: 31 };
+    s.accounts.push(card);
+    s.transactions.push(
+      { id: 'purchase', type: 'expense', amount: 10000, date: '2026-10-10', categoryId: 'food', accountId: 'card', title: 'purchase' },
+      {
+        id: 'payment', type: 'transfer', amount: 10000, pointUsed: points, transferFee: fee, date: '2026-11-10',
+        categoryId: 'transfer', accountId: 'bank', toAccountId: 'card', targetBillingMonth: '2026-11', title: 'payment',
+      },
+    );
+    const saved = loadInitialState(memoryStorage({ [STORAGE_KEY]: JSON.stringify(s) }));
+    const balances = computeAccountBalances(saved);
+    expect(balances.bank).toBe(bankBalance);
+    expect(balances.card).toBe(0);
+    expect(computeCreditCardSummary(card, saved.transactions, balances.card, '2026-11')).toMatchObject({
+      thisMonthGross: 10000, thisMonthSettled: 10000, thisMonthRemaining: 0, totalUnpaidBalance: 0,
+    });
   });
 
   it('ignores transactions of unknown accounts', () => {

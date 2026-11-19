@@ -26,7 +26,7 @@ export default function CardBilling() {
                 onChangeText={(value) => setAmount(value.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 12))}
                 style={{ paddingHorizontal: 16, minHeight: 54, color: p.text, fontSize: 19 }} />
             </Group>
-            <Text style={{ color: p.textSecondary }}>カード明細に記載された請求総額を入力します。記帳済みの支払いは、残額の計算で差し引きます。</Text>
+            <Text style={{ color: p.textSecondary }}>カード明細の請求総額を入力します。記帳済みの支払いは自動で差し引きます。支払い記録でポイントを入力する場合は、充当前の請求額を入力してください。</Text>
             <Pressable accessibilityRole="button" disabled={!amount} onPress={() => {
               setConfirmedCardBilling(id, month, Number(amount));
               router.back();

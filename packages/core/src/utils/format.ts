@@ -94,7 +94,7 @@ export function getCurrentMonthKey(): string {
 }
 
 export function getEffectiveOutflow(tx: Transaction): number {
-  if (tx.type === 'expense') {
+  if (tx.type === 'expense' || (tx.type === 'transfer' && (tx.pointUsed ?? 0) > 0)) {
     return Math.max(0, tx.amount - (tx.pointUsed ?? 0));
   }
   return tx.amount;
@@ -161,7 +161,7 @@ export function buildTransactionsCsv(
   };
 
   const rows = transactions.map((tx) => {
-    const netAmount = tx.type === 'expense' ? getEffectiveOutflow(tx) : tx.amount;
+    const netAmount = getEffectiveOutflow(tx);
     const deductible = getDeductibleBusinessAmount(tx);
     const ratio = tx.businessRatio ?? (tx.scope === 'business' ? 100 : 0);
 

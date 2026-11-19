@@ -4,7 +4,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
 import { ACCOUNTING_SUBJECTS, ACCOUNT_TYPE_LABELS, INCOME_TAX_CATEGORY_LABELS, getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
-import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
+import { formatJPY, formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { getBillingMonthForDate } from '@dmm/core/utils/creditCard';
 import { getTransactionLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
@@ -63,6 +63,7 @@ export default function AddScreen() {
 
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
   const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
+  const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
   const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
@@ -93,6 +94,10 @@ export default function AddScreen() {
   const customCategories = state.customCategories;
   const account = state.accounts.find((a) => a.id === accountId);
   const destination = state.accounts.find((a) => a.id === toAccountId);
+  const isCardPayment = type === 'transfer' && destination?.type === 'credit';
+  const allowsPoints = type === 'expense' || isCardPayment;
+  const points = allowsPoints ? Number(pointUsed) : 0;
+  const validPoints = Number.isSafeInteger(points) && points >= 0 && points <= Number(amount);
   const linkedBank = account?.type === 'debit'
     ? state.accounts.find((a) => a.id === account.linkedBankAccountId && a.type === 'bank') : undefined;
   const targetBillingMonth = type === 'transfer' && destination?.type === 'credit'
@@ -169,6 +174,10 @@ export default function AddScreen() {
       Alert.alert('金額を入力してください');
       return;
     }
+    if (!validPoints) {
+      Alert.alert('ポイント充当額は合計金額以下で入力してください');
+      return;
+    }
     if (!account || (type === 'transfer' && (!destination || destination.id === account.id ||
       account.type === 'debit' || destination.type === 'debit'))) {
       Alert.alert('口座を確認してください');
@@ -182,6 +191,7 @@ export default function AddScreen() {
     const payload: Omit<Transaction, 'id'> = {
       type,
       amount: value,
+      pointUsed: points || undefined,
       date,
       categoryId: type === 'transfer' ? 'transfer' : categoryId,
       accountId,
@@ -213,6 +223,7 @@ export default function AddScreen() {
     success();
     if (keepOpen && !editing) {
       setAmount('');
+      setPointUsed('');
       setTitle('');
       setMemo('');
       return;
@@ -333,12 +344,26 @@ export default function AddScreen() {
         </Group>
 
         <Group>
-          <TransactionInput label="金額" icon={{ ios: 'yensign', android: 'currency_yen' }}
+          <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
             accessibilityHint="円単位で入力" value={amount}
             onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
             keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
             style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
               fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
+          {allowsPoints ? (
+            <TransactionInput label="うちポイント充当" icon={{ ios: 'star.circle', android: 'stars' }} optional unit="円"
+              accessibilityHint="使ったポイントの円換算額" value={pointUsed} placeholder="0"
+              onChangeText={(value) => setPointUsed(value.normalize('NFKC').replace(/[^0-9]/g, ''))}
+              keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
+          ) : null}
+          {points > 0 ? (
+            <Text accessibilityLiveRegion="polite" style={{ color: validPoints ? p.textSecondary : p.danger,
+              fontSize: 13, paddingHorizontal: 16, paddingVertical: 9 }}>
+              {validPoints
+                ? `${isCardPayment ? '口座からの出金額' : '実支払額'} ${formatJPY(Number(amount) - points)}`
+                : 'ポイント充当額は合計金額以下で入力してください'}
+            </Text>
+          ) : null}
           <TransactionInput label="取引内容" icon={{ ios: 'text.alignleft', android: 'subject' }} optional
             value={title} onChangeText={setTitle} placeholder="取引の名前" />
           <TransactionInput label="メモ" icon={{ ios: 'note.text', android: 'notes' }} optional

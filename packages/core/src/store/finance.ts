@@ -195,7 +195,7 @@ export function computeAccountBalances(state: FinanceState): Record<string, numb
         }
       } else if (tx.type === 'transfer') {
         if (map[tx.accountId] !== undefined) {
-          map[tx.accountId] -= tx.amount + getTransferTotalFees(tx);
+          map[tx.accountId] -= getEffectiveOutflow(tx) + getTransferTotalFees(tx);
         }
         if (tx.toAccountId && map[tx.toAccountId] !== undefined) {
           map[tx.toAccountId] += tx.amount;

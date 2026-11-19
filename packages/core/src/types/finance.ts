@@ -88,7 +88,7 @@ export interface Transaction {
   memo?: string;
   recurringId?: string;
   transferFee?: number;
-  pointUsed?: number;
+  pointUsed?: number; // 円換算のポイント充当額。カード支払いでは振替元からの出金だけを減らす。
   scope?: TransactionScope;
   ledgerId?: string;
   businessRatio?: number;

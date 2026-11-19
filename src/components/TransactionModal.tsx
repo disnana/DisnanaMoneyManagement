@@ -271,6 +271,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const numericAmount = Number(amountStr) || 0;
   const numericPoints = Math.max(0, Number(pointUsedStr) || 0);
+  const isCardPayment = activeTab === 'transfer' && selectedToAccount?.type === 'credit';
+  const allowsPoints = activeTab === 'expense' || isCardPayment;
   const numericFee = Math.max(0, Number(transferFeeStr) || 0);
   const numericTransferFxFee = Math.max(0, Number(transferFxFeeStr) || 0);
   const numericWithholding = Math.max(0, Number(withholdingTaxStr) || 0);
@@ -521,7 +523,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setError('口座を選択してください。');
       return;
     }
-    if (type === 'expense' && numericPoints > numericAmount) {
+    if (allowsPoints && numericPoints > numericAmount) {
       setError('ポイント充当額は支払総額以下に指定してください。');
       return;
     }
@@ -575,7 +577,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             ? Math.round(numericTransferFxFee)
             : undefined,
         pointUsed:
-          type === 'expense' && numericPoints > 0
+          allowsPoints && numericPoints > 0
             ? Math.round(numericPoints)
             : undefined,
         businessRatio: effectiveRatio,
@@ -1379,7 +1381,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
             )}
 
-            {activeTab === 'expense' && (
+            {allowsPoints && (
               <div className="space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
@@ -1403,7 +1405,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </div>
                   <div className="flex flex-col justify-end">
                     <div className="flex min-h-[44px] items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
-                      <span>口座・カード実請求額</span>
+                      <span>{isCardPayment ? '口座からの出金額（手数料別）' : '口座・カード実請求額'}</span>
                       <strong className="font-mono text-sm text-slate-900 tabular-nums">
                         {formatJPY(Math.max(0, numericAmount - numericPoints))}
                       </strong>
