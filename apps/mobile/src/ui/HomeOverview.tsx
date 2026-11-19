@@ -6,8 +6,9 @@ import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
 import { HeroCard, MonthlyCashFlow } from './HeroCard';
-import { MonthBar, SectionTitle } from './kit';
+import { IconBadge, MonthBar, SectionTitle } from './kit';
 import { LedgerPill } from './LedgerPill';
+import { ModernHero } from './ModernHero';
 
 export function HomeOverview({ month, assets }: { month: string; assets: number }) {
   const [appearance] = useAppearanceStyle();
@@ -78,40 +79,54 @@ function StyledOverview({ appearance, month, assets }: {
   }
 
   if (appearance === 'modern') {
-    const activityScale = Math.max(Math.abs(income), Math.abs(expense), 1);
+    const hasActivity = income !== 0 || expense !== 0;
+    const flowIcons = [
+      { ios: 'arrow.down.left', android: 'south_west' },
+      { ios: 'arrow.up.right', android: 'north_east' },
+    ] as const;
 
     return (
-      <View style={{ paddingHorizontal: 4, paddingTop: 8, gap: 13 }}>
-        <View style={{ gap: 5 }}>
-          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text accessibilityRole="header" style={{ color: p.textSecondary, fontSize: 14, fontWeight: '600', flexShrink: 1 }}>現在の総資産</Text>
+      <>
+        <ModernHero>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <IconBadge name={{ ios: 'wallet.pass', android: 'account_balance_wallet' }} color={p.tint} size={34} />
+              <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>現在の総資産</Text>
+            </View>
             <LedgerPill />
           </View>
           <Text numberOfLines={1} adjustsFontSizeToFit
-            style={[moneyStyle, { color: assetsColor, fontSize: 48, letterSpacing: -1.8 }]}>{formatJPY(assets)}</Text>
-        </View>
+            style={[moneyStyle, { color: assetsColor, fontSize: 45, letterSpacing: -1.5 }]}>{formatJPY(assets)}</Text>
+        </ModernHero>
 
-        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.outline, gap: 8 }}>
+        <View style={{ backgroundColor: p.card, borderRadius: 25, borderCurve: 'continuous', paddingHorizontal: 16, paddingBottom: 15, gap: 8 }}>
           <MonthBar month={month} onChange={setMonth} />
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
             <Text accessibilityRole="header" style={{ flexShrink: 0, color: p.text, fontSize: 16, fontWeight: '700' }}>月の収支</Text>
             <Text numberOfLines={1} adjustsFontSizeToFit
-              style={[moneyStyle, { flexShrink: 1, color: netColor, fontSize: 26 }]}>{netAmount}</Text>
+              style={[moneyStyle, { flexShrink: 1, color: netColor, fontSize: 24 }]}>{netAmount}</Text>
           </View>
-          {activity.map(({ label, amount, color }) => (
-            <View key={label} style={{ gap: 5 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                <Text style={{ color: p.textSecondary, fontSize: 13 }}>{label}</Text>
+          <View aria-hidden style={{ height: 10, flexDirection: 'row', backgroundColor: p.fill, borderRadius: 15,
+            overflow: 'hidden', gap: income !== 0 && expense !== 0 ? 4 : 0 }}>
+            {hasActivity ? activity.filter(({ amount }) => amount !== 0).map(({ label, amount, color }) => (
+              <View key={label} style={{ flex: Math.abs(amount), flexBasis: 0, backgroundColor: color, borderRadius: 15 }} />
+            )) : null}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8, paddingTop: 2 }}>
+            {activity.map(({ label, amount, color }, index) => (
+              <View key={label} style={{ flex: 1, gap: 3, paddingHorizontal: 10, paddingVertical: 7,
+                backgroundColor: p.fill, borderRadius: 15 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <IconBadge name={flowIcons[index]} color={color} size={22} />
+                  <Text style={{ color: p.textSecondary, fontSize: 12, flexShrink: 1 }}>{label}</Text>
+                </View>
                 <Text numberOfLines={1} adjustsFontSizeToFit
-                  style={[moneyStyle, { flexShrink: 1, color, fontSize: 15 }]}>{formatJPY(amount)}</Text>
+                  style={[moneyStyle, { color, fontSize: 16 }]}>{formatJPY(amount)}</Text>
               </View>
-              <View aria-hidden style={{ height: 5, backgroundColor: p.fill, borderRadius: 3, overflow: 'hidden' }}>
-                <View style={{ height: '100%', width: `${Math.abs(amount) / activityScale * 100}%`, backgroundColor: color, borderRadius: 3 }} />
-              </View>
-            </View>
-          ))}
+            ))}
+          </View>
         </View>
-      </View>
+      </>
     );
   }
 

@@ -41,11 +41,17 @@ function LayoutDiagram({ style }: { style: AppearanceStyle }) {
           ))}
         </View>
       ) : style === 'modern' ? (
-        <View style={{ flex: 1, paddingHorizontal: 5, justifyContent: 'space-around' }}>
-          <View style={{ ...metric, width: '60%', height: 8 }} />
-          <View style={{ backgroundColor: p.outline, height: 1 }} />
-          <View style={{ ...metric, width: '94%', height: 3 }} />
-          <View style={{ ...metric, width: '41%', height: 3 }} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <View style={{ flex: 1, paddingHorizontal: 6, justifyContent: 'center', backgroundColor: p.tint + '24', borderRadius: 8 }}>
+            <View style={{ ...metric, width: '58%', height: 6 }} />
+          </View>
+          <View style={{ flex: 1, paddingHorizontal: 6, gap: 4, justifyContent: 'center', backgroundColor: p.card, borderRadius: 7 }}>
+            <View style={{ flexDirection: 'row', gap: 2 }}>
+              <View style={{ ...metric, flex: 2, height: 4 }} />
+              <View style={{ ...line, flex: 1, height: 4 }} />
+            </View>
+            <View style={{ ...line, width: '75%', height: 2 }} />
+          </View>
         </View>
       ) : (
         <View style={{ ...sheet, flex: 1, gap: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 11 }}>
