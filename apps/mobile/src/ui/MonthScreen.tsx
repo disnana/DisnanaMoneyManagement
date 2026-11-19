@@ -13,8 +13,9 @@ function monthNumber(month: string): number {
   return year * 12 + number;
 }
 
-export function MonthScreen({ children, ...props }: Omit<ComponentProps<typeof Screen>, 'children'> & {
+export function MonthScreen({ children, showMonthBar = true, ...props }: Omit<ComponentProps<typeof Screen>, 'children'> & {
   children: (month: string, isPreview: boolean) => ReactNode;
+  showMonthBar?: boolean;
 }) {
   const { month, setMonth } = useFinance();
   const { width } = useWindowDimensions();
@@ -77,7 +78,7 @@ export function MonthScreen({ children, ...props }: Omit<ComponentProps<typeof S
                 pointerEvents={isPreview ? 'none' : 'auto'} aria-hidden={isPreview}
                 accessibilityElementsHidden={isPreview} importantForAccessibility={isPreview ? 'no-hide-descendants' : 'auto'}>
                 <Screen directionalLockEnabled scrollEnabled={!isPreview} {...props}>
-                  <MonthBar month={pageMonth} onChange={setMonth} />
+                  {showMonthBar ? <MonthBar month={pageMonth} onChange={setMonth} /> : null}
                   {children(pageMonth, isPreview)}
                 </Screen>
               </View>

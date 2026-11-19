@@ -1,87 +1,102 @@
-import { useMemo } from 'react';
+import { useState } from 'react';
 import { router } from 'expo-router';
-import { Text, View } from 'react-native';
-import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
-import { computeAccountBalances } from '@dmm/core/store/finance';
-import { formatJPY, getTodayString } from '@dmm/core/utils/format';
-import { ACCOUNT_ICONS } from '@/lib/accountIcons';
+import { Pressable, Text } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
+import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
+import { useCurrentBalances } from '@/lib/currentBalances';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { HeroCard } from '@/ui/HeroCard';
-import { CreditPaymentCard } from '@/ui/CreditPaymentCard';
+import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
+import { HeroCard, MonthlyCashFlow } from '@/ui/HeroCard';
 import { Group, Row, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
 
-export default function Home() {
-  const { state, visibleState, accountBalances } = useFinance();
-  const today = getTodayString();
-  const currentBalances = useMemo(() => {
-    const transactions = state.transactions.filter((item) => item.date <= today);
-    return transactions.length === state.transactions.length ? accountBalances : computeAccountBalances({ ...state, transactions });
-  }, [state, accountBalances, today]);
-  const assets = visibleState.accounts.reduce((sum, account) => sum + (currentBalances[account.id] ?? 0), 0);
+const BALANCE_PREVIEW_COUNT = 4;
 
-  return <MonthScreen>{(month) => <HomeMonth month={month} assets={assets} balances={currentBalances} />}</MonthScreen>;
+function openAccount(id: string) {
+  router.navigate({ pathname: '/accounts/[id]', params: { id } }, { withAnchor: true });
 }
 
-function HomeMonth({ month, assets, balances }: { month: string; assets: number; balances: Record<string, number> }) {
+export default function Home() {
   const p = usePalette();
   const { state, visibleState } = useFinance();
+  const balances = useCurrentBalances();
+  const [showAllBalances, setShowAllBalances] = useState(false);
+  const assets = visibleState.accounts.reduce((sum, account) => sum + (balances[account.id] ?? 0), 0);
+  const accounts = visibleState.accounts.filter((account) =>
+    account.type !== 'credit' &&
+    (account.type !== 'debit' || !account.linkedBankAccountId || (balances[account.id] ?? 0) !== 0)
+  );
+  const listed = showAllBalances ? accounts : accounts.slice(0, BALANCE_PREVIEW_COUNT);
+  const banks = new Map(state.accounts.map((account) => [account.id, account]));
+
+  return (
+    <MonthScreen showMonthBar={false}>
+      {(month) => (
+        <>
+          <HeroCard assets={assets} />
+          <SectionTitle>月の収支</SectionTitle>
+          <MonthlyCashFlow month={month} />
+          <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
+          <AccountSummaryGroup>
+            {listed.length ? listed.map((account) => (
+              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0}
+                linkedBank={banks.get(account.linkedBankAccountId ?? '')} onPress={() => openAccount(account.id)} />
+            )) : [<Row key="empty" compact title="この家計グループに表示する口座がありません" />]}
+            {accounts.length > BALANCE_PREVIEW_COUNT ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAllBalances }}
+                onPress={() => setShowAllBalances((expanded) => !expanded)}
+                style={({ pressed }) => ({
+                  minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : p.card,
+                })}>
+                <Text style={{ color: p.tint, fontSize: 13, fontWeight: '600' }}>
+                  {showAllBalances ? '口座を折りたたむ' : `残りの${accounts.length - BALANCE_PREVIEW_COUNT}件を表示`}
+                </Text>
+                <SymbolView name={showAllBalances ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
+                  tintColor={p.tint} size={12} />
+              </Pressable>
+            ) : null}
+          </AccountSummaryGroup>
+          <HomeActivity month={month} balances={balances} />
+        </>
+      )}
+    </MonthScreen>
+  );
+}
+
+function HomeActivity({ month, balances }: { month: string; balances: Record<string, number> }) {
+  const { state, visibleState } = useFinance();
   const recent = visibleState.transactions
-    .filter((t) => t.date.slice(0, 7) === month)
+    .filter((tx) => tx.date.startsWith(month))
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
-  const statements = visibleState.accounts
-    .filter((account) => account.type === 'credit')
-    .map((card) => computeCreditCardSummary(card, state.transactions, balances[card.id] ?? 0, month));
-
-  const accounts = visibleState.accounts.filter((account) => (
-    account.type !== 'debit' || !account.linkedBankAccountId || (balances[account.id] ?? 0) !== 0
-  ));
+  const cards = visibleState.accounts.filter((account) => account.type === 'credit');
 
   return (
     <>
-      <HeroCard month={month} assets={assets} />
-
-      <SectionTitle action="口座を開く" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
-      <Group>
-        {accounts.length ? accounts.map((account) => {
-          const balance = balances[account.id] ?? 0;
-          return (
-            <Row key={account.id} compact icon={ACCOUNT_ICONS[account.type]} title={account.name}
-              subtitle={account.institution} right={formatJPY(balance)} rightColor={balance < 0 ? p.danger : p.income}
-              chevron onPress={() => router.navigate({ pathname: '/accounts/[id]', params: { id: account.id } }, { withAnchor: true })} />
-          );
-        }) : <Row compact title="この家計グループに口座がありません" />}
-      </Group>
-
-      {statements.length > 0 ? (
+      {cards.length > 0 ? (
         <>
           <SectionTitle>カードの支払い</SectionTitle>
-          <View style={{ gap: 8 }}>
-            {statements.map((statement) => (
-              <CreditPaymentCard key={statement.card.id} statement={statement}
-                onPress={() => router.navigate({ pathname: '/accounts/[id]', params: { id: statement.card.id } }, { withAnchor: true })} />
-            ))}
-          </View>
+          <AccountSummaryGroup>
+            {cards.map((card) => {
+              const balance = balances[card.id] ?? 0;
+              const statement = computeCreditCardSummary(card, state.transactions, balance, month);
+              const warning = getPaymentWarning(statement, getTodayString());
+              return <AccountSummaryRow key={card.id} account={card} balance={balance}
+                bill={{ label: `${formatMonthLabel(month)}分の残額`, remaining: statement.thisMonthRemaining,
+                  warning: warning === null ? undefined : warning === 0 ? '今日が支払日' : `支払日まであと${warning}日` }} onPress={() => openAccount(card.id)} />;
+            })}
+          </AccountSummaryGroup>
         </>
       ) : null}
-
-      <SectionTitle action="すべて" onAction={() => router.navigate('/transactions')}>主な取引</SectionTitle>
-      {recent.length === 0 ? (
-        <Group>
-          <View style={{ padding: 28, alignItems: 'center' }}>
-            <Text style={{ color: p.textSecondary }}>この月の取引はまだありません</Text>
-          </View>
-        </Group>
-      ) : (
-        <Group>
-          {recent.map((tx) => (
-            <TxRow key={tx.id} tx={tx} showDate />
-          ))}
-        </Group>
-      )}
+      <SectionTitle action="すべて見る" onAction={() => router.navigate('/transactions')}>最近の取引</SectionTitle>
+      <Group>
+        {recent.length > 0 ? recent.map((tx) => <TxRow key={tx.id} tx={tx} showDate />)
+          : <Row compact title="この月の取引はまだありません" />}
+      </Group>
     </>
   );
 }

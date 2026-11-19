@@ -1,69 +1,86 @@
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { formatJPY } from '@dmm/core/utils/format';
-import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
-import { ACCOUNT_ICONS } from '@/lib/accountIcons';
+import type { Account } from '@dmm/core/types/finance';
+import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
+import { formatJPY, formatMonthLabel } from '@dmm/core/utils/format';
+import { useCurrentBalances } from '@/lib/currentBalances';
+import { tick } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
-import { usePalette } from '@/lib/theme';
-import { LedgerPicker } from '@/ui/LedgerPicker';
+import { metrics, usePalette } from '@/lib/theme';
+import { LedgerPill } from '@/ui/LedgerPill';
 import { ReorderList, SortActions } from '@/ui/ReorderList';
-import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
+import { AccountSummaryGroup, AccountSummaryRow, isPaymentCard } from '@/ui/AccountSummaryRow';
+import { Row, Screen, SectionTitle } from '@/ui/kit';
 
-/** Accounts and cards. Total assets live on Home; here the focus is the list itself and its order. */
 export default function Accounts() {
   const p = usePalette();
-  const { state, visibleState, accountBalances, reorderAccounts } = useFinance();
-  const [snapshot, setSnapshot] = useState<string[]>(); // account order before sorting started
+  const { state, visibleState, reorderAccounts, month } = useFinance();
+  const balances = useCurrentBalances();
+  const [snapshot, setSnapshot] = useState<string[]>();
   const sorting = snapshot !== undefined;
-  const startSorting = () => setSnapshot(state.accounts.map((a) => a.id));
-  const cancelSorting = () => { if (snapshot) reorderAccounts(snapshot); setSnapshot(undefined); };
-  const isCard = (type: string) => type === 'credit' || type === 'debit';
-  const cards = visibleState.accounts.filter((a) => isCard(a.type));
-  const others = visibleState.accounts.filter((a) => !isCard(a.type));
+  const cards = visibleState.accounts.filter(isPaymentCard);
+  const accounts = visibleState.accounts.filter((account) => !isPaymentCard(account));
+  const total = accounts.reduce((sum, account) => sum + (balances[account.id] ?? 0), 0);
+  const bankById = new Map(state.accounts.map((account) => [account.id, account]));
 
-  /** Drop a new order for the section being shown; accounts in other groups / sections keep their slots. */
-  const reorder = (section: typeof cards, ids: string[]) => {
-    const inSection = new Set(section.map((a) => a.id));
+  const reorder = (section: Account[], ids: string[]) => {
+    const inSection = new Set(section.map((account) => account.id));
     let next = 0;
-    reorderAccounts(state.accounts.map((a) => (inSection.has(a.id) ? ids[next++] : a.id)));
+    reorderAccounts(state.accounts.map((account) => (inSection.has(account.id) ? ids[next++] : account.id)));
   };
 
-  const rowFor = (a: (typeof cards)[number]) => {
-    const bal = accountBalances[a.id] ?? 0;
+  const rowFor = (account: Account) => {
+    const balance = balances[account.id] ?? 0;
+    const summary = !sorting && account.type === 'credit'
+      ? computeCreditCardSummary(account, state.transactions, balance, month)
+      : undefined;
     return (
-      <Row
-        compact
-        chevron={!sorting}
-        onPress={sorting ? undefined : () => router.push({ pathname: '/accounts/[id]', params: { id: a.id } })}
-        icon={ACCOUNT_ICONS[a.type]}
-        title={a.name}
-        subtitle={a.institution ? `${ACCOUNT_TYPE_LABELS[a.type]} · ${a.institution}` : ACCOUNT_TYPE_LABELS[a.type]}
-        right={a.type === 'debit' ? undefined : formatJPY(bal)}
-        rightColor={bal < 0 ? p.danger : p.income}
-      />
+      <AccountSummaryRow key={account.id} account={account} balance={balance} sorting={sorting}
+        bill={summary && { label: `${formatMonthLabel(month)}分の残額`, remaining: summary.thisMonthRemaining }}
+        linkedBank={bankById.get(account.linkedBankAccountId ?? '')}
+        onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })} />
     );
   };
 
-  const list = (section: typeof cards) => sorting
-    ? <ReorderList items={section} renderItem={rowFor} getLabel={(a) => a.name} onReorder={(ids) => reorder(section, ids)} />
-    : <Group>{section.map((a) => <View key={a.id}>{rowFor(a)}</View>)}</Group>;
-
+  const list = (section: Account[], empty: string) => sorting
+    ? <ReorderList items={section} renderItem={rowFor} getLabel={(account) => account.name}
+        onReorder={(ids) => reorder(section, ids)} />
+    : <AccountSummaryGroup>
+        {section.length ? section.map(rowFor) : [<Row key="empty" compact title={empty} />]}
+      </AccountSummaryGroup>;
 
   return (
     <Screen>
-      <LedgerPicker />
-      {sorting
-        ? <SortActions title="口座" onCancel={cancelSorting} onDone={() => setSnapshot(undefined)} />
-        : <SectionTitle action={others.length > 1 || cards.length > 1 ? '並び替え' : undefined} onAction={startSorting}>口座</SectionTitle>}
-      {others.length > 0 ? list(others) : null}
+      {sorting && snapshot ? (
+        <SortActions title="口座" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
+          onDone={() => setSnapshot(undefined)} />
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 }}>
+          <LedgerPill />
+          {accounts.length > 1 || cards.length > 1 ? (
+            <Pressable accessibilityRole="button" onPress={() => { tick(); setSnapshot(state.accounts.map((account) => account.id)); }}
+              style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
+              <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>並び替え</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
       {!sorting ? (
-        <Group>
-          <Row title="口座を追加" icon={{ ios: 'plus.circle.fill', android: 'add_circle' }} onPress={() => router.push('/accounts/account')} />
-        </Group>
+        <View style={{ backgroundColor: p.sectionHeader, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
+          borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, paddingHorizontal: 14, paddingVertical: 12,
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>口座残高の合計</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit
+            style={{ color: total < 0 ? p.danger : p.income, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+            {formatJPY(total)}
+          </Text>
+        </View>
       ) : null}
-      <SectionTitle action={sorting ? undefined : '追加'} onAction={() => router.push('/accounts/card')}>カード</SectionTitle>
-      {cards.length > 0 ? list(cards) : null}
+      <SectionTitle action={sorting ? undefined : '口座を追加'} onAction={() => router.push('/accounts/account')}>口座</SectionTitle>
+      {list(accounts, 'この家計グループに口座がありません')}
+      <SectionTitle action={sorting ? undefined : 'カードを追加'} onAction={() => router.push('/accounts/card')}>カード</SectionTitle>
+      {list(cards, 'この家計グループにカードがありません')}
     </Screen>
   );
 }
