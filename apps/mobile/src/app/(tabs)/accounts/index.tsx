@@ -53,7 +53,7 @@ export default function Accounts() {
   return (
     <Screen>
       {sorting && snapshot ? (
-        <SortActions title="口座" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
+        <SortActions title="並び替え" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
           onDone={() => setSnapshot(undefined)} />
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 }}>
