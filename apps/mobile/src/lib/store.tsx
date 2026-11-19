@@ -1,13 +1,17 @@
 import * as React from 'react';
 import { kv } from '@/lib/kv';
-import { createFinanceStoreHook, type StorageAdapter } from '@dmm/core/store/finance';
+import { createEmptyFinanceState, createFinanceStoreHook, type StorageAdapter } from '@dmm/core/store/finance';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import type { Ledger, TransactionType } from '@dmm/core/types/finance';
 import { filterLedger, getLedgers } from '@dmm/core/utils/ledgers';
 
 const adapter: StorageAdapter = kv;
 
-const useFinanceStore = createFinanceStoreHook(React, adapter);
+const useFinanceStore = createFinanceStoreHook(React, adapter, () => {
+  const empty = createEmptyFinanceState();
+  empty.accounts.push({ id: 'acc_default_bank', name: '銀行口座', type: 'bank', usageScope: 'personal', initialBalance: 0 });
+  return empty;
+});
 type Store = ReturnType<typeof useFinanceStore> & {
   month: string;
   setMonth: React.Dispatch<React.SetStateAction<string>>;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { STORAGE_KEY, computeAccountBalances, loadInitialState, sanitizeState } from './finance';
+import { STORAGE_KEY, computeAccountBalances, createEmptyFinanceState, loadInitialState, sanitizeState } from './finance';
 import type { FinanceState } from '../types/finance';
 import { computeCreditCardSummary } from '../utils/creditCard';
 
@@ -114,6 +114,15 @@ describe('sanitizeState', () => {
 });
 
 describe('loadInitialState', () => {
+  it('can start with zero balances and preserve existing data on later launches', () => {
+    const storage = memoryStorage();
+    const firstLaunch = loadInitialState(storage, createEmptyFinanceState);
+    expect(firstLaunch.accounts.map((account) => account.initialBalance)).toEqual([0]);
+    expect(firstLaunch.transactions).toEqual([]);
+    storage.setItem(STORAGE_KEY, JSON.stringify(base()));
+    expect(loadInitialState(storage, createEmptyFinanceState).accounts).toHaveLength(3);
+  });
+
   it('restores saved data', () => {
     const saved = base();
     const st = memoryStorage({ [STORAGE_KEY]: JSON.stringify(saved) });

@@ -50,9 +50,9 @@ export default function DataSettings() {
         ) : null}
         <Group>
           <Row title="サンプルデータに置き換える" icon={{ ios: 'doc.text', android: 'description' }}
-            subtitle="サンプルの口座と取引で試す" chevron onPress={(event) => ask('sample', event)} />
+            subtitle="今月を基準にした口座・取引・貯金目標で試す" chevron onPress={(event) => ask('sample', event)} />
           <Row title="家計データを初期化" icon={{ ios: 'trash', android: 'delete' }} iconColor={p.danger}
-            subtitle="空の家計簿から始める" chevron onPress={(event) => ask('clear', event)} />
+            subtitle="残高0円の現金・銀行口座から始める" chevron onPress={(event) => ask('clear', event)} />
         </Group>
         {message ? <Text accessibilityLiveRegion="polite" style={{ color: p.tint }}>{message}</Text> : null}
       </Screen>

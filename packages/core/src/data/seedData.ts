@@ -156,15 +156,15 @@ export function createInitialSeedData(baseMonth: string): FinanceState {
         title: '生活防衛資金（6ヶ月分）',
         targetAmount: 1500000,
         currentAmount: 1120000,
-        targetDate: '2027-06-30',
+        targetDate: `${shiftMonth(m0, 7)}-28`,
         note: '万が一に備える無リスク預金',
       },
       {
         id: 'goal_travel',
-        title: '北海道・秋旅の資金',
+        title: '北海道旅行の資金',
         targetAmount: 180000,
         currentAmount: 135000,
-        targetDate: '2027-09-15',
+        targetDate: `${shiftMonth(m0, 10)}-15`,
         note: '航空券・宿泊・現地食事費',
       },
       {
@@ -172,9 +172,16 @@ export function createInitialSeedData(baseMonth: string): FinanceState {
         title: '作業用PC買い替え積立',
         targetAmount: 240000,
         currentAmount: 96000,
-        targetDate: '2027-03-31',
+        targetDate: `${shiftMonth(m0, 4)}-28`,
+        monthlyContribution: 20000,
         note: '毎月¥20,000ずつ積立中',
       },
+    ],
+    purchaseCandidates: [
+      { id: 'purchase_sample_monitor', title: '外部モニター', categoryId: 'education',
+        amount: 35000, month: m0, priority: 2 },
+      { id: 'purchase_sample_light', title: 'デスクライト', categoryId: 'daily',
+        amount: 6800, month: m0, status: 'confirmed', plannedDate: `${m0}-25`, accountId: 'acc_main_bank' },
     ],
     transactions: [
       {
@@ -186,7 +193,7 @@ export function createInitialSeedData(baseMonth: string): FinanceState {
         categoryId: 'food',
         accountId: 'acc_card',
         title: 'ライフ（生鮮食品・週末まとめ買い）',
-        memo: 'Vポイント480pt充当・実請求¥3,800',
+        memo: '週末分の食材',
         scope: 'personal',
       },
       {
@@ -314,6 +321,7 @@ export function createInitialSeedData(baseMonth: string): FinanceState {
         id: 'tx_m0_prepay',
         type: 'transfer',
         amount: 15000,
+        pointUsed: 500,
         date: `${m0}-11`,
         categoryId: 'transfer',
         accountId: 'acc_main_bank',

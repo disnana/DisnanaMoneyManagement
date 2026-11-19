@@ -140,7 +140,19 @@ export interface StorageAdapter {
   setItem(key: string, value: string): void;
 }
 
-export function loadInitialState(storage: StorageAdapter): FinanceState {
+export function createEmptyFinanceState(): FinanceState {
+  return {
+    accounts: [
+      { id: 'acc_default_wallet', name: '財布（現金）', type: 'cash', usageScope: 'personal', initialBalance: 0 },
+    ],
+    transactions: [],
+    budgets: [],
+    recurringItems: [],
+    savingsGoals: [],
+  };
+}
+
+export function loadInitialState(storage: StorageAdapter, fallback = () => createInitialSeedData(getCurrentMonthKey())): FinanceState {
   try {
     const raw =
       storage.getItem(STORAGE_KEY) ??
@@ -154,9 +166,9 @@ export function loadInitialState(storage: StorageAdapter): FinanceState {
       }
     }
   } catch {
-    // Fallback to seed data
+    // Use the starting state when no readable save is available.
   }
-  return createInitialSeedData(getCurrentMonthKey());
+  return fallback();
 }
 
 
@@ -214,11 +226,11 @@ export interface ReactHooks {
   useCallback<T extends (...args: any[]) => any>(callback: T, deps: readonly unknown[]): T;
 }
 
-export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter) {
+export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter, initialState?: () => FinanceState) {
   const { useState, useEffect, useMemo, useCallback } = react;
 
   return function useFinanceStore() {
-  const [state, setState] = useState<FinanceState>(() => loadInitialState(storage));
+  const [state, setState] = useState<FinanceState>(() => loadInitialState(storage, initialState));
 
   useEffect(() => {
     try {
@@ -533,21 +545,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const clearAllData = useCallback(() => {
-    setState({
-      accounts: [
-        {
-          id: 'acc_default_wallet',
-          name: '財布（現金）',
-          type: 'cash',
-          usageScope: 'personal',
-          initialBalance: 0,
-        },
-      ],
-      transactions: [],
-      budgets: [],
-      recurringItems: [],
-      savingsGoals: [],
-    });
+    setState((initialState ?? createEmptyFinanceState)());
   }, []);
 
   return {
