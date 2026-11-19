@@ -26,7 +26,7 @@ export function HeroCard({ assets }: { assets: number }) {
   );
 }
 
-export function MonthlyCashFlow({ month }: { month: string }) {
+export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; showNetSign?: boolean }) {
   const p = usePalette();
   const { visibleState, setMonth } = useFinance();
   const { income, expense, net } = computeMonthMetrics(visibleState, month);
@@ -49,7 +49,7 @@ export function MonthlyCashFlow({ month }: { month: string }) {
             <Text style={{ color: p.textSecondary, fontSize: 12, fontWeight: '600' }}>{label}</Text>
             <Text numberOfLines={1} adjustsFontSizeToFit
               style={{ color, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-              {label === '収支' && amount > 0 ? '+' : ''}{formatJPY(amount)}
+              {showNetSign && label === '収支' && amount > 0 ? '+' : ''}{formatJPY(amount)}
             </Text>
           </View>
         ))}

@@ -1,17 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import type { TransactionType } from '@dmm/core/types/finance';
-import { formatJPY, formatMonthLabel } from '@dmm/core/utils/format';
-import { computeMonthMetrics } from '@dmm/core/utils/metrics';
+import { formatMonthLabel } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
-import { Group, Segmented } from '@/ui/kit';
+import { Segmented } from '@/ui/kit';
 import { TxGroups } from '@/ui/TxGroups';
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { MonthlyCashFlow } from '@/ui/HeroCard';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TransactionCalendar } from '@/ui/TransactionCalendar';
-import { usePalette } from '@/lib/theme';
 
 type Filter = 'all' | TransactionType;
 
@@ -26,15 +25,15 @@ export default function Transactions() {
           <HeaderAction name={{ ios: 'calendar', android: 'calendar_month' }} label="カレンダー表示" selected={calendar} onPress={() => setCalendar(true)} />
         </View>
       ) }} />
-      <MonthScreen>{(month, isPreview) => <TransactionsMonth month={month} calendar={calendar} isPreview={isPreview} />}</MonthScreen>
+      <MonthScreen showMonthBar={false}>
+        {(month, isPreview) => <TransactionsMonth month={month} calendar={calendar} isPreview={isPreview} />}
+      </MonthScreen>
     </>
   );
 }
 
 function TransactionsMonth({ month, calendar, isPreview }: { month: string; calendar: boolean; isPreview: boolean }) {
   const { visibleState, transactionFilter, setTransactionFilter } = useFinance();
-  const p = usePalette();
-  const totals = computeMonthMetrics(visibleState, month);
   const monthTransactions = useMemo(
     () => visibleState.transactions.filter((tx) => tx.date.startsWith(month)),
     [visibleState.transactions, month]
@@ -56,18 +55,7 @@ function TransactionsMonth({ month, calendar, isPreview }: { month: string; cale
         ]}
       /> : null}
 
-      <Group>
-        <View style={{ flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 12, gap: 8 }}>
-          {[{ label: '収入', value: totals.income, color: p.income },
-            { label: '支出', value: totals.expense, color: totals.expense === 0 ? p.income : p.danger },
-            { label: '収支', value: totals.net, color: totals.net < 0 ? p.danger : p.income }].map(({ label, value, color }) => (
-            <View key={label} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
-              <Text numberOfLines={1} adjustsFontSizeToFit style={{ color, fontSize: 17, fontWeight: '700' }}>{formatJPY(value)}</Text>
-            </View>
-          ))}
-        </View>
-      </Group>
+      <MonthlyCashFlow month={month} showNetSign={false} />
       {calendar
         ? <TransactionCalendar month={month} transactions={monthTransactions} isPreview={isPreview} />
         : <TxGroups dayCards transactions={isPreview ? transactions.slice(0, 18) : transactions}
