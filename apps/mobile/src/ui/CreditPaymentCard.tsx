@@ -1,5 +1,4 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 import { getCycleRangeLabel, getPaymentWarning, type CreditCardStatementSummary } from '@dmm/core/utils/creditCard';
 import { formatDayLabel, formatJPY, formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { usePalette } from '@/lib/theme';
@@ -11,11 +10,10 @@ function warningLabel(days: number) {
   return days === 0 ? '今日が支払日' : `支払日まであと${days}日`;
 }
 
-export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBilling }: {
+export function CreditPaymentCard({ statement, onChangeMonth, onRecord }: {
   statement: CreditCardStatementSummary;
   onChangeMonth: (month: string) => void;
   onRecord: () => void;
-  onEditBilling: () => void;
 }) {
   const p = usePalette();
   const { card, currentMonthKey, nextMonthKey, thisMonthRemaining, thisMonthConfirmed, thisMonthGross,
@@ -24,7 +22,6 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBi
   const warning = getPaymentWarning(statement, today, currentMonthKey);
   const nextWarning = getPaymentWarning(statement, today, nextMonthKey);
   const paid = thisMonthGross > 0 && thisMonthRemaining === 0;
-  const billingAction = thisMonthConfirmed ? '確定額を編集' : '確定額を入力';
   const month = Number(currentMonthKey.slice(5));
 
   return (
@@ -54,31 +51,20 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBi
               請求額 {formatJPY(thisMonthGross)} · 支払い記帳済み {formatJPY(thisMonthSettled)}
             </Text>
           ) : null}
-          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 12, rowGap: 4 }}>
-            {thisMonthRemaining > 0 ? (
-              <Pressable accessibilityRole="button" onPress={onRecord}
-                style={({ pressed }) => ({
-                  flex: 1, minWidth: 140, minHeight: 44, paddingHorizontal: 12,
-                  alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                  backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
-                })}>
-                <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
-              </Pressable>
-            ) : null}
-            <Pressable accessibilityRole="button" onPress={onEditBilling}
-              style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}>
-              <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>{billingAction}</Text>
+          {thisMonthRemaining > 0 ? (
+            <Pressable accessibilityRole="button" onPress={onRecord}
+              style={({ pressed }) => ({
+                minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
+              })}>
+              <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
             </Pressable>
-          </View>
+          ) : null}
         </View>
 
-        <Pressable accessibilityRole="button" accessibilityLabel={`翌月の支払残額 ${formatMonthLabel(nextMonthKey)} ${formatJPY(nextMonthRemaining)}`}
-          accessibilityHint="翌月の請求を表示" onPress={() => onChangeMonth(nextMonthKey)}
-          style={({ pressed }) => ({
-            flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, minHeight: 56,
-            backgroundColor: pressed ? p.sectionHeader : p.fill, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline,
-          })}>
-          <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.tint} size={32} />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, minHeight: 56,
+          backgroundColor: p.fill, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline }}>
+          <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.textSecondary} size={32} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ color: p.text, fontSize: 14, fontWeight: '700' }}>翌月の支払残額</Text>
             <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatMonthLabel(nextMonthKey)} · {nextMonthConfirmed ? '確定' : '見込み'}</Text>
@@ -86,8 +72,7 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBi
           </View>
           <Text numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: '36%', color: p.text, fontSize: 16,
             fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(nextMonthRemaining)}</Text>
-          <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={12} tintColor={p.tint} />
-        </Pressable>
+        </View>
       </CardSurface>
 
       <CardSurface style={{ padding: 16, gap: 12 }}>

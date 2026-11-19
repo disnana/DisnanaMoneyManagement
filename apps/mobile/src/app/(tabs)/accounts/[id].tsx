@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
-import { formatJPY, getEffectiveOutflow } from '@dmm/core/utils/format';
+import { formatJPY, formatMonthLabel, getEffectiveOutflow } from '@dmm/core/utils/format';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { useCurrentBalances } from '@/lib/currentBalances';
@@ -72,7 +72,6 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
 
       {summary ? (
         <CreditPaymentCard statement={summary} onChangeMonth={setMonth}
-          onEditBilling={() => router.push({ pathname: '/accounts/billing', params: { id, month } })}
           onRecord={() => router.push({
             pathname: '/add',
             params: { accountId: bank?.id, toAccountId: id, billingMonth: month, amount: String(summary.thisMonthRemaining) },
@@ -83,6 +82,11 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
         {card ? 'カード情報' : '口座情報'}
       </SectionTitle>
       <AccountSummaryGroup>
+        {summary ? (
+          <Row compact title="請求の確定額" subtitle={`${formatMonthLabel(month)}支払分`}
+            right={summary.thisMonthConfirmed ? formatJPY(summary.thisMonthGross) : '未入力'} chevron
+            onPress={() => router.push({ pathname: '/accounts/billing', params: { id, month } })} />
+        ) : null}
         <Row compact title="家計グループ" right={ledger.name} chevron icon={ledgerIcon(ledger)} iconColor={ledgerColor(ledger)}
           onPress={async () => {
             const choice = await pickLedger(ledger.id);

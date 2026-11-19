@@ -60,10 +60,11 @@ export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting 
         style={({ pressed }) => [rowStyle, { backgroundColor: pressed ? p.fill : p.card }]}>{content}</Pressable>;
 }
 
-export function AccountSummaryGroup({ children }: { children: ReactNode }) {
+export function AccountSummaryGroup({ children, header }: { children: ReactNode; header?: ReactNode }) {
   const p = usePalette();
   return (
     <CardSurface>
+      {header}
       {Children.toArray(children).map((child, index) => (
         <View key={index}>
           {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.outline, marginHorizontal: 12 }} /> : null}
