@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
@@ -10,8 +11,10 @@ import { useCurrentBalances } from '@/lib/currentBalances';
 import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { useFinance } from '@/lib/store';
+import { useAppearanceStyle } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
 import { AccountSummaryGroup, isPaymentCard } from '@/ui/AccountSummaryRow';
+import { HeaderAction } from '@/ui/HeaderAction';
 import { CreditPaymentCard } from '@/ui/CreditPaymentCard';
 import { IconBadge, MonthBar, Row, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
@@ -20,19 +23,39 @@ import { TxGroups } from '@/ui/TxGroups';
 export default function AccountDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state } = useFinance();
+  const p = usePalette();
+  const [appearance] = useAppearanceStyle();
   const balances = useCurrentBalances();
   const account = state.accounts.find((item) => item.id === id);
+  const standalone = appearance === 'modern' && account?.type === 'credit';
+
   return (
     <>
-      <Stack.Screen options={{ title: account?.name ?? '口座' }} />
-      <MonthScreen showMonthBar={false}>
-        {(month, isPreview) => <AccountMonth id={id} month={month} isPreview={isPreview} balance={balances[id] ?? 0} />}
+      <Stack.Screen options={{ title: account?.name ?? '口座', headerShown: !standalone }} />
+      {standalone ? (
+        <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: p.bg, paddingHorizontal: 16, paddingTop: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <HeaderAction name={{ ios: 'chevron.left', android: 'arrow_back' }} label="口座に戻る" circular inContent
+              onPress={() => router.canGoBack() ? router.back() : router.replace('/accounts')} />
+            <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="カード設定" circular inContent
+              onPress={() => router.push({ pathname: '/accounts/card', params: { id } })} />
+          </View>
+          <Text accessibilityRole="header" style={{ color: p.text, paddingTop: 9, fontSize: 27, fontWeight: '800', letterSpacing: -0.6 }}>
+            {account.name}
+          </Text>
+        </SafeAreaView>
+      ) : null}
+      <MonthScreen showMonthBar={false} contentInsetAdjustmentBehavior={standalone ? 'never' : 'automatic'}>
+        {(month, isPreview) => (
+          <AccountMonth id={id} month={month} isPreview={isPreview}
+            balance={balances[id] ?? 0} standalone={standalone} />
+        )}
       </MonthScreen>
     </>
   );
 }
 
-function AccountMonth({ id, month, isPreview, balance }: { id: string; month: string; isPreview: boolean; balance: number }) {
+function AccountMonth({ id, month, isPreview, balance, standalone }: { id: string; month: string; isPreview: boolean; balance: number; standalone: boolean }) {
   const p = usePalette();
   const pickLedger = useLedgerPicker();
   const { state, ledgers, updateAccount, setMonth } = useFinance();
@@ -78,7 +101,7 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
           })} />
       ) : <MonthBar month={month} onChange={setMonth} />}
 
-      <SectionTitle action="設定" onAction={() => router.push({ pathname: card ? '/accounts/card' : '/accounts/account', params: { id } })}>
+      <SectionTitle action={standalone ? undefined : '設定'} onAction={() => router.push({ pathname: card ? '/accounts/card' : '/accounts/account', params: { id } })}>
         {card ? 'カード情報' : '口座情報'}
       </SectionTitle>
       <AccountSummaryGroup>

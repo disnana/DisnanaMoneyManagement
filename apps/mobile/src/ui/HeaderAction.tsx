@@ -3,13 +3,14 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
 
-export function HeaderAction({ name, label, onPress, selected, accent, circular, disabled }: {
+export function HeaderAction({ name, label, onPress, selected, accent, circular, inContent, disabled }: {
   name: SymbolViewProps['name'];
   label: string;
   onPress: NonNullable<PressableProps['onPress']>;
   selected?: boolean;
   accent?: boolean;
   circular?: boolean;
+  inContent?: boolean;
   disabled?: boolean;
 }) {
   const p = usePalette();
@@ -20,7 +21,7 @@ export function HeaderAction({ name, label, onPress, selected, accent, circular,
         width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.45 : 1,
         // position only (size and colours unchanged): the custom circle fills the whole 44pt bar and touches the
         // status-bar / Dynamic Island band above it, so nudge it down a little on iOS
-        transform: circular && Platform.OS === 'ios' ? [{ translateY: 6 }] : undefined,
+        transform: circular && !inContent && Platform.OS === 'ios' ? [{ translateY: 6 }] : undefined,
         borderRadius: accent ? 22 : 12, backgroundColor: !circular && (selected || pressed) ? p.fill : 'transparent',
       })}>
       {({ pressed }) => circular ? (

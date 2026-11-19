@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { formatJPY } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
@@ -5,6 +6,7 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
+import { HeaderAction } from './HeaderAction';
 import { HeroCard, MonthlyCashFlow } from './HeroCard';
 import { IconBadge, MonthBar, SectionTitle } from './kit';
 import { LedgerPill } from './LedgerPill';
@@ -89,15 +91,23 @@ function StyledOverview({ appearance, month, assets }: {
 
     return (
       <>
-        <ModernHero>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <View style={{ flexGrow: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <IconBadge name={{ ios: 'wallet.pass', android: 'account_balance_wallet' }} color={p.tint} size={34} />
-              <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>現在の総資産</Text>
-            </View>
-            <LedgerPill />
+        <ModernHero masthead>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 33, fontWeight: '800', letterSpacing: -0.8 }}>
+              ホーム
+            </Text>
+            <HeaderAction name={{ ios: 'list.clipboard', android: 'assignment' }} label="予算・計画" circular inContent
+              onPress={() => router.push('/planning')} />
+            <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="設定" circular inContent
+              onPress={() => router.push('/settings')} />
           </View>
-          <ModernHeroAmount amount={assets} color={assetsColor} />
+          <View style={{ gap: 3 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <Text accessibilityRole="header" style={{ color: p.textSecondary, fontSize: 14, fontWeight: '700' }}>現在の総資産</Text>
+              <LedgerPill />
+            </View>
+            <ModernHeroAmount amount={assets} color={assetsColor} />
+          </View>
         </ModernHero>
 
         <View style={{ backgroundColor: p.card, borderRadius: 25, borderCurve: 'continuous', paddingHorizontal: 16, paddingBottom: 15, gap: 8 }}>

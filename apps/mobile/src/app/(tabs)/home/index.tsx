@@ -36,7 +36,7 @@ export default function Home() {
   const banks = new Map(state.accounts.map((account) => [account.id, account]));
 
   return (
-    <MonthScreen showMonthBar={false}>
+    <MonthScreen showMonthBar={false} contentInsetAdjustmentBehavior={flat ? 'never' : 'automatic'}>
       {(month) => (
         <>
           <HomeOverview month={month} assets={assets} />
