@@ -104,7 +104,7 @@ export default function Accounts() {
               </Pressable>
             ) : null}
           </View>
-          <CardSurface style={{ backgroundColor: p.sectionHeader }}>
+          <CardSurface style={{ backgroundColor: `${p.income}12`, borderColor: `${p.income}65` }}>
             {totalRow('口座残高の合計', accountTotal, accountTotal < 0 ? p.danger : p.income)}
           </CardSurface>
           <SectionTitle action={accounts.length ? '口座を追加' : undefined} onAction={addAccount}>口座</SectionTitle>
@@ -117,7 +117,9 @@ export default function Accounts() {
           <SectionTitle action={cards.length ? 'カードを追加' : undefined} onAction={addCard}>カード</SectionTitle>
           <AccountSummaryGroup header={statements.size > 0 ? (
             <>
-              <CardHeader><MonthBar month={month} onChange={setMonth} /></CardHeader>
+              <CardHeader style={{ backgroundColor: `${p.tint}17`, borderBottomColor: `${p.tint}55` }}>
+                <MonthBar month={month} onChange={setMonth} />
+              </CardHeader>
               {statements.size > 1 ? (
                 <CardHeader style={{ backgroundColor: p.card }}>
                   {totalRow('カード支払残額の合計', billTotal, billTotal > 0 ? p.danger : p.income)}

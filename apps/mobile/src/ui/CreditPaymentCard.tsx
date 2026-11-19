@@ -23,12 +23,15 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord }: {
   const nextWarning = getPaymentWarning(statement, today, nextMonthKey);
   const paid = thisMonthGross > 0 && thisMonthRemaining === 0;
   const month = Number(currentMonthKey.slice(5));
+  const usagePercent = Math.round(statement.utilizationRatio * 100);
 
   return (
     <>
-      <CardSurface>
-        <CardHeader><MonthBar month={currentMonthKey} onChange={onChangeMonth} /></CardHeader>
-        <View style={{ padding: 16, gap: 10 }}>
+      <CardSurface style={{ borderColor: `${p.tint}75` }}>
+        <CardHeader style={{ backgroundColor: `${p.tint}24`, borderBottomColor: `${p.tint}55` }}>
+          <MonthBar month={currentMonthKey} onChange={onChangeMonth} />
+        </CardHeader>
+        <View style={{ padding: 16, gap: 12, backgroundColor: `${p.tint}0C` }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>支払残額</Text>
             <Text style={{ backgroundColor: paid ? `${p.tint}16` : p.fill, color: paid ? p.tint : p.textSecondary,
@@ -61,35 +64,39 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord }: {
             </Pressable>
           ) : null}
         </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, minHeight: 56,
-          backgroundColor: p.fill, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline }}>
-          <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.textSecondary} size={32} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ color: p.text, fontSize: 14, fontWeight: '700' }}>翌月の支払残額</Text>
-            <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatMonthLabel(nextMonthKey)} · {nextMonthConfirmed ? '確定' : '見込み'}</Text>
-            {nextWarning !== null ? <Text style={{ color: p.danger, fontSize: 12 }}>{warningLabel(nextWarning)}</Text> : null}
-          </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: '36%', color: p.text, fontSize: 16,
-            fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(nextMonthRemaining)}</Text>
-        </View>
       </CardSurface>
 
-      <CardSurface style={{ padding: 16, gap: 12 }}>
-        <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>カードの利用状況</Text>
-        {creditLimit > 0 ? (
-          <View style={{ gap: 7 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 13 }}>現在の利用可能額</Text>
-              <Text style={{ color: p.income, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                {formatJPY(availableCredit)}
-              </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 6, paddingVertical: 2, minHeight: 44 }}>
+        <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.textSecondary} size={34} />
+        <View style={{ flex: 1, gap: 3 }}>
+          <Text style={{ color: p.text, fontSize: 14, fontWeight: '700' }}>翌月の支払残額</Text>
+          <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatMonthLabel(nextMonthKey)} · {nextMonthConfirmed ? '確定' : '見込み'}</Text>
+          {nextWarning !== null ? <Text style={{ color: p.danger, fontSize: 12 }}>{warningLabel(nextWarning)}</Text> : null}
+        </View>
+        <Text numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: '38%', color: p.text, fontSize: 17,
+          fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(nextMonthRemaining)}</Text>
+      </View>
+
+      <CardSurface style={{ borderColor: creditLimit > 0 ? `${p.income}70` : p.outline }}>
+        <View style={{ padding: 16, gap: 12, backgroundColor: creditLimit > 0 ? `${p.income}18` : p.card }}>
+          <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>カードの利用状況</Text>
+          {creditLimit > 0 ? (
+            <View style={{ gap: 7 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5 }}>
+                <Text style={{ color: p.textSecondary, fontSize: 13 }}>現在の利用可能額</Text>
+                <Text style={{ color: p.income, fontSize: 21, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+                  {formatJPY(availableCredit)}
+                </Text>
+              </View>
+              <PlanningProgress amount={totalUnpaidBalance} total={creditLimit} color={p.income} label="利用枠の使用率" />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5 }}>
+                <Text style={{ color: p.textSecondary, fontSize: 12 }}>利用枠 {formatJPY(creditLimit)}</Text>
+                <Text style={{ color: p.income, fontSize: 12, fontWeight: '700' }}>{usagePercent}% 使用</Text>
+              </View>
             </View>
-            <PlanningProgress amount={totalUnpaidBalance} total={creditLimit} color={p.tint} label="利用枠の使用率" />
-            <Text style={{ color: p.textSecondary, fontSize: 12 }}>利用枠 {formatJPY(creditLimit)}</Text>
-          </View>
-        ) : null}
-        <View style={{ flexDirection: 'row', gap: 14, paddingTop: creditLimit > 0 ? 10 : 0,
+          ) : null}
+        </View>
+        <View style={{ flexDirection: 'row', gap: 14, padding: 16, paddingTop: creditLimit > 0 ? 12 : 0,
           borderTopWidth: creditLimit > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: p.outline }}>
           <View style={{ flex: 1, gap: 4 }}>
             <Text style={{ color: p.textSecondary, fontSize: 12 }}>現在の未払い残高</Text>
