@@ -5,7 +5,7 @@ import { TabStack } from '@/ui/StackLayout';
 import { tick } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 
-export const unstable_settings = { initialRouteName: 'index' };
+export const unstable_settings = { anchor: 'index' };
 
 export default function Layout() {
   const p = usePalette();

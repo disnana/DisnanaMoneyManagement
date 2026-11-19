@@ -15,15 +15,23 @@ export function setHapticsEnabled(value: boolean): void {
   kv.setItem(HAPTIC_KEY, value ? 'on' : 'off');
 }
 
+function androidTick() {
+  const clockTick = () => Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Clock_Tick);
+  // Segment ticks were introduced in Android 14 (API 34).
+  if (Number(Platform.Version) < 34) return clockTick();
+  return Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Segment_Tick).catch(clockTick);
+}
+
 /** Selection tick (tabs, segmented, pickers). */
 export function tick() {
   if (Platform.OS === 'web' || !getHapticsEnabled()) return;
-  if (Platform.OS === 'android') void Haptics.performAndroidHapticsAsync(Haptics.AndroidHaptics.Segment_Tick);
-  else void Haptics.selectionAsync();
+  const feedback = Platform.OS === 'android' ? androidTick() : Haptics.selectionAsync();
+  // Haptic feedback is optional and must never interrupt the action.
+  void feedback.catch(() => undefined);
 }
 
 /** Confirmation (saved / deleted). */
 export function success() {
   if (Platform.OS === 'web' || !getHapticsEnabled()) return;
-  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
 }
