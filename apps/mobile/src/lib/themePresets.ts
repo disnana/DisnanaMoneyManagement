@@ -60,6 +60,15 @@ const colorsByTheme: Record<Exclude<AppearanceColor, 'standard'>, Record<'light'
   },
 };
 
+const modernDarkSurfaces = {
+  bg: '#171C23',
+  card: '#222A34',
+  fill: '#2D3743',
+  separator: '#3B4654',
+  outline: '#67768A',
+  sectionHeader: '#364252',
+} satisfies Partial<Colors>;
+
 const shapes = {
   classic: { cardRadius: 8, controlRadius: 6 },
   modern: { cardRadius: 16, controlRadius: 12 },
@@ -77,6 +86,7 @@ export function useStyledPalette(light: Palette, dark: Palette, preview?: Appear
     if (style === 'standard' && color === 'standard') return base;
     const colors = color === 'standard' ? base : colorsByTheme[color][scheme];
     const shape = style === 'standard' ? { cardRadius: base.cardRadius, controlRadius: base.controlRadius } : shapes[style];
-    return { ...colors, ...shape };
+    const surfaces = style === 'modern' && scheme === 'dark' && color === 'standard' ? modernDarkSurfaces : undefined;
+    return { ...colors, ...surfaces, ...shape };
   }, [base, color, scheme, style]);
 }
