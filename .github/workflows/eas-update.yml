@@ -1,6 +1,6 @@
 name: Publish update (EAS Update -> Expo Go)
 
-# Publishes the iOS JS bundle to EAS Update so the app can be opened from the App Store's Expo Go without a
+# Publishes the iOS and Android JS bundles to the same EAS project so Expo Go can open them without a
 # dev server or a PC. Free plan only: no EAS Build, no Apple Developer Program. See apps/mobile/README.md.
 #
 # One-time setup (details in the README):
@@ -43,7 +43,7 @@ env:
 
 jobs:
   publish:
-    name: Publish iOS update
+    name: Publish iOS and Android updates
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -75,7 +75,7 @@ jobs:
           node-version: '22'
       - run: bun install --frozen-lockfile
 
-      - name: Publish update (iOS only)
+      - name: Publish update (iOS and Android)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           # Passed through the environment, never interpolated into the script (the text is user-controlled)
@@ -89,7 +89,7 @@ jobs:
           if [ -z "$message" ]; then message="manual publish of ${SHA:0:7}"; fi
           bunx "eas-cli@${EAS_CLI_VERSION}" update \
             --channel "$UPDATE_CHANNEL" \
-            --platform ios \
+            --platform all \
             --environment production \
             --message "$message" \
             --json --non-interactive > "$RUNNER_TEMP/update.json"
@@ -98,17 +98,22 @@ jobs:
       - name: Summary with the link / QR for Expo Go
         run: |
           set -euo pipefail
-          runtime="$(node -e "const j=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/update.json','utf8')); const a=Array.isArray(j)?j:[j]; console.log((a.find(u=>u.runtimeVersion)||{}).runtimeVersion||'')")"
-          if [ -z "$runtime" ]; then echo "::error::The publish output has no runtimeVersion"; exit 1; fi
-          group="$(node -e "const j=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/update.json','utf8')); const a=Array.isArray(j)?j:[j]; console.log((a.find(u=>u.group)||{}).group||'')")"
+          runtime="$(node - "$RUNNER_TEMP/update.json" <<'NODE'
+          const fs = require('node:fs');
+          const updates = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const ios = updates.find((update) => update.platform === 'ios');
+          const android = updates.find((update) => update.platform === 'android');
+          if (!ios?.runtimeVersion || ios.runtimeVersion !== android?.runtimeVersion) {
+            throw new Error('Expected iOS and Android updates with the same runtime version');
+          }
+          console.log(ios.runtimeVersion);
+          NODE
+          )"
           url="https://qr.expo.dev/eas-update?projectId=${EXPO_PROJECT_ID}&runtimeVersion=${runtime}&channel=${UPDATE_CHANNEL}"
           {
             echo "### Update published"
             echo
             echo "- Runtime: \`${runtime}\` (must equal \`exposdk:<SDK>.0.0\` of your Expo Go)"
             echo "- Channel: \`${UPDATE_CHANNEL}\`"
-            echo "- QR for Expo Go (open on another screen and scan with the iPhone camera): ${url}"
-            if [ -n "$group" ]; then
-              echo "- Direct link for this update group (not verified on a device): \`exp://u.expo.dev/${EXPO_PROJECT_ID}/group/${group}\`"
-            fi
+            echo "- QR for Expo Go on iOS and Android (open on another screen and scan from the phone): ${url}"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -22,12 +22,12 @@ packages/core         型・計算・初期データ・ストア（React/DOM 非
 | 数字キーボード | 「完了」アクセサリバー（`KeyboardDone.ios.tsx`） | なし（システム側に確定キーあり） |
 | ストレージ | expo-sqlite kv-store（同期） | 同左（Web プレビューのみ localStorage） |
 
-## PC なしで iPhone の Expo Go から起動する（GitHub Actions + EAS Update、無料）
-`main` に push するたびに、GitHub Actions が iOS 向けの JS バンドルを EAS Update に公開します。
-iPhone の App Store 版 Expo Go でその更新を開くので、開発サーバーも PC の常時起動も要りません。
+## PC なしで iOS・Android の Expo Go から起動する（GitHub Actions + EAS Update、無料）
+`main` に push するたびに、GitHub Actions が iOS と Android の JS バンドルを同じ Expo プロジェクト・チャネルに EAS Update で公開します。
+App Store または Google Play の Expo Go でその更新を開くので、開発サーバーも PC の常時起動も要りません。
 EAS Build・Apple Developer Program・EAS Workflows は使いません（Expo の Free プランで完結）。
 
-仕組み: `.github/workflows/eas-update.yml`（`main` への push と手動実行）→ `eas update --channel main --platform ios` →
+仕組み: `.github/workflows/eas-update.yml`（`main` への push と手動実行）→ `eas update --channel main --platform all` →
 Expo の EAS Update に公開 → Expo Go が QR / リンクから最新の更新を取得。
 
 ### 初回セットアップ（一度だけ）
@@ -45,21 +45,21 @@ Expo の EAS Update に公開 → Expo Go が QR / リンクから最新の更�
 5. **初回の公開**: Actions → 「Publish update (EAS Update -> Expo Go)」→ Run workflow（`main` を選択）。
    2 つが未設定だと、最初のステップが何が足りないかを表示して止まります。
 
-### 初回の起動（iPhone）
-1. App Store の **Expo Go** を入れ、Expo アカウントでサインインしておく（無料）。
+### 初回の起動（iOS・Android）
+1. App Store または Google Play から **Expo Go** を入れ、両端末で同じ Expo アカウントにサインインする。
 2. 公開が終わったジョブの **Summary** に出るリンク（`https://qr.expo.dev/eas-update?projectId=…&runtimeVersion=exposdk:58.0.0&channel=main`）を、**PC や別の画面で開く**と QR が出る。
-   iPhone の標準カメラで読み取る → Expo Go で開く。
-3. 自分の iPhone の画面にある QR は、その iPhone のカメラでは読めません。別の画面（PC・タブレット・家族の端末）でリンクを開くか、
-   Summary にある `exp://…` の直接リンク（更新グループ用）を iPhone で開いてください。
-   **QR・直接リンクのどちらが Expo Go で開けるかは実機で未確認です。** うまくいかない場合は Expo ダッシュボード（Updates の該当グループ）の QR を使ってください。
+   iOS は標準カメラ、Android は Expo Go の QR スキャナーで読み取る。
+3. QR を別の画面に表示できない場合は、Expo ダッシュボードの Updates から該当の更新グループを選び、Preview で端末に対応するリンクか QR を使う。
+
+Expo アカウントはプレビューへのアクセスに使います。家計データは各端末に保存されます。
 
 ### 更新するには
 - `main` に push する（`apps/mobile/**` か `packages/core/**` が変わったとき自動で公開）。
 - 手動: Actions → Publish update → Run workflow。
-- iPhone 側: Expo Go でアプリを開き直すと更新を取得します（強制的に取りたいときは Expo Go のアプリを一度終了して再度開く）。
+- 端末側: Expo Go でアプリを開き直すと更新を取得します（強制的に取りたいときは Expo Go のアプリを一度終了して再度開く）。
 
 ### 前提と制限（実機で未確認のものを含む）
-- **Expo Go と SDK**: このアプリは Expo SDK 58。App Store の Expo Go が SDK 58 に対応している必要があります。
+- **Expo Go と SDK**: このアプリは Expo SDK 58。利用する端末の Expo Go が SDK 58 に対応している必要があります。
   更新の `runtimeVersion` は `exposdk:58.0.0`（`app.config.ts` の `runtimeVersion: { policy: 'sdkVersion' }`）で、Expo Go の SDK と一致しないと「No launchable updates」になります。
   SDK を上げたら更新の公開をやり直してください。Expo Go 側が古い SDK のままなら、Expo Go の更新を待つか SDK を合わせます。
 - **ネイティブコード**: Expo Go に入っているライブラリだけが使えます。アプリが依存する `expo-*`・`react-native-*` はすべて Expo Go に同梱のものです（`bunx expo-doctor` で確認）。
