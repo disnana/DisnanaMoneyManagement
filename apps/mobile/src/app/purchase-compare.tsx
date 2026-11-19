@@ -14,15 +14,14 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { PurchaseBankPicker, PurchaseCashPreview, usePurchaseBank } from '@/ui/PurchaseCashPreview';
-import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
-import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { Group, Screen } from '@/ui/kit';
 
 export default function PurchaseCompare() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, removePurchaseCandidate, addTransaction, savePurchaseCandidate } = useFinance();
   const p = usePalette();
-  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const candidate = state.purchaseCandidates?.find((item) => item.id === id);
   const payment = usePurchaseBank(candidate?.ledgerId);
   const category = candidate ? getCategoryById(candidate.categoryId, state.customCategories) : undefined;
@@ -33,7 +32,7 @@ export default function PurchaseCompare() {
       <Stack.Screen options={{ title: '買い物試算', headerRight: candidate ? () => (
         <View style={{ flexDirection: 'row' }}>
           <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="削除"
-            onPress={({ nativeEvent }) => setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY })} />
+            onPress={() => setDeleteOpen(true)} />
           <HeaderAction name={{ ios: 'pencil', android: 'edit' }} label="編集"
             onPress={() => router.push({ pathname: '/purchase-editor', params: { id } })} />
         </View>
@@ -80,9 +79,9 @@ export default function PurchaseCompare() {
           </>
         ) : <Text style={{ color: p.textSecondary }}>購入候補が見つかりません</Text>}
       </Screen>
-      <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={deleteAnchor ? candidate?.title : undefined} anchor={deleteAnchor} onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+      <DeleteDialog heading="購入候補を削除しますか？" title={candidate?.title} visible={deleteOpen} onCancel={() => setDeleteOpen(false)} onDelete={() => {
         if (!candidate) return;
-        setDeleteAnchor(undefined);
+        setDeleteOpen(false);
         removePurchaseCandidate(candidate.id);
         router.back();
       }} />

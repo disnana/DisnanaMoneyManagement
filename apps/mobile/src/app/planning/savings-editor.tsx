@@ -4,7 +4,7 @@ import { Text } from 'react-native';
 import { formatJPY } from '@dmm/core/utils/format';
 import { isPlanningDate } from '@dmm/core/utils/planning';
 import { success } from '@/lib/haptics';
-import { pickOne } from '@/lib/pick';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, Screen } from '@/ui/kit';
@@ -24,6 +24,7 @@ export default function SavingsGoalEditor() {
   const [date, setDate] = useState(goal?.targetDate ?? '');
   const [monthly, setMonthly] = useState(goal?.monthlyContribution ? String(goal.monthlyContribution) : '');
   const [amount, setAmount] = useState(monthly);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const closing = useRef(false);
   const validDate = !date || isPlanningDate(date);
   const valid = depositing
@@ -53,31 +54,33 @@ export default function SavingsGoalEditor() {
             {depositing && goal ? (
               <>
                 <PlanningSummary label={goal.title} value={formatJPY(goal.currentAmount)} color={p.income} detail={`目標 ${formatJPY(goal.targetAmount)}`} />
-                <Group><PlanningInput label="積立額（円）" value={amount} onChange={setAmount} yen /></Group>
+                <Group><PlanningInput label="積立額" icon={{ ios: 'yensign', android: 'currency_yen' }} value={amount} onChange={setAmount} yen /></Group>
               </>
             ) : (
               <Group>
-                <PlanningInput label="目標名" value={title} onChange={setTitle} />
-                <PlanningInput label="目標額（円）" value={target} onChange={setTarget} yen />
-                <PlanningInput label="目標日（任意・YYYY-MM-DD）" value={date} onChange={setDate} />
-                <PlanningInput label="毎月の積立予定（円・任意）" value={monthly} onChange={setMonthly} yen />
+                <PlanningInput label="目標名" icon={{ ios: 'flag', android: 'flag' }} placeholder="例：旅行資金" value={title} onChange={setTitle} />
+                <PlanningInput label="目標額" icon={{ ios: 'yensign', android: 'currency_yen' }} value={target} onChange={setTarget} yen />
+                <PlanningInput label="目標日" icon={{ ios: 'calendar', android: 'calendar_today' }} optional placeholder="YYYY-MM-DD" value={date} onChange={setDate} />
+                <PlanningInput label="毎月の積立予定" icon={{ ios: 'calendar.badge.plus', android: 'event_repeat' }} optional value={monthly} onChange={setMonthly} yen />
               </Group>
             )}
             {!depositing && !validDate ? <Text style={{ color: p.danger }}>目標日は YYYY-MM-DD 形式で入力してください。</Text> : null}
             <PlanningActions label={depositing ? '積立を記録' : '保存'} close={close} valid={valid} save={save} />
             {!depositing && goal ? (
               <Group><Row title="貯金目標を削除" icon={{ ios: 'trash', android: 'delete' }} iconColor={p.danger}
-                onPress={async () => {
-                  const choice = await pickOne('貯金目標を削除しますか？', [{ id: 'delete', label: '削除', destructive: true }]);
-                  if (choice !== 'delete' || closing.current) return;
-                  closing.current = true;
-                  deleteSavingsGoal(goal.id);
-                  close();
-                }} /></Group>
+                onPress={() => setDeleteOpen(true)} /></Group>
             ) : null}
           </>
         )}
       </Screen>
+      <DeleteDialog visible={deleteOpen && Boolean(goal) && !depositing} heading="貯金目標を削除しますか？" title={goal?.title}
+        onCancel={() => setDeleteOpen(false)} onDelete={() => {
+          if (!goal || closing.current) return;
+          closing.current = true;
+          deleteSavingsGoal(goal.id);
+          setDeleteOpen(false);
+          close();
+        }} />
     </>
   );
 }

@@ -7,6 +7,7 @@ import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { TransactionInput } from '@/ui/TransactionForm';
 import { Group, IconBadge, Screen, SectionTitle, Segmented } from '@/ui/kit';
 
 const ICONS = [
@@ -60,8 +61,8 @@ export default function CategoryEditor() {
             <TextInput accessibilityLabel="カテゴリ名" placeholder="カテゴリ名" placeholderTextColor={p.textSecondary}
               value={name} onChangeText={setName} maxLength={32} style={{ flex: 1, minHeight: 54, fontSize: 17, color: p.text }} />
           </View>
-          <TextInput accessibilityLabel="メモ（任意）" placeholder="メモ（任意）" placeholderTextColor={p.textSecondary}
-            value={memo} onChangeText={setMemo} maxLength={100} style={{ minHeight: 48, color: p.text, paddingHorizontal: 16 }} />
+          <TransactionInput label="メモ" icon={{ ios: 'note.text', android: 'notes' }} optional
+            placeholder="補足があれば入力" value={memo} onChangeText={setMemo} maxLength={100} />
         </Group>
         {taken ? <Text style={{ color: p.danger }}>同じ名前のカテゴリがあります。</Text> : null}
         <SectionTitle>アイコン</SectionTitle>

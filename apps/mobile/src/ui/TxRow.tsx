@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { useState } from 'react';
 import { router } from 'expo-router';
 import type { Transaction } from '@dmm/core/types/finance';
 import { getCategoryById } from '@dmm/core/data/categories';
@@ -8,10 +8,12 @@ import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 import { useFinance } from '@/lib/store';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { Row } from '@/ui/kit';
 
 /** One transaction row. Tap = edit, long-press = action list (native action sheet on iOS). */
 export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: boolean; showMemo?: boolean }) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const p = usePalette();
   const { state, accountNameMap, deleteTransaction } = useFinance();
   const cat = getCategoryById(tx.categoryId, state.customCategories);
@@ -24,19 +26,7 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
       { id: 'delete', label: '削除', destructive: true },
     ]);
     if (choice === 'edit') router.push({ pathname: '/add', params: { id: tx.id } });
-    if (choice === 'delete') {
-      Alert.alert('削除しますか？', `「${tx.title}」を削除します。`, [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '削除',
-          style: 'destructive',
-          onPress: () => {
-            deleteTransaction(tx.id);
-            success();
-          },
-        },
-      ]);
-    }
+    if (choice === 'delete') setDeleteOpen(true);
   };
 
   const accounts = tx.type === 'transfer' ? `${acc} → ${to}`
@@ -48,17 +38,27 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
   const memo = showMemo ? tx.memo?.trim() : undefined;
 
   return (
-    <Row
-      icon={categoryIcon(cat.icon ?? tx.categoryId)}
-      iconColor={cat.color}
-      iconFilledInDark
-      title={tx.title}
-      subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${accounts}`}
-      detail={[pointDetail, memo].filter(Boolean).join('\n') || undefined}
-      right={tx.amount === 0 ? formatJPY(0) : formatSignedJPY(tx.amount, tx.type)}
-      rightColor={tx.amount === 0 || tx.type === 'income' ? p.income : tx.type === 'expense' ? p.danger : p.text}
-      onPress={() => router.push({ pathname: '/add', params: { id: tx.id } })}
-      onLongPress={onLongPress}
-    />
+    <>
+      <Row
+        icon={categoryIcon(cat.icon ?? tx.categoryId)}
+        iconColor={cat.color}
+        iconFilledInDark
+        title={tx.title}
+        subtitle={`${showDate ? `${formatShortDate(tx.date)} · ` : ''}${accounts}`}
+        detail={[pointDetail, memo].filter(Boolean).join('\n') || undefined}
+        right={tx.amount === 0 ? formatJPY(0) : formatSignedJPY(tx.amount, tx.type)}
+        rightColor={tx.amount === 0 || tx.type === 'income' ? p.income : tx.type === 'expense' ? p.danger : p.text}
+        onPress={() => router.push({ pathname: '/add', params: { id: tx.id } })}
+        onLongPress={onLongPress}
+      />
+      {deleteOpen ? (
+        <DeleteDialog visible heading="取引を削除しますか？" title={tx.title}
+          onCancel={() => setDeleteOpen(false)} onDelete={() => {
+            setDeleteOpen(false);
+            deleteTransaction(tx.id);
+            success();
+          }} />
+      ) : null}
+    </>
   );
 }

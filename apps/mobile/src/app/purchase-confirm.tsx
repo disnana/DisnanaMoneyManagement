@@ -67,7 +67,7 @@ export default function PurchaseConfirm() {
         </View>
 
         <Group>
-          <PlanningInput label="最終価格（円）" value={price} onChange={setPrice} yen />
+          <PlanningInput label="最終価格" icon={{ ios: 'yensign', android: 'currency_yen' }} value={price} onChange={setPrice} yen />
           {Platform.OS === 'ios' ? (
             <View style={{ minHeight: 56, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>購入予定日</Text>

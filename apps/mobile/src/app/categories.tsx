@@ -13,7 +13,7 @@ import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { AnchoredPopover, type PopoverAnchor } from '@/ui/AnchoredPopover';
-import { DeleteConfirmation } from '@/ui/AnchoredDeleteDialog';
+import { DeleteConfirmation } from '@/ui/DeleteDialog';
 import { Group, IconBadge, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 
 const ROW_HEIGHT = 62;
@@ -158,8 +158,8 @@ export default function Categories() {
         ) : null}
       </Screen>
       {menu ? (
-        <AnchoredPopover anchor={menu.anchor} onClose={() => setMenu(undefined)}
-          width={menu.confirming ? 280 : 180} initialHeight={104}>
+        <AnchoredPopover anchor={menu.confirming ? undefined : menu.anchor} instant onClose={() => setMenu(undefined)}
+          width={menu.confirming ? 340 : 180} initialHeight={104}>
           {menu.confirming ? (
             <DeleteConfirmation heading="カテゴリを削除しますか？" title={menu.category.name}
               description="過去の取引にはカテゴリ名が残ります。"

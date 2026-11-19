@@ -101,7 +101,7 @@ export default function PurchaseEditor() {
             contentContainerStyle={{ padding: 16, gap: 14 }}>
             <Text style={{ color: p.textSecondary, fontSize: 13 }}>{formatMonthLabel(targetMonth)}の買い物試算</Text>
             <Group>
-              <PlanningInput label="買いたいもの" value={title} onChange={setTitle} />
+              <PlanningInput label="買いたいもの" icon={{ ios: 'cart', android: 'shopping_cart' }} value={title} onChange={setTitle} />
               <Row title="家計グループ" right={ledger?.name ?? '選択なし'} chevron
                 icon={ledger ? ledgerIcon(ledger) : ALL_LEDGER_ICON} iconColor={ledgerColor(ledger)} onPress={async () => {
                 const choice = await pickLedger(ledgerId, '選択なし');
@@ -111,13 +111,14 @@ export default function PurchaseEditor() {
                 icon={selectedCategory ? categoryIcon(selectedCategory.icon ?? selectedCategory.id) : { ios: 'tag', android: 'label' }}
                 iconColor={selectedCategory?.color}
                 onPress={() => void pickCategory('expense', category, setCategory)} />
-              <PlanningInput label={currency === 'JPY' ? '見込み価格（円）' : `見込み価格（${currency}）`}
+              <PlanningInput label={currency === 'JPY' ? '見込み価格' : `見込み価格（${currency}）`}
+                icon={currency === 'JPY' ? { ios: 'yensign', android: 'currency_yen' } : { ios: 'banknote', android: 'payments' }}
                 value={amount} onChange={setAmount} yen={currency === 'JPY'} decimal={currency !== 'JPY'} />
             </Group>
             <Group>
               <Row title="支払い通貨" right={currency === 'JPY' ? '日本円' : currency} chevron onPress={() => void chooseCurrency()} />
-              {foreignPrice ? <PlanningInput label={`為替レート（1 ${currency} あたり円）`} value={rate} onChange={setRate} decimal /> : null}
-              {foreignPrice ? <PlanningInput label="手数料（円・任意）" value={fee} onChange={setFee} yen /> : null}
+              {foreignPrice ? <PlanningInput label={`為替レート（1 ${currency} あたり円）`} icon={{ ios: 'arrow.left.arrow.right', android: 'currency_exchange' }} value={rate} onChange={setRate} decimal /> : null}
+              {foreignPrice ? <PlanningInput label="手数料" optional icon={{ ios: 'yensign', android: 'currency_yen' }} value={fee} onChange={setFee} yen /> : null}
               {foreignPrice && purchaseAmount ? <Row title="円換算（手数料込み）" right={formatJPY(purchaseAmount)} /> : null}
             </Group>
             {category && purchaseAmount
@@ -132,9 +133,9 @@ export default function PurchaseEditor() {
                 const choice = await pickOne('支払い方法', [1, 3, 6, 12, 24].map((n) => ({ id: String(n), label: n === 1 ? '一括' : `${n}回払い`, selected: n === count })));
                 if (choice) setCount(Number(choice));
               }} />
-              {count > 1 ? <PlanningInput label="年率（%・分割手数料）" value={ratePct} onChange={setRatePct} decimal /> : null}
-              <PlanningInput label="メモ（任意）" value={note} onChange={setNote} />
-              <PlanningInput label="商品のリンク（任意）" value={url} onChange={setUrl} />
+              {count > 1 ? <PlanningInput label="年率（分割手数料）" icon={{ ios: 'percent', android: 'percent' }} unit="%" value={ratePct} onChange={setRatePct} decimal /> : null}
+              <PlanningInput label="メモ" optional icon={{ ios: 'note.text', android: 'notes' }} value={note} onChange={setNote} />
+              <PlanningInput label="商品のリンク" optional icon={{ ios: 'link', android: 'link' }} value={url} onChange={setUrl} />
             </Group>
             <Pressable accessibilityRole="button" onPress={() => showTab('estimate')} style={({ pressed }) => ({
               minHeight: 48, borderRadius: 13, alignItems: 'center', justifyContent: 'center',

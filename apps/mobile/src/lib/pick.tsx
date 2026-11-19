@@ -52,33 +52,64 @@ export function PickerHost() {
   const { height } = useWindowDimensions();
   const [req, setReq] = useState<Request | null>(null);
   const pending = useRef<Request | null>(null);
+  const [dismissing, setDismissing] = useState(false);
+  const dismissal = useRef<{ request: Request; result: string | null } | null>(null);
+  const nextRequest = useRef<Request | null>(null);
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<PickOption[]>();
   const dragOffset = useSharedValue(0);
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dragOffset.value }] }));
 
+  const show = useCallback((request: Request | null) => {
+    pending.current = request;
+    dragOffset.value = 0;
+    setQuery('');
+    setDraft(undefined);
+    setReq(request);
+  }, [dragOffset]);
+
   useEffect(() => {
     listener = (request) => {
+      if (dismissal.current) {
+        nextRequest.current?.resolve(null);
+        nextRequest.current = request;
+        return;
+      }
       pending.current?.resolve(null);
-      pending.current = request;
-      dragOffset.value = 0;
-      setQuery('');
-      setDraft(undefined);
-      setReq(request);
+      show(request);
     };
     return () => {
       listener = null;
       pending.current?.resolve(null);
       pending.current = null;
+      nextRequest.current?.resolve(null);
+      nextRequest.current = null;
+      dismissal.current = null;
     };
-  }, [dragOffset]);
+  }, [show]);
+
+  const didDismiss = useCallback(() => {
+    const dismissed = dismissal.current;
+    if (!dismissed) return;
+    dismissal.current = null;
+    setDismissing(false);
+    show(nextRequest.current);
+    nextRequest.current = null;
+    dismissed.request.resolve(dismissed.result);
+  }, [show]);
 
   const close = useCallback((id: string | null) => {
-    pending.current?.resolve(id);
-    pending.current = null;
-    setReq(null);
-    setDraft(undefined);
-  }, []);
+    const request = pending.current;
+    if (!request || dismissal.current) return;
+    // iOS must finish dismissing its native sheet before a caller can open another modal.
+    if (Platform.OS === 'ios') {
+      dismissal.current = { request, result: id };
+      setDismissing(true);
+      return;
+    }
+    show(null);
+    request.resolve(id);
+  }, [show]);
   const sheetDrag = usePanGesture({
     maxPointers: 1,
     activeOffsetY: 5,
@@ -249,7 +280,7 @@ export function PickerHost() {
   );
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={() => close(null)}
+    <Modal transparent animationType="none" visible={!dismissing} onDismiss={didDismiss} onRequestClose={() => close(null)}
       statusBarTranslucent={android} navigationBarTranslucent={android}>
       {/* Android hosts the modal in its own window, so read the insets there. */}
       {android ? <SafeAreaProvider>{sheet}</SafeAreaProvider> : sheet}

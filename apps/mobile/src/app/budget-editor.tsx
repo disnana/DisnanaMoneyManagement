@@ -7,8 +7,7 @@ import { useCategoryPicker } from '@/lib/categoryPicker';
 import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
-import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, Row, Screen } from '@/ui/kit';
 import { PlanningInput } from '@/ui/PlanningForm';
@@ -23,7 +22,7 @@ export default function BudgetEditor() {
   const initial = scopedBudgets.find((item) => item.categoryId === categoryId);
   const [category, setCategory] = useState(categoryId ?? '');
   const [amount, setAmount] = useState(initial ? String(initial.monthlyLimit) : '');
-  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const closing = useRef(false);
   const selected = category ? getCategoryById(category, state.customCategories) : undefined;
   const existing = scopedBudgets.find((item) => item.categoryId === category);
@@ -40,7 +39,7 @@ export default function BudgetEditor() {
           <View style={{ flexDirection: 'row' }}>
             {existing ? (
               <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="予算を削除"
-                onPress={({ nativeEvent }) => setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY })} />
+                onPress={() => setDeleteOpen(true)} />
             ) : null}
             <HeaderAction name={{ ios: 'checkmark', android: 'check' }} label="予算を保存" accent disabled={!valid} onPress={() => {
               if (!valid || closing.current) return;
@@ -64,15 +63,15 @@ export default function BudgetEditor() {
                 setCategory(id);
                 setAmount(budget ? String(budget.monthlyLimit) : '');
               })} />
-            <PlanningInput label="毎月の上限（円）" value={amount} onChange={setAmount} yen />
+            <PlanningInput label="毎月の上限" icon={{ ios: 'yensign', android: 'currency_yen' }} value={amount} onChange={setAmount} yen />
           </Group>
         )}
       </Screen>
-      <AnchoredDeleteDialog heading="カテゴリ予算を削除しますか？" title={selected?.name} anchor={deleteAnchor}
-        onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+      <DeleteDialog heading="カテゴリ予算を削除しますか？" title={selected?.name} visible={deleteOpen}
+        onCancel={() => setDeleteOpen(false)} onDelete={() => {
           if (!existing || closing.current) return;
           closing.current = true;
-          setDeleteAnchor(undefined);
+          setDeleteOpen(false);
           removeBudget(existing.categoryId, ledgerId);
           close();
         }} />

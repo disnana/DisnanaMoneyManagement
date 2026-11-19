@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import Swipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -9,7 +9,9 @@ import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { getOrderedLedgers } from '@dmm/core/utils/ledgers';
 import { usePalette } from '@/lib/theme';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { TransactionInput } from '@/ui/TransactionForm';
 import { Group, IconBadge, Row, Screen, Segmented } from '@/ui/kit';
 
 const LEDGER_KINDS: { id: Ledger['kind']; label: string }[] = [
@@ -30,6 +32,7 @@ export default function Ledgers() {
   const [icon, setIcon] = useState<string>();
   const [color, setColor] = useState<string>();
   const [error, setError] = useState('');
+  const [deletion, setDeletion] = useState<{ ledger: Ledger; destination: string }>();
   const swipeRows = useRef(new Map<string, SwipeableMethods>());
   const openRow = useRef<string | null>(null);
   const canDelete = ledgers.length > 1;
@@ -70,13 +73,12 @@ export default function Ledgers() {
   const remove = async (ledger: Ledger) => {
     swipeRows.current.get(ledger.id)?.close();
     const destination = await pickOne(
-      `「${ledger.name}」を削除し、口座と記録を移動`,
-      ledgerOptions(ledgers.filter((item) => item.id !== ledger.id))
+      '口座と記録の移動先',
+      ledgerOptions(ledgers.filter((item) => item.id !== ledger.id)),
+      { description: `「${ledger.name}」を削除する前に、移動先を選んでください。` }
     );
     if (!destination) return;
-    deleteLedger(ledger.id, destination);
-    if (activeLedger?.id === ledger.id) setActiveLedgerId(destination);
-    if (editing?.id === ledger.id) reset();
+    setDeletion({ ledger, destination });
   };
 
   return (
@@ -145,9 +147,8 @@ export default function Ledgers() {
             </View>
             {creating ? <Segmented value={kind} onChange={setKind} options={LEDGER_KINDS} /> : null}
             <Group>
-              <TextInput accessibilityLabel="グループ名" placeholder="グループ名" placeholderTextColor={p.textSecondary}
-                value={name} onChangeText={setName} maxLength={40}
-                style={{ minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 }} />
+              <TransactionInput label="グループ名" icon={ledgerIcon({ kind, icon })} placeholder="例：家庭"
+                value={name} onChangeText={setName} maxLength={40} />
               <Row title="アイコン" right={LEDGER_ICONS.find(({ id }) => id === (icon ?? kind))?.label ?? '既定'}
                 icon={ledgerIcon({ kind, icon })} iconColor={color} chevron onPress={async () => {
                   const choice = await pickOne('アイコン', LEDGER_ICONS.map((item) => ({
@@ -167,6 +168,16 @@ export default function Ledgers() {
           </>
         ) : null}
       </Screen>
+      <DeleteDialog visible={Boolean(deletion)} heading="家計グループを削除しますか？" title={deletion?.ledger.name}
+        description={deletion ? `口座と記録は「${ledgers.find((ledger) => ledger.id === deletion.destination)?.name ?? ''}」に移動します。` : undefined}
+        onCancel={() => setDeletion(undefined)} onDelete={() => {
+          if (!deletion) return;
+          const { ledger, destination } = deletion;
+          setDeletion(undefined);
+          deleteLedger(ledger.id, destination);
+          if (activeLedger?.id === ledger.id) setActiveLedgerId(destination);
+          if (editing?.id === ledger.id) reset();
+        }} />
     </>
   );
 }

@@ -6,15 +6,14 @@ import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
-import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
-import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { Group, IconBadge, Row, Screen } from '@/ui/kit';
 
 export default function CategoryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, setCategoryHidden } = useFinance();
   const p = usePalette();
-  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const category = getOrderedCategories('expense', state.customCategories).concat(getOrderedCategories('income', state.customCategories))
     .find((item) => item.id === id);
   const hidden = state.hiddenCategoryIds?.includes(id);
@@ -24,7 +23,7 @@ export default function CategoryDetail() {
       <Stack.Screen options={{ title: 'カテゴリ', headerRight: category ? () => (
         <View style={{ flexDirection: 'row' }}>
           {!hidden ? <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="削除"
-            onPress={({ nativeEvent }) => setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY })} /> : null}
+            onPress={() => setDeleteOpen(true)} /> : null}
           <HeaderAction name={{ ios: 'pencil', android: 'edit' }} label="編集"
             onPress={() => router.push({ pathname: '/category-editor', params: { id } })} />
         </View>
@@ -50,11 +49,11 @@ export default function CategoryDetail() {
           </>
         ) : <Text style={{ color: p.textSecondary }}>カテゴリが見つかりません</Text>}
       </Screen>
-      <AnchoredDeleteDialog heading="カテゴリを削除しますか？" title={category?.name} anchor={deleteAnchor}
+      <DeleteDialog heading="カテゴリを削除しますか？" title={category?.name} visible={deleteOpen}
         description="過去の取引にはカテゴリ名が残ります。"
-        onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+        onCancel={() => setDeleteOpen(false)} onDelete={() => {
           setCategoryHidden(id, true);
-          setDeleteAnchor(undefined);
+          setDeleteOpen(false);
           router.back();
         }} />
     </>

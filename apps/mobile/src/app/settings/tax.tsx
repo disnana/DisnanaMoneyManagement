@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -12,6 +12,7 @@ import { buildTransactionsCsv, formatJPY, getTodayString } from '@dmm/core/utils
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { success, tick } from '@/lib/haptics';
+import { TransactionInput } from '@/ui/TransactionForm';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
 
@@ -88,9 +89,9 @@ export default function Tax() {
               }} />
             {editing ? (
               <>
-                <TextInput accessibilityLabel="控除・免除額（円）" value={amount} keyboardType="number-pad"
-                  onChangeText={(text) => setAmount(text.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 15))}
-                  style={{ minHeight: 48, paddingHorizontal: 16, color: p.text, fontSize: 16 }} />
+                <TransactionInput label="控除・免除額" icon={{ ios: 'yensign', android: 'currency_yen' }} unit="円"
+                  value={amount} keyboardType="number-pad"
+                  onChangeText={(text) => setAmount(text.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 15))} />
                 <Row title="この年の設定を保存" onPress={() => {
                   if (amount === '') return;
                   setLedgerTaxExemption(activeLedger.id, year, Number(amount));

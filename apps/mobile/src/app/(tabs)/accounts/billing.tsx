@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { formatMonthLabel } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { PlanningInput } from '@/ui/PlanningForm';
 import { Group, Row, Screen } from '@/ui/kit';
 
 export default function CardBilling() {
@@ -21,10 +22,7 @@ export default function CardBilling() {
           <>
             <Text style={{ color: p.text, fontSize: 17, fontWeight: '700' }}>{card.name} · {formatMonthLabel(month)}支払分</Text>
             <Group>
-              <TextInput accessibilityLabel="確定した請求額（円）" placeholder="確定した請求額（円）"
-                placeholderTextColor={p.textSecondary} keyboardType="number-pad" value={amount}
-                onChangeText={(value) => setAmount(value.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 12))}
-                style={{ paddingHorizontal: 16, minHeight: 54, color: p.text, fontSize: 19 }} />
+              <PlanningInput label="確定した請求額" icon={{ ios: 'yensign', android: 'currency_yen' }} value={amount} onChange={setAmount} yen />
             </Group>
             <Text style={{ color: p.textSecondary }}>カード明細の請求総額を入力します。記帳済みの支払いは自動で差し引きます。支払い記録でポイントを入力する場合は、充当前の請求額を入力してください。</Text>
             <Pressable accessibilityRole="button" disabled={!amount} onPress={() => {

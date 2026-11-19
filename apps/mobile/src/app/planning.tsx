@@ -15,8 +15,7 @@ import { usePalette } from '@/lib/theme';
 import { Group, IconBadge, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
 import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
-import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
-import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { PlanningProgress, PlanningSummary } from '@/ui/PlanningSummary';
 import { SavingsGoals } from '@/ui/SavingsGoals';
@@ -101,13 +100,13 @@ function Budgets() {
 function Purchases() {
   const { state, activeLedger, ledgers, month, removePurchaseCandidate, savePurchaseCandidate, addTransaction } = useFinance();
   const p = usePalette();
-  const [deletion, setDeletion] = useState<{ id: string; anchor: PopoverAnchor }>();
+  const [deletion, setDeletion] = useState<string>();
   const ledgerId = activeLedger?.id;
   const inView = (state.purchaseCandidates ?? []).filter((item) => (!ledgerId || item.ledgerId === ledgerId) && item.month === month);
   const { candidates, confirmed, purchased } = groupPurchases(inView);
   const planned = [...confirmed, ...candidates];
   const plannedTotal = planned.reduce((sum, item) => sum + item.amount, 0);
-  const pendingDelete = inView.find((item) => item.id === deletion?.id);
+  const pendingDelete = inView.find((item) => item.id === deletion);
   const accountName = (id?: string) => state.accounts.find((a) => a.id === id)?.name ?? '口座未設定';
   const buy = (item: (typeof inView)[number]) => {
     const today = getTodayString();
@@ -182,7 +181,7 @@ function Purchases() {
               <PurchaseAction label="予定にする" color={p.text} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
               <PurchaseAction label="編集" color={p.text} onPress={() => router.push({ pathname: '/purchase-editor', params: { id: item.id } })} />
               <PurchaseAction label="削除" color={p.danger}
-                onPress={({ nativeEvent }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />
+                onPress={() => setDeletion(item.id)} />
             </View>
           </Group>
         );
@@ -210,7 +209,7 @@ function Purchases() {
               const category = getCategoryById(item.categoryId, state.customCategories);
               return <Row key={item.id} title={item.title} subtitle={item.purchasedAt ? formatFullDate(item.purchasedAt) : ''} right={formatJPY(item.amount)}
                 icon={categoryIcon(category.icon ?? category.id)} iconColor={category.color}
-                onPress={({ nativeEvent }: { nativeEvent: { pageX: number; pageY: number } }) => setDeletion({ id: item.id, anchor: { x: nativeEvent.pageX, y: nativeEvent.pageY } })} />;
+                onPress={() => setDeletion(item.id)} />;
             })}
           </Group>
         </>
@@ -219,7 +218,7 @@ function Purchases() {
         <Group><Row title="購入候補を追加" subtitle="購入後の予算や残高を試算"
           icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => router.push('/purchase-editor')} /></Group>
       ) : null}
-      <AnchoredDeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} anchor={deletion?.anchor} onCancel={() => setDeletion(undefined)} onDelete={() => {
+      <DeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} visible={Boolean(pendingDelete)} onCancel={() => setDeletion(undefined)} onDelete={() => {
         if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
         setDeletion(undefined);
       }} />

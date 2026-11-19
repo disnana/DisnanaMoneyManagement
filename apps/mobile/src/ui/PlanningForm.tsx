@@ -1,19 +1,26 @@
-import { Pressable, Text, TextInput, View } from 'react-native';
+import type { SymbolViewProps } from 'expo-symbols';
+import { Pressable, Text, View } from 'react-native';
+import { TransactionInput } from '@/ui/TransactionForm';
+import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { usePalette } from '@/lib/theme';
 
-export function PlanningInput({ label, value, onChange, yen, decimal }: {
-  label: string; value: string; onChange: (text: string) => void; yen?: boolean; decimal?: boolean;
+export function PlanningInput({ label, icon, value, onChange, yen, decimal, unit, optional, placeholder }: {
+  label: string;
+  icon: SymbolViewProps['name'];
+  value: string;
+  onChange: (text: string) => void;
+  yen?: boolean;
+  decimal?: boolean;
+  unit?: string;
+  optional?: boolean;
+  placeholder?: string;
 }) {
-  const p = usePalette();
   return (
-    <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-      <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
-      <TextInput accessibilityLabel={label} value={value} keyboardType={yen ? 'number-pad' : decimal ? 'decimal-pad' : 'default'}
-        onChangeText={(text) => onChange(yen || decimal
-          ? text.normalize('NFKC').replace(decimal ? /[^0-9.]/g : /[^0-9]/g, '').slice(0, decimal ? 18 : 12)
-          : text)}
-        style={{ minHeight: 36, color: p.text, fontSize: 17, paddingVertical: 2 }} />
-    </View>
+    <TransactionInput label={label} icon={icon} value={value} optional={optional} placeholder={placeholder} unit={yen ? '円' : unit}
+      keyboardType={yen ? 'number-pad' : decimal ? 'decimal-pad' : 'default'} inputAccessoryViewID={yen || decimal ? KEYBOARD_ACCESSORY_ID : undefined}
+      onChangeText={(text) => onChange(yen || decimal
+        ? text.normalize('NFKC').replace(decimal ? /[^0-9.]/g : /[^0-9]/g, '').slice(0, decimal ? 18 : 12)
+        : text)} />
   );
 }
 

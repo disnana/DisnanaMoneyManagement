@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Text, TextInput } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import type { Account, AccountType } from '@dmm/core/types/finance';
@@ -9,7 +9,9 @@ import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { TransactionInput } from '@/ui/TransactionForm';
 import { Group, Row, Screen } from '@/ui/kit';
 
 const TYPES: AccountType[] = ['bank', 'cash', 'emoney', 'investment', 'psp', 'foreign_bank'];
@@ -46,15 +48,12 @@ export default function AccountEditor() {
     router.back();
   };
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const remove = () => {
     if (!editing) return;
-    Alert.alert('口座を削除しますか？', `「${editing.name}」を削除します。`, [
-      { text: 'キャンセル', style: 'cancel' },
-      { text: '削除', style: 'destructive', onPress: () => { deleteAccount(editing.id); router.dismissTo('/accounts'); } },
-    ]);
+    setDeleteOpen(true);
   };
 
-  const inputStyle = { minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 };
   return (
     <>
       <Stack.Screen options={{
@@ -70,11 +69,13 @@ export default function AccountEditor() {
                   const choice = await pickOne('口座の種類', TYPES.map((t) => ({ id: t, label: ACCOUNT_TYPE_LABELS[t], icon: ACCOUNT_ICONS[t], selected: t === type })));
                   if (choice) setType(choice as AccountType);
                 }} />
-              <TextInput accessibilityLabel="口座名" placeholder="口座名" placeholderTextColor={p.textSecondary} value={name} onChangeText={setName} style={inputStyle} />
-              <TextInput accessibilityLabel="金融機関" placeholder="金融機関・サービス名（任意）" placeholderTextColor={p.textSecondary}
-                value={institution} onChangeText={setInstitution} style={inputStyle} />
-              <TextInput accessibilityLabel="開始残高" placeholder="開始時の残高（円）" placeholderTextColor={p.textSecondary} keyboardType="numbers-and-punctuation"
-                value={balance} onChangeText={(v) => setBalance(v.normalize('NFKC').replace(/[^0-9-]/g, '').replace(/(?!^)-/g, '').slice(0, 13))} style={inputStyle} />
+              <TransactionInput label="口座名" icon={{ ios: 'text.alignleft', android: 'subject' }}
+                placeholder="例：生活費口座" value={name} onChangeText={setName} />
+              <TransactionInput label="金融機関" icon={{ ios: 'building.columns', android: 'account_balance' }} optional
+                placeholder="金融機関・サービス名" value={institution} onChangeText={setInstitution} />
+              <TransactionInput label="開始残高" icon={{ ios: 'yensign', android: 'currency_yen' }} unit="円"
+                placeholder="0" keyboardType="numbers-and-punctuation" value={balance}
+                onChangeText={(v) => setBalance(v.normalize('NFKC').replace(/[^0-9-]/g, '').replace(/(?!^)-/g, '').slice(0, 13))} />
               <Row title="家計グループ" right={ledger?.name ?? '選択'} chevron icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)}
                 onPress={async () => {
                   const choice = await pickLedger(ledgerId);
@@ -93,6 +94,13 @@ export default function AccountEditor() {
           </>
         )}
       </Screen>
+      <DeleteDialog visible={deleteOpen && Boolean(editing) && !used} heading="口座を削除しますか？" title={editing?.name}
+        onCancel={() => setDeleteOpen(false)} onDelete={() => {
+          if (!editing) return;
+          setDeleteOpen(false);
+          deleteAccount(editing.id);
+          router.dismissTo('/accounts');
+        }} />
     </>
   );
 }

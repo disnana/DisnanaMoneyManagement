@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Text, TextInput } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { formatDayLabel } from '@dmm/core/utils/format';
@@ -10,6 +10,7 @@ import { pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
+import { TransactionInput } from '@/ui/TransactionForm';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
 
 type CardType = 'credit' | 'debit';
@@ -74,7 +75,6 @@ export default function CardSettings() {
     if (choice) setDay(Number(choice));
   };
 
-  const inputStyle = { minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 };
 
   return (
     <>
@@ -97,22 +97,10 @@ export default function CardSettings() {
               />
             ) : null}
             <Group>
-              <TextInput
-                accessibilityLabel="カード名"
-                placeholder="カード名"
-                placeholderTextColor={p.textSecondary}
-                value={name}
-                onChangeText={setName}
-                style={inputStyle}
-              />
-              <TextInput
-                accessibilityLabel="発行会社"
-                placeholder="発行会社（任意）"
-                placeholderTextColor={p.textSecondary}
-                value={institution}
-                onChangeText={setInstitution}
-                style={inputStyle}
-              />
+              <TransactionInput label="カード名" icon={{ ios: 'creditcard', android: 'credit_card' }}
+                placeholder="例：メインカード" value={name} onChangeText={setName} />
+              <TransactionInput label="発行会社" icon={{ ios: 'building.2', android: 'business' }} optional
+                placeholder="カード会社名" value={institution} onChangeText={setInstitution} />
               <Row title="家計グループ" right={ledger?.name ?? '選択'} chevron icon={ledger ? ledgerIcon(ledger) : undefined} iconColor={ledgerColor(ledger)}
                 onPress={async () => {
                   const choice = await pickLedger(ledgerId);
@@ -141,15 +129,8 @@ export default function CardSettings() {
                   const choice = await pickOne('支払月', [{ id: '1', label: '翌月' }, { id: '2', label: '翌々月' }]);
                   if (choice) setOffset(choice === '2' ? 2 : 1);
                 }} />
-                <TextInput
-                  accessibilityLabel="利用限度額"
-                  placeholder="利用限度額（任意）"
-                  placeholderTextColor={p.textSecondary}
-                  keyboardType="number-pad"
-                  value={limit}
-                  onChangeText={(value) => setLimit(value.replace(/[^0-9]/g, ''))}
-                  style={inputStyle}
-                />
+                <TransactionInput label="利用限度額" icon={{ ios: 'yensign', android: 'currency_yen' }} optional unit="円"
+                  keyboardType="number-pad" value={limit} onChangeText={(value) => setLimit(value.replace(/[^0-9]/g, ''))} />
                 <Row title="支払日前の警告" subtitle="期日が近づくとホームに表示"
                   right={warningDays ? `${warningDays}日前` : 'オフ'} chevron onPress={async () => {
                     const choice = await pickOne('支払日前の警告', [

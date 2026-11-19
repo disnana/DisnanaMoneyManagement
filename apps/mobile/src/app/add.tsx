@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -19,9 +19,8 @@ import { pickOne } from '@/lib/pick';
 import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
-import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
+import { DeleteDialog } from '@/ui/DeleteDialog';
 import { CardHeader, CardSurface } from '@/ui/CardSurface';
-import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { FormScrollView } from '@/ui/FormScrollView';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
@@ -70,7 +69,7 @@ export default function AddScreen() {
   const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
-  const [deleteAnchor, setDeleteAnchor] = useState<PopoverAnchor>();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
     getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds)[0]?.id ?? '');
   const [accountId, setAccountId] = useState(editing?.accountId ?? defaultAccount?.id ?? '');
@@ -278,24 +277,30 @@ export default function AddScreen() {
     </Pressable>
   );
 
+  const headerActions = () => (
+    <View style={{ flexDirection: 'row', gap: 6 }}>
+      {editing ? (
+        <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="取引を削除" circular
+          onPress={() => {
+            Keyboard.dismiss();
+            setDeleteOpen(true);
+          }} />
+      ) : null}
+      <HeaderAction name={{ ios: 'checkmark', android: 'check' }}
+        label={editing ? '取引を保存' : '取引を登録'} accent circular onPress={() => save(false)} />
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Stack.Screen
         options={{
           title: editing ? `${TYPE_LABELS[type]}を編集` : `${TYPE_LABELS[type]}を記録`,
-          headerRight: () => (
-            <View style={{ flexDirection: 'row' }}>
-              {editing ? (
-                <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="取引を削除"
-                  onPress={({ nativeEvent }) => {
-                    Keyboard.dismiss();
-                    setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY });
-                  }} />
-              ) : null}
-              <HeaderAction name={{ ios: 'checkmark', android: 'check' }}
-                label={editing ? '取引を保存' : '取引を登録'} accent onPress={() => save(false)} />
-            </View>
-          ),
+          ...(Platform.OS === 'ios' ? {
+            unstable_headerRightItems: () => [{
+              type: 'custom', element: headerActions(), hidesSharedBackground: true,
+            }],
+          } : { headerRight: headerActions }),
         }}
       />
 
@@ -451,14 +456,15 @@ export default function AddScreen() {
                   <Text style={{ color: p.text, fontSize: 14, fontWeight: '600' }}>事業で使った割合</Text>
                   <Text style={{ color: p.textSecondary, fontSize: 12 }}>0〜100%</Text>
                 </View>
-                <View style={{ minWidth: 92, flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 10,
+                <View style={{ minWidth: 108, flexDirection: 'row', gap: 6, alignItems: 'center', paddingHorizontal: 10,
                   borderRadius: 8, borderWidth: 1, borderColor: ratioFocused ? p.tint : p.outline, backgroundColor: p.fill }}>
+                  <SymbolView name={{ ios: 'chart.pie', android: 'pie_chart' }} size={16} tintColor={p.textSecondary} />
                   <TextInput accessibilityLabel="事業で使った割合" accessibilityHint="0から100まで入力" value={ratio}
                     onFocus={() => setRatioFocused(true)} onBlur={() => setRatioFocused(false)} onChangeText={(value) => {
                       const digits = value.normalize('NFKC').replace(/[^0-9]/g, '');
                       setRatio(digits ? String(Math.min(100, Number(digits))) : '');
                     }} keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} underlineColorAndroid="transparent"
-                    style={{ width: 62, minHeight: 46, paddingLeft: 8, color: p.text, textAlign: 'right',
+                    style={{ width: 50, minHeight: 46, padding: 0, color: p.text, textAlign: 'right',
                       fontSize: 19, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
                   <Text style={{ color: p.textSecondary, fontSize: 14 }}>%</Text>
                 </View>
@@ -534,11 +540,11 @@ export default function AddScreen() {
         setDate(value);
         setDateOpen(false);
       }} /> : null}
-      <AnchoredDeleteDialog heading="取引を削除しますか？" title={editing?.title} anchor={deleteAnchor}
-        onCancel={() => setDeleteAnchor(undefined)} onDelete={() => {
+      <DeleteDialog heading="取引を削除しますか？" title={editing?.title} visible={deleteOpen}
+        onCancel={() => setDeleteOpen(false)} onDelete={() => {
           if (!editing || closing.current) return;
           closing.current = true;
-          setDeleteAnchor(undefined);
+          setDeleteOpen(false);
           deleteTransaction(editing.id);
           success();
           closeEditor();
