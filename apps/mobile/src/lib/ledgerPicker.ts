@@ -14,7 +14,7 @@ export function useLedgerPicker() {
     return pickOne('家計グループ', options, {
       layout: 'divided',
       searchLabel: '家計グループ名を検索',
-      reorderTitle: '家計グループの並び替え',
+      reorderTitle: '家計グループの並べ替え',
       onReorder: setLedgerOrder,
     });
   };

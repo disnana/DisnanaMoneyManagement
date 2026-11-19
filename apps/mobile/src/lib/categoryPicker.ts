@@ -21,7 +21,7 @@ export function useCategoryPicker() {
     const choice = await pickOne('カテゴリ', options, {
       layout: 'divided',
       searchLabel: 'カテゴリ名を検索',
-      reorderTitle: 'カテゴリの並び替え',
+      reorderTitle: 'カテゴリの並べ替え',
       onReorder: (ids) => {
         let index = 0;
         setCategoryOrder(type, categories.map(({ id }) => hidden.has(id) ? id : ids[index++]));

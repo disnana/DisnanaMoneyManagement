@@ -53,7 +53,7 @@ export default function Accounts() {
   return (
     <Screen>
       {sorting && snapshot ? (
-        <SortActions title="並び替え" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
+        <SortActions title="並べ替え" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
           onDone={() => setSnapshot(undefined)} />
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 }}>
@@ -61,7 +61,7 @@ export default function Accounts() {
           {accounts.length > 1 || cards.length > 1 ? (
             <Pressable accessibilityRole="button" onPress={() => { tick(); setSnapshot(state.accounts.map((account) => account.id)); }}
               style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
-              <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>並び替え</Text>
+              <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>並べ替え</Text>
             </Pressable>
           ) : null}
         </View>

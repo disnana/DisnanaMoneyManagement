@@ -133,7 +133,7 @@ export default function Categories() {
       ) }} />
       <Screen>
         <Segmented value={type} onChange={setType} options={[{ id: 'expense', label: '支出' }, { id: 'income', label: '収入' }]} />
-        <Text style={{ color: p.textSecondary, fontSize: 13 }}>左のつまみを長押しして並び替え</Text>
+        <Text style={{ color: p.textSecondary, fontSize: 13 }}>左のつまみを長押しして並べ替え</Text>
         {categories.length > 0 ? (
           <View style={{ borderRadius: 14, overflow: 'hidden', backgroundColor: p.card }}>
             {categories.map((category, index) => (

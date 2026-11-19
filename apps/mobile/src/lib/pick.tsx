@@ -141,7 +141,7 @@ export function PickerHost() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: 20, paddingRight: 8, minHeight: 57 }}>
             <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 19, fontWeight: '700' }}>
-              {draft ? req.reorderTitle ?? '口座の並び替え' : req.title ?? '選択'}
+              {draft ? req.reorderTitle ?? '口座の並べ替え' : req.title ?? '選択'}
             </Text>
             {draft ? (
               <>
@@ -162,7 +162,7 @@ export function PickerHost() {
                     setQuery('');
                     setDraft(movable);
                   }} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
-                    <Text style={{ color: p.tint, fontSize: 14, fontWeight: '600' }}>並び替え</Text>
+                    <Text style={{ color: p.tint, fontSize: 14, fontWeight: '600' }}>並べ替え</Text>
                   </Pressable>
                 ) : null}
                 <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={() => close(null)}

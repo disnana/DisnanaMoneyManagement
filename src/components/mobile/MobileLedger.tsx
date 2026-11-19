@@ -141,7 +141,7 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
           <button
             type="button"
             onClick={() => setFilterOpen(true)}
-            aria-label="絞り込み・並び替え"
+            aria-label="絞り込み・並べ替え"
             className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-slate-200/70 text-slate-700 transition-transform active:scale-90"
           >
             <SlidersHorizontal className="h-[18px] w-[18px]" />
@@ -251,7 +251,7 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
       <ResponsiveSheet
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
-        title="絞り込み・並び替え"
+        title="絞り込み・並べ替え"
         titleId="ledger-filter-title"
         footer={
           <div className="grid grid-cols-2 gap-2">

@@ -108,8 +108,8 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
       ) : null}
       {canReorder ? (
         before
-          ? <SortActions title="並び替え中" cancelLabel="元に戻す" onCancel={() => { setCategoryOrder(kind, before); setBefore(undefined); }} onDone={() => setBefore(undefined)} />
-          : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>行を長押しして並び替え</Text>
+          ? <SortActions title="並べ替え中" cancelLabel="元に戻す" onCancel={() => { setCategoryOrder(kind, before); setBefore(undefined); }} onDone={() => setBefore(undefined)} />
+          : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>行を長押しして並べ替え</Text>
       ) : null}
       {breakdown.length === 0 ? (
         <Group>
