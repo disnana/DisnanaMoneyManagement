@@ -200,12 +200,12 @@ export function Segmented<T extends string>({
   );
 }
 
-export function MonthBar({ month, onChange }: { month: string; onChange: (m: string) => void }) {
+export function MonthBar({ month, onChange, compact = false }: { month: string; onChange: (m: string) => void; compact?: boolean }) {
   const p = usePalette();
   const [open, setOpen] = useState(false);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
     <Pressable
-      hitSlop={8}
+      hitSlop={compact ? 0 : 8}
       accessibilityRole="button"
       accessibilityLabel={delta < 0 ? '前月' : '翌月'}
       onPress={() => {
@@ -222,8 +222,8 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
         {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
         <Pressable accessibilityRole="button" accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
           onPress={() => { tick(); setOpen(true); }}
-          style={{ minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+          style={{ minWidth: compact ? 98 : 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ color: p.text, fontSize: compact ? 13 : 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
           <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
         </Pressable>
         {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}

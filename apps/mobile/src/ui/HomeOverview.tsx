@@ -1,21 +1,18 @@
-import { router } from 'expo-router';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { formatJPY } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
-import { HeaderAction } from './HeaderAction';
 import { HeroCard, MonthlyCashFlow } from './HeroCard';
-import { IconBadge, MonthBar, SectionTitle } from './kit';
+import { MonthBar, SectionTitle } from './kit';
 import { LedgerPill } from './LedgerPill';
-import { ModernHero, ModernHeroAmount } from './ModernHero';
 
 export function HomeOverview({ month, assets }: { month: string; assets: number }) {
   const [appearance] = useAppearanceStyle();
 
-  if (appearance !== 'standard') {
+  if (appearance === 'classic' || appearance === 'soft') {
     return <StyledOverview appearance={appearance} month={month} assets={assets} />;
   }
 
@@ -29,12 +26,11 @@ export function HomeOverview({ month, assets }: { month: string; assets: number 
 }
 
 function StyledOverview({ appearance, month, assets }: {
-  appearance: 'classic' | 'modern' | 'soft';
+  appearance: 'classic' | 'soft';
   month: string;
   assets: number;
 }) {
   const p = usePalette();
-  const { width, fontScale } = useWindowDimensions();
   const { visibleState, setMonth } = useFinance();
   const { income, expense, net } = computeMonthMetrics(visibleState, month);
   const activity = [
@@ -78,66 +74,6 @@ function StyledOverview({ appearance, month, assets }: {
             style={[moneyStyle, { flexShrink: 1, textAlign: 'right', color: netColor, fontSize: 18 }]}>{netAmount}</Text>
         </View>
       </CardSurface>
-    );
-  }
-
-  if (appearance === 'modern') {
-    const stackMetrics = width / fontScale < 295;
-    const cashFlow = [
-      { ...activity[0], seriesColor: p.income, icon: { ios: 'arrow.down.left', android: 'south_west' } },
-      { ...activity[1], seriesColor: p.danger, icon: { ios: 'arrow.up.right', android: 'north_east' } },
-    ] as const;
-    const plotted = cashFlow.filter(({ amount }) => amount !== 0);
-
-    return (
-      <>
-        <ModernHero masthead>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 33, fontWeight: '800', letterSpacing: -0.8 }}>
-              ホーム
-            </Text>
-            <HeaderAction name={{ ios: 'list.clipboard', android: 'assignment' }} label="予算・計画" circular inContent
-              onPress={() => router.push('/planning')} />
-            <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="設定" circular inContent
-              onPress={() => router.push('/settings')} />
-          </View>
-          <View style={{ gap: 3 }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <Text accessibilityRole="header" style={{ color: p.textSecondary, fontSize: 14, fontWeight: '700' }}>現在の総資産</Text>
-              <LedgerPill />
-            </View>
-            <ModernHeroAmount amount={assets} color={assetsColor} />
-          </View>
-        </ModernHero>
-
-        <View style={{ backgroundColor: p.card, borderRadius: 25, borderCurve: 'continuous', paddingHorizontal: 16, paddingBottom: 15, gap: 8 }}>
-          <MonthBar month={month} onChange={setMonth} />
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: 10, rowGap: 3 }}>
-            <Text accessibilityRole="header" style={{ flexShrink: 0, color: p.text, fontSize: 16, fontWeight: '700' }}>月の収支</Text>
-            <Text numberOfLines={1} adjustsFontSizeToFit
-              style={[moneyStyle, { flexShrink: 1, color: netColor, fontSize: 24 }]}>{netAmount}</Text>
-          </View>
-          <View aria-hidden style={{ height: 10, flexDirection: 'row', backgroundColor: p.fill, borderRadius: 15,
-            overflow: 'hidden', gap: plotted.length > 1 ? 4 : 0 }}>
-            {plotted.map(({ label, amount, seriesColor }) => (
-              <View key={label} style={{ flex: Math.abs(amount), flexBasis: 0, backgroundColor: seriesColor, borderRadius: 15 }} />
-            ))}
-          </View>
-          <View style={{ flexDirection: stackMetrics ? 'column' : 'row', gap: 8, paddingTop: 2 }}>
-            {cashFlow.map(({ label, amount, color, seriesColor, icon }) => (
-              <View key={label} style={{ flex: stackMetrics ? undefined : 1, gap: 3, paddingHorizontal: 10, paddingVertical: 7,
-                backgroundColor: p.fill, borderRadius: 15 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                  <IconBadge name={icon} color={seriesColor} size={22} />
-                  <Text style={{ color: p.textSecondary, fontSize: 12, flexShrink: 1 }}>{label}</Text>
-                </View>
-                <Text numberOfLines={1} adjustsFontSizeToFit
-                  style={[moneyStyle, { color, fontSize: 16 }]}>{formatJPY(amount)}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </>
     );
   }
 

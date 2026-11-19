@@ -4,6 +4,7 @@ import { usePalette } from '@/lib/theme';
 import { useAppearanceColor, useAppearanceStyle, useThemePref, type AppearanceStyle, type ThemePref } from '@/lib/themePref';
 import { tick } from '@/lib/haptics';
 import { pickOne } from '@/lib/pick';
+import { featureColors } from './ModernHero';
 import { Group, Row, Segmented } from './kit';
 
 const choices = [
@@ -42,15 +43,19 @@ function LayoutDiagram({ style }: { style: AppearanceStyle }) {
         </View>
       ) : style === 'modern' ? (
         <View style={{ flex: 1, gap: 3 }}>
-          <View style={{ flex: 1, paddingHorizontal: 6, justifyContent: 'center', backgroundColor: p.tint + '24', borderRadius: 8 }}>
-            <View style={{ ...metric, width: '58%', height: 6 }} />
+          <View style={{ flex: 2, paddingHorizontal: 6, justifyContent: 'center', gap: 4,
+            backgroundColor: featureColors.surface, borderRadius: 7 }}>
+            <View style={{ ...metric, backgroundColor: featureColors.positive, width: '48%', height: 5 }} />
+            <View style={{ height: 1, borderRadius: 1, backgroundColor: featureColors.secondary, transform: [{ rotate: '-4deg' }] }} />
           </View>
-          <View style={{ flex: 1, paddingHorizontal: 6, gap: 4, justifyContent: 'center', backgroundColor: p.card, borderRadius: 7 }}>
-            <View style={{ flexDirection: 'row', gap: 2 }}>
-              <View style={{ ...metric, flex: 2, height: 4 }} />
-              <View style={{ ...line, flex: 1, height: 4 }} />
-            </View>
-            <View style={{ ...line, width: '75%', height: 2 }} />
+          <View style={{ flexDirection: 'row', gap: 2, marginHorizontal: 2 }}>
+            <View style={{ ...metric, flex: 2, height: 3 }} />
+            <View style={{ ...line, flex: 1, height: 3 }} />
+          </View>
+          <View style={{ flex: 1, flexDirection: 'row', gap: 3 }}>
+            {[0, 1, 2].map((index) => (
+              <View key={index} style={{ ...sheet, flex: 1, borderRadius: 3 }} />
+            ))}
           </View>
         </View>
       ) : (

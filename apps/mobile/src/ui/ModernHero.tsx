@@ -1,29 +1,30 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatJPY } from '@dmm/core/utils/format';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 
-export function ModernHero({ children, masthead = false }: { children: ReactNode; masthead?: boolean }) {
+export const featureColors = {
+  surface: '#192B42',
+  text: '#F5F8FF',
+  secondary: '#B9CADF',
+  positive: '#B6D9FF',
+  negative: '#FFAAA6',
+  control: '#FFFFFF18',
+  pressed: '#FFFFFF32',
+};
+
+export function ModernFeature({ children }: { children: ReactNode }) {
   const p = usePalette();
-  const accent = p.tint;
-
   return (
-    <View style={[{ backgroundColor: p.card, borderCurve: 'continuous', overflow: 'hidden' }, masthead
-      ? { marginTop: -8 - metrics.screenPaddingTop, marginHorizontal: -16, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }
-      : { borderRadius: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: accent + '40' }]}>
-      <View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, { backgroundColor: accent + '10' }]}>
-        {(masthead ? [196, 262, 328] : [136, 186, 236]).map((size) => (
-          <View key={size} style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2,
-            right: 24 - size / 2, top: (masthead ? 82 : 28) - size / 2, backgroundColor: accent + '08',
-            borderWidth: 1, borderColor: accent + '20' }} />
-        ))}
+    <View style={{ backgroundColor: featureColors.surface, borderRadius: 28, borderCurve: 'continuous',
+      borderWidth: StyleSheet.hairlineWidth, borderColor: '#7AB0E65C', overflow: 'hidden' }}>
+      <View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, { backgroundColor: p.tint + '10' }]}>
+        <View style={{ position: 'absolute', width: 290, height: 290, borderRadius: 145,
+          top: -171, right: -105, backgroundColor: '#70B6FF12', borderWidth: 1, borderColor: '#8EC4FF33' }} />
+        <View style={{ position: 'absolute', width: 238, height: 238, borderRadius: 119,
+          top: -157, right: -99, backgroundColor: '#70B6FF13' }} />
       </View>
-      {masthead ? (
-        <SafeAreaView edges={['top', 'left', 'right']} style={{ paddingHorizontal: 22, paddingTop: 12, paddingBottom: 22, gap: 14 }}>
-          {children}
-        </SafeAreaView>
-      ) : <View style={{ padding: 18, gap: 12 }}>{children}</View>}
+      <View style={{ paddingHorizontal: 18, paddingVertical: 16, gap: 7 }}>{children}</View>
     </View>
   );
 }

@@ -6,7 +6,7 @@ import { useAppearanceStyle, type AppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
 import { IconBadge, MonthBar } from './kit';
 import { PlanningProgress } from './PlanningSummary';
-import { ModernHero, ModernHeroAmount } from './ModernHero';
+import { ModernFeature, ModernHeroAmount, featureColors } from './ModernHero';
 
 function warningLabel(days: number) {
   return days === 0 ? '今日が支払日' : `支払日まであと${days}日`;
@@ -24,15 +24,15 @@ export function CreditPaymentCard(props: PaymentCardProps) {
     : <StyledCreditPaymentCard {...props} appearance={appearance} />;
 }
 
-function RecordPayment({ onPress, radius = 10 }: { onPress: () => void; radius?: number }) {
+function RecordPayment({ onPress, radius = 10, onDark = false }: { onPress: () => void; radius?: number; onDark?: boolean }) {
   const p = usePalette();
   return (
     <Pressable accessibilityRole="button" onPress={onPress}
       style={({ pressed }) => ({
         minHeight: 48, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: radius,
-        backgroundColor: p.tint, transform: [{ scale: pressed ? 0.98 : 1 }],
+        backgroundColor: onDark ? featureColors.positive : p.tint, transform: [{ scale: pressed ? 0.98 : 1 }],
       })}>
-      <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
+      <Text style={{ color: onDark ? featureColors.surface : p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
     </Pressable>
   );
 }
@@ -213,26 +213,32 @@ function StyledCreditPaymentCard({ appearance, statement, onChangeMonth, onRecor
     return (
       <>
         {monthBar}
-        <ModernHero>
+        <ModernFeature>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <View style={{ flexGrow: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <IconBadge name={{ ios: 'creditcard', android: 'credit_card' }} color={p.tint} size={34} />
-              <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>支払残額</Text>
+              <IconBadge name={{ ios: 'creditcard', android: 'credit_card' }} color={featureColors.positive} size={33} />
+              <Text accessibilityRole="header" style={{ color: featureColors.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>支払残額</Text>
             </View>
-            <Text style={{ color: paid ? p.tint : p.textSecondary, backgroundColor: p.card,
+            <Text style={{ color: featureColors.text, backgroundColor: featureColors.control,
               paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, overflow: 'hidden',
               fontSize: 12, fontWeight: '700' }}>{status}</Text>
           </View>
-          <ModernHeroAmount amount={thisMonthRemaining} color={paymentColor} />
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8, rowGap: 4 }}>
-            <Text style={{ color: p.text, fontWeight: '700', fontSize: 13, backgroundColor: p.card,
-              borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' }}>{dueDay}</Text>
-            <Text style={{ color: p.textSecondary, fontSize: 13 }}>{cycle}</Text>
+          <ModernHeroAmount amount={thisMonthRemaining} color={thisMonthRemaining > 0 ? featureColors.negative : featureColors.positive} />
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: 9, rowGap: 4, marginTop: 3 }}>
+            <Text style={{ color: featureColors.text, fontWeight: '700', fontSize: 13, backgroundColor: featureColors.control,
+              borderRadius: 12, paddingHorizontal: 9, paddingVertical: 5, overflow: 'hidden' }}>{dueDay}</Text>
+            <Text style={{ color: featureColors.secondary, fontSize: 13 }}>{cycle}</Text>
           </View>
-          {statementWarning}
-          {recordedPayments}
-          {thisMonthRemaining > 0 ? <RecordPayment onPress={onRecord} radius={24} /> : null}
-        </ModernHero>
+          {warning !== null ? <Text style={{ color: featureColors.negative, fontSize: 13, fontWeight: '700' }}>{warningLabel(warning)}</Text> : null}
+          {thisMonthSettled > 0 ? (
+            <Text style={{ color: featureColors.secondary, fontSize: 13, fontVariant: ['tabular-nums'] }}>
+              請求額 {formatJPY(thisMonthGross)} · 支払い記帳済み {formatJPY(thisMonthSettled)}
+            </Text>
+          ) : null}
+          {thisMonthRemaining > 0 ? (
+            <View style={{ marginTop: 5 }}><RecordPayment onPress={onRecord} radius={24} onDark /></View>
+          ) : null}
+        </ModernFeature>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 10 }}>
           <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.tint} size={36} />
