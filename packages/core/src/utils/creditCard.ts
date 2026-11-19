@@ -55,7 +55,7 @@ export function getCycleRangeLabel(
 }
 
 /** Days to the calendar due date, when an unpaid statement is within its configured warning window. */
-export function getPaymentWarning(summary: CreditCardStatementSummary, today: string): number | null {
+export function getPaymentWarning(summary: CreditCardStatementSummary, today: string, billingMonth?: string): number | null {
   const daysBefore = summary.card.paymentWarningDays ?? 0;
   if (daysBefore <= 0) return null;
 
@@ -64,7 +64,7 @@ export function getPaymentWarning(summary: CreditCardStatementSummary, today: st
     [summary.currentMonthKey, summary.thisMonthRemaining],
     [summary.nextMonthKey, summary.nextMonthRemaining],
   ] as const) {
-    if (amount <= 0) continue;
+    if (amount <= 0 || (billingMonth && month !== billingMonth)) continue;
     const [year, m] = month.split('-').map(Number);
     const day = Math.min(summary.card.paymentDay ?? 27, new Date(year, m, 0).getDate());
     const due = toUtc(`${month}-${String(day).padStart(2, '0')}`);

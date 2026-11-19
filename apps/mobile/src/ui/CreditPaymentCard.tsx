@@ -1,9 +1,15 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
 import { getCycleRangeLabel, getPaymentWarning, type CreditCardStatementSummary } from '@dmm/core/utils/creditCard';
 import { formatDayLabel, formatJPY, formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { usePalette } from '@/lib/theme';
 import { CardHeader, CardSurface } from './CardSurface';
-import { MonthBar } from './kit';
+import { IconBadge, MonthBar } from './kit';
+import { PlanningProgress } from './PlanningSummary';
+
+function warningLabel(days: number) {
+  return days === 0 ? '今日が支払日' : `支払日まであと${days}日`;
+}
 
 export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBilling }: {
   statement: CreditCardStatementSummary;
@@ -12,9 +18,12 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBi
   onEditBilling: () => void;
 }) {
   const p = usePalette();
-  const { card, currentMonthKey, nextMonthKey, thisMonthRemaining, thisMonthConfirmed,
-    thisMonthGross, thisMonthSettled, nextMonthRemaining, thisMonthUsage, creditLimit, availableCredit } = statement;
-  const warning = getPaymentWarning(statement, getTodayString());
+  const { card, currentMonthKey, nextMonthKey, thisMonthRemaining, thisMonthConfirmed, thisMonthGross,
+    thisMonthSettled, nextMonthRemaining, nextMonthConfirmed, thisMonthUsage, creditLimit, availableCredit, totalUnpaidBalance } = statement;
+  const today = getTodayString();
+  const warning = getPaymentWarning(statement, today, currentMonthKey);
+  const nextWarning = getPaymentWarning(statement, today, nextMonthKey);
+  const paid = thisMonthGross > 0 && thisMonthRemaining === 0;
   const billingAction = thisMonthConfirmed ? '確定額を編集' : '確定額を入力';
   const month = Number(currentMonthKey.slice(5));
 
@@ -25,75 +34,89 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord, onEditBi
         <View style={{ padding: 16, gap: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>支払残額</Text>
-            <View style={{ backgroundColor: p.fill, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 12, fontWeight: '700' }}>{thisMonthConfirmed ? '確定' : '見込み'}</Text>
-            </View>
+            <Text style={{ backgroundColor: paid ? `${p.tint}16` : p.fill, color: paid ? p.tint : p.textSecondary,
+              fontSize: 12, fontWeight: '700', paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' }}>
+              {paid ? '支払い済み' : thisMonthConfirmed ? '確定' : '見込み'}
+            </Text>
           </View>
-          <Text numberOfLines={1} adjustsFontSizeToFit
-            style={{ color: thisMonthRemaining > 0 ? p.danger : p.income, fontSize: 32, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-            {formatJPY(thisMonthRemaining)}
-          </Text>
-          <Text style={{ color: p.textSecondary, fontSize: 12 }}>
-            {getCycleRangeLabel(currentMonthKey, card.closingDay, card.paymentMonthOffset)} · {formatDayLabel(card.paymentDay ?? 27)}払い
-          </Text>
-          {warning !== null ? (
-            <Text style={{ color: p.danger, fontWeight: '700', fontSize: 13 }}>
-              {warning === 0 ? '今日が支払日です' : `支払日まであと${warning}日`}
+          <View style={{ gap: 4 }}>
+            <Text numberOfLines={1} adjustsFontSizeToFit
+              style={{ color: thisMonthRemaining > 0 ? p.danger : p.income, fontSize: 36, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+              {formatJPY(thisMonthRemaining)}
+            </Text>
+            <Text style={{ color: p.textSecondary, fontSize: 13 }}>
+              {formatDayLabel(card.paymentDay ?? 27)}払い · {getCycleRangeLabel(currentMonthKey, card.closingDay, card.paymentMonthOffset)}
+            </Text>
+            {warning !== null ? <Text style={{ color: p.danger, fontSize: 13, fontWeight: '700' }}>{warningLabel(warning)}</Text> : null}
+          </View>
+          {thisMonthSettled > 0 ? (
+            <Text style={{ color: p.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] }}>
+              請求額 {formatJPY(thisMonthGross)} · 支払い記帳済み {formatJPY(thisMonthSettled)}
             </Text>
           ) : null}
-          {thisMonthRemaining > 0 ? (
-            <Pressable accessibilityRole="button" onPress={onRecord}
-              style={({ pressed }) => ({
-                minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
-              })}>
-              <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700' }}>支払いを記録</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 12, rowGap: 4 }}>
+            {thisMonthRemaining > 0 ? (
+              <Pressable accessibilityRole="button" onPress={onRecord}
+                style={({ pressed }) => ({
+                  flex: 1, minWidth: 140, minHeight: 44, paddingHorizontal: 12,
+                  alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                  backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
+                })}>
+                <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
+              </Pressable>
+            ) : null}
+            <Pressable accessibilityRole="button" onPress={onEditBilling}
+              style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}>
+              <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>{billingAction}</Text>
             </Pressable>
-          ) : null}
-        </View>
-        <View style={{ paddingHorizontal: 16, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: p.outline, backgroundColor: p.fill }}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 12 }}>請求額</Text>
-              <Text numberOfLines={1} adjustsFontSizeToFit
-                style={{ color: p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(thisMonthGross)}</Text>
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 12 }}>支払い記帳済み</Text>
-              <Text numberOfLines={1} adjustsFontSizeToFit
-                style={{ color: p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(thisMonthSettled)}</Text>
-            </View>
           </View>
-          <Pressable accessibilityRole="button" onPress={onEditBilling}
-            style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', opacity: pressed ? 0.6 : 1 })}>
-            <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>{billingAction}</Text>
-          </Pressable>
         </View>
+
+        <Pressable accessibilityRole="button" accessibilityLabel={`翌月の支払残額 ${formatMonthLabel(nextMonthKey)} ${formatJPY(nextMonthRemaining)}`}
+          accessibilityHint="翌月の請求を表示" onPress={() => onChangeMonth(nextMonthKey)}
+          style={({ pressed }) => ({
+            flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, minHeight: 56,
+            backgroundColor: pressed ? p.sectionHeader : p.fill, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline,
+          })}>
+          <IconBadge name={{ ios: 'calendar', android: 'calendar_month' }} color={p.tint} size={32} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: p.text, fontSize: 14, fontWeight: '700' }}>翌月の支払残額</Text>
+            <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatMonthLabel(nextMonthKey)} · {nextMonthConfirmed ? '確定' : '見込み'}</Text>
+            {nextWarning !== null ? <Text style={{ color: p.danger, fontSize: 12 }}>{warningLabel(nextWarning)}</Text> : null}
+          </View>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: '36%', color: p.text, fontSize: 16,
+            fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(nextMonthRemaining)}</Text>
+          <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={12} tintColor={p.tint} />
+        </Pressable>
       </CardSurface>
 
-      <CardSurface style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: 14 }}>
-        <View style={{ flexShrink: 1, gap: 3 }}>
-          <Text style={{ color: p.textSecondary, fontSize: 12 }}>翌月の支払残額</Text>
-          <Text style={{ color: p.text, fontSize: 14, fontWeight: '600' }}>{formatMonthLabel(nextMonthKey)}</Text>
-        </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit style={{ flexShrink: 1, color: p.text, fontSize: 21,
-          fontWeight: '800', fontVariant: ['tabular-nums'] }}>{formatJPY(nextMonthRemaining)}</Text>
-      </CardSurface>
-
-      <CardSurface style={{ flexDirection: 'row' }}>
-        <View style={{ flex: 1, gap: 5, padding: 14 }}>
-          <Text style={{ color: p.textSecondary, fontSize: 12 }}>{month}月のカード利用額</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: p.text, fontSize: 18, fontWeight: '700',
-            fontVariant: ['tabular-nums'] }}>{formatJPY(thisMonthUsage)}</Text>
-        </View>
+      <CardSurface style={{ padding: 16, gap: 12 }}>
+        <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>カードの利用状況</Text>
         {creditLimit > 0 ? (
-          <View style={{ flex: 1, gap: 5, padding: 14, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: p.outline }}>
-            <Text style={{ color: p.textSecondary, fontSize: 12 }}>現在の利用可能額</Text>
-            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: p.income, fontSize: 18, fontWeight: '700',
-              fontVariant: ['tabular-nums'] }}>{formatJPY(availableCredit)}</Text>
+          <View style={{ gap: 7 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 5 }}>
+              <Text style={{ color: p.textSecondary, fontSize: 13 }}>現在の利用可能額</Text>
+              <Text style={{ color: p.income, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+                {formatJPY(availableCredit)}
+              </Text>
+            </View>
+            <PlanningProgress amount={totalUnpaidBalance} total={creditLimit} color={p.tint} label="利用枠の使用率" />
+            <Text style={{ color: p.textSecondary, fontSize: 12 }}>利用枠 {formatJPY(creditLimit)}</Text>
           </View>
         ) : null}
+        <View style={{ flexDirection: 'row', gap: 14, paddingTop: creditLimit > 0 ? 10 : 0,
+          borderTopWidth: creditLimit > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: p.outline }}>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={{ color: p.textSecondary, fontSize: 12 }}>現在の未払い残高</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: totalUnpaidBalance > 0 ? p.danger : p.income,
+              fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(totalUnpaidBalance)}</Text>
+          </View>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={{ color: p.textSecondary, fontSize: 12 }}>{month}月のカード利用額</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: p.text,
+              fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(thisMonthUsage)}</Text>
+          </View>
+        </View>
       </CardSurface>
     </>
   );

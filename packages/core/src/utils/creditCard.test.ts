@@ -75,6 +75,8 @@ describe('computeCreditCardSummary', () => {
     expect(s.thisMonthUsage).toBe(5600);
     expect(s.nextMonthRemaining).toBe(5600);
     expect(getPaymentWarning(s, '2026-11-28')).toBe(3);
+    expect(getPaymentWarning(s, '2026-11-28', '2026-11')).toBeNull();
+    expect(getPaymentWarning(s, '2026-11-28', '2026-12')).toBe(3);
     expect(getPaymentWarning(s, '2026-11-27')).toBeNull();
     expect(getPaymentWarning({ ...s, nextMonthRemaining: 0 }, '2026-11-28')).toBeNull();
   });

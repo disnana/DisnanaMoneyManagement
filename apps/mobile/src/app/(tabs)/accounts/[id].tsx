@@ -47,14 +47,14 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
   const card = isPaymentCard(account);
   const bank = state.accounts.find((item) => item.id === account.linkedBankAccountId && item.type === 'bank');
   const summary = account.type === 'credit' ? computeCreditCardSummary(account, state.transactions, balance, month) : undefined;
-  const displayBalance = summary?.totalUnpaidBalance ?? (account.type === 'debit'
+  const displayBalance = account.type === 'debit'
     ? list.reduce((sum, tx) => sum + (tx.type === 'expense' && tx.accountId === id ? getEffectiveOutflow(tx) : 0), 0)
-    : balance);
-  const label = summary ? '現在の未払い残高' : account.type === 'debit' ? '選択月の利用額' : '現在の残高';
+    : balance;
+  const label = account.type === 'debit' ? '選択月の利用額' : '現在の残高';
 
   return (
     <>
-      <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
+      {!summary ? <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
         borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, padding: 16, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <IconBadge name={ACCOUNT_ICONS[account.type]} color={account.type === 'credit' ? '#8167BF' : p.tint} size={36} />
@@ -68,7 +68,7 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
             fontSize: 34, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
           {formatJPY(displayBalance)}
         </Text>
-      </View>
+      </View> : null}
 
       {summary ? (
         <CreditPaymentCard statement={summary} onChangeMonth={setMonth}
