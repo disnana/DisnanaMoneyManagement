@@ -8,7 +8,7 @@ import { useCurrentBalances } from '@/lib/currentBalances';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
-import { HeroCard, MonthlyCashFlow } from '@/ui/HeroCard';
+import { HomeOverview } from '@/ui/HomeOverview';
 import { Group, Row, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
@@ -36,9 +36,7 @@ export default function Home() {
     <MonthScreen showMonthBar={false}>
       {(month) => (
         <>
-          <HeroCard assets={assets} />
-          <SectionTitle>月の収支</SectionTitle>
-          <MonthlyCashFlow month={month} />
+          <HomeOverview month={month} assets={assets} />
           <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
           <AccountSummaryGroup>
             {listed.length ? listed.map((account) => (

@@ -7,21 +7,21 @@ import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
 import { usePalette } from '@/lib/theme';
-import { useAppearanceStyle, useThemeColorScheme } from '@/lib/themePref';
+import { useAppearanceColor, useThemeColorScheme } from '@/lib/themePref';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const scheme = useThemeColorScheme();
   const p = usePalette();
-  const [style] = useAppearanceStyle();
+  const [color] = useAppearanceColor();
   const navigationTheme = useMemo(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
-    return style === 'standard' ? base : {
+    return color === 'standard' ? base : {
       ...base,
       colors: { background: p.bg, card: p.card, text: p.text, primary: p.tint, border: p.outline, notification: p.danger },
     };
-  }, [p, scheme, style]);
+  }, [p, scheme, color]);
 
   useEffect(() => {
     // Storage is synchronous, so the first frame already has data

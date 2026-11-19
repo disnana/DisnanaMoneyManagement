@@ -5,9 +5,11 @@ import { kv } from '@/lib/kv';
 /** "system" (default) follows the OS live; "light"/"dark" are explicit user choices. */
 export type ThemePref = 'system' | 'light' | 'dark';
 export type AppearanceStyle = 'standard' | 'classic' | 'modern' | 'soft';
+export type AppearanceColor = 'standard' | 'navy' | 'violet' | 'terracotta';
 
 const KEY = 'dmm_theme';
 const STYLE_KEY = 'dmm_appearance_style';
+const COLOR_KEY = 'dmm_appearance_color';
 const listeners = new Set<() => void>();
 
 const storedMode = kv.getItem(KEY);
@@ -15,6 +17,9 @@ let mode: ThemePref = storedMode === 'light' || storedMode === 'dark' ? storedMo
 const storedStyle = kv.getItem(STYLE_KEY);
 let appearanceStyle: AppearanceStyle =
   storedStyle === 'classic' || storedStyle === 'modern' || storedStyle === 'soft' ? storedStyle : 'standard';
+const storedColor = kv.getItem(COLOR_KEY);
+let appearanceColor: AppearanceColor =
+  storedColor === 'navy' || storedColor === 'violet' || storedColor === 'terracotta' ? storedColor : 'standard';
 
 function subscribe(listener: () => void) {
   listeners.add(listener);
@@ -66,6 +71,22 @@ function setAppearanceStyle(style: AppearanceStyle): void {
 export function useAppearanceStyle(): [AppearanceStyle, (style: AppearanceStyle) => void] {
   const style = useSyncExternalStore(subscribe, getAppearanceStyle, getAppearanceStyle);
   return [style, setAppearanceStyle];
+}
+
+function getAppearanceColor(): AppearanceColor {
+  return appearanceColor;
+}
+
+function setAppearanceColor(color: AppearanceColor): void {
+  if (color === appearanceColor) return;
+  kv.setItem(COLOR_KEY, color);
+  appearanceColor = color;
+  listeners.forEach((listener) => listener());
+}
+
+export function useAppearanceColor(): [AppearanceColor, (color: AppearanceColor) => void] {
+  const color = useSyncExternalStore(subscribe, getAppearanceColor, getAppearanceColor);
+  return [color, setAppearanceColor];
 }
 
 // Apply the saved choice before the first render so there is no flash of the wrong theme

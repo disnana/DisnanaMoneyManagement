@@ -1,6 +1,6 @@
 /** iOS theme: system grouped backgrounds, hairline separators, continuous corners. */
 import { useStyledPalette, type Palette } from './themePresets';
-import type { AppearanceStyle } from './themePref';
+import type { AppearanceColor } from './themePref';
 
 export type { Palette } from './themePresets';
 
@@ -38,7 +38,7 @@ const dark: Palette = {
   danger: '#FF786E',
 };
 
-export function usePalette(preview?: AppearanceStyle): Palette {
+export function usePalette(preview?: AppearanceColor): Palette {
   return useStyledPalette(light, dark, preview);
 }
 
