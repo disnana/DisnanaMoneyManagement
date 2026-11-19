@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -22,6 +22,7 @@ import { Group, IconBadge, Segmented } from '@/ui/kit';
 import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import { CardHeader, CardSurface } from '@/ui/CardSurface';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { FormScrollView } from '@/ui/FormScrollView';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
 import { TransactionInput } from '@/ui/TransactionForm';
@@ -282,20 +283,23 @@ export default function AddScreen() {
       <Stack.Screen
         options={{
           title: editing ? `${TYPE_LABELS[type]}を編集` : `${TYPE_LABELS[type]}を記録`,
-          headerRight: editing ? () => (
+          headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
-              <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="取引を削除"
-                onPress={({ nativeEvent }) => {
-                  Keyboard.dismiss();
-                  setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY });
-                }} />
-              <HeaderAction name={{ ios: 'checkmark', android: 'check' }} label="取引を保存" accent onPress={() => save(false)} />
+              {editing ? (
+                <HeaderAction name={{ ios: 'trash', android: 'delete' }} label="取引を削除"
+                  onPress={({ nativeEvent }) => {
+                    Keyboard.dismiss();
+                    setDeleteAnchor({ x: nativeEvent.pageX, y: nativeEvent.pageY });
+                  }} />
+              ) : null}
+              <HeaderAction name={{ ios: 'checkmark', android: 'check' }}
+                label={editing ? '取引を保存' : '取引を登録'} accent onPress={() => save(false)} />
             </View>
-          ) : undefined,
+          ),
         }}
       />
 
-      <ScrollView
+      <FormScrollView
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -524,7 +528,7 @@ export default function AddScreen() {
             </Pressable>
           ) : null}
         </View> : null}
-      </ScrollView>
+      </FormScrollView>
 
       {dateOpen ? <TransactionDatePicker date={date} onCancel={() => setDateOpen(false)} onPick={(value) => {
         setDate(value);

@@ -6,20 +6,22 @@ import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
+import { FormScrollView } from './FormScrollView';
 import { MonthPicker } from './MonthPicker';
 
 /** Scrollable screen. On iOS the transparent large-title bar insets content automatically. */
 export function Screen({ children, ...rest }: ScrollViewProps & { children: ReactNode }) {
   const p = usePalette();
+  const Scroll = Platform.OS === 'android' && rest.automaticallyAdjustKeyboardInsets ? FormScrollView : Animated.ScrollView;
   return (
-    <Animated.ScrollView
+    <Scroll
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       style={{ flex: 1, backgroundColor: p.bg }}
       contentContainerStyle={{ padding: 16, paddingTop: 8 + metrics.screenPaddingTop, gap: 16, paddingBottom: 48 }}
       {...rest}>
       {children}
-    </Animated.ScrollView>
+    </Scroll>
   );
 }
 

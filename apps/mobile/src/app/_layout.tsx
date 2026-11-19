@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FinanceProvider } from '@/lib/store';
+import { AndroidKeyboardProvider } from '@/ui/AndroidKeyboardProvider';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
@@ -25,6 +26,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+    <AndroidKeyboardProvider>
     <LockGate>
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <FinanceProvider>
@@ -66,6 +68,7 @@ export default function RootLayout() {
       </FinanceProvider>
     </ThemeProvider>
     </LockGate>
+    </AndroidKeyboardProvider>
     </GestureHandlerRootView>
   );
 }
