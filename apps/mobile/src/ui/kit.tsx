@@ -38,14 +38,14 @@ export function SectionTitle({ children, action, onAction }: { children: string;
 }
 
 /** Inset grouped card: rounded container, children separated by hairlines (iOS) / tonal gaps (Android). */
-export function Group({ children }: { children: ReactNode }) {
+export function Group({ children, flat = false }: { children: ReactNode; flat?: boolean }) {
   const p = usePalette();
   const items = Array.isArray(children) ? children.flat().filter(Boolean) : [children];
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: p.cardRadius, overflow: 'hidden', borderCurve: 'continuous' }}>
+    <View style={flat ? undefined : { backgroundColor: p.card, borderRadius: p.cardRadius, overflow: 'hidden', borderCurve: 'continuous' }}>
       {items.map((child, i) => (
         <View key={i}>
-          {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: p.separator }} /> : null}
+          {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: flat ? p.fill : p.separator }} /> : null}
           {child}
         </View>
       ))}

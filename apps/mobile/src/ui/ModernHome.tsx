@@ -17,7 +17,7 @@ import { usePalette } from '@/lib/theme';
 import { HeaderAction } from './HeaderAction';
 import { AccountSummaryGroup, AccountSummaryRow } from './AccountSummaryRow';
 import { HomeAssetsHeading, hiddenAssetsLabel } from './HomeAssets';
-import { ModernFeature, ModernHeroAmount, featureColors } from './ModernHero';
+import { ModernHeroAmount, featureColors } from './ModernHero';
 import { IconBadge, MonthBar } from './kit';
 
 const money = { fontWeight: '800' as const, fontVariant: ['tabular-nums'] as ['tabular-nums'] };
@@ -96,7 +96,9 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
     const selected = homeLayouts.find(({ id }) => id === choice);
     if (selected) setLayout(selected.id);
   };
-  const rail = <ModernAccountRail accounts={accounts} balances={balances} onOpen={onOpen} />;
+  const rail = (
+    <ModernAccountRail accounts={accounts} balances={balances} onOpen={onOpen} frameless={layout === 'trend'} />
+  );
 
   return (
     <>
@@ -126,16 +128,11 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
         </>
       ) : (
         <>
-          <View style={{ backgroundColor: p.card, borderRadius: 25, borderCurve: 'continuous', paddingHorizontal: 10, paddingBottom: 7 }}>
-            <View style={{ paddingHorizontal: 8, paddingTop: 7, paddingBottom: 13 }}>
+          <View style={{ gap: 14 }}>
+            <View style={{ paddingHorizontal: 3, paddingBottom: 6 }}>
               <ModernAssets assets={assets} emphasis="wallet" />
             </View>
-            <WalletAccounts
-              accounts={accounts}
-              balances={balances}
-              bankAccounts={state.accounts}
-              onOpen={onOpen}
-            />
+            <WalletAccounts accounts={accounts} balances={balances} bankAccounts={state.accounts} onOpen={onOpen} />
           </View>
           <ModernCashFlow />
         </>
@@ -150,7 +147,8 @@ function ModernAssets({ assets, emphasis }: { assets: number; emphasis: 'trend' 
 
   if (emphasis === 'trend') {
     return (
-      <ModernFeature>
+      <View style={{ marginHorizontal: -16, paddingHorizontal: 19, paddingTop: 10, paddingBottom: 17,
+        backgroundColor: featureColors.surface, gap: 6 }}>
         <HomeAssetsHeading onDark />
         {hidden ? (
           <Text accessibilityLabel={hiddenAssetsLabel} style={[money, { color: featureColors.secondary, fontSize: 32 }]}>••••••</Text>
@@ -160,7 +158,7 @@ function ModernAssets({ assets, emphasis }: { assets: number; emphasis: 'trend' 
             <AssetsTrend assets={assets} />
           </>
         )}
-      </ModernFeature>
+      </View>
     );
   }
 
@@ -169,7 +167,7 @@ function ModernAssets({ assets, emphasis }: { assets: number; emphasis: 'trend' 
       <HomeAssetsHeading />
       <Text accessibilityLabel={hidden ? hiddenAssetsLabel : undefined} numberOfLines={1} adjustsFontSizeToFit
         style={[money, { color: hidden ? p.textSecondary : assets < 0 ? p.danger : p.income,
-          fontSize: emphasis === 'wallet' ? 36 : 25, letterSpacing: -0.4 }]}>
+          fontSize: emphasis === 'wallet' ? 40 : 25, letterSpacing: -0.4 }]}>
         {hidden ? '••••••' : formatJPY(assets)}
       </Text>
     </>
@@ -231,27 +229,31 @@ function ModernCashFlow({ prominent = false }: { prominent?: boolean }) {
   );
 }
 
-function ModernAccountRail({ accounts, balances, onOpen }: {
-  accounts: Account[]; balances: Record<string, number>; onOpen: (id: string) => void;
+function ModernAccountRail({ accounts, balances, onOpen, frameless }: {
+  accounts: Account[]; balances: Record<string, number>; onOpen: (id: string) => void; frameless: boolean;
 }) {
   const p = usePalette();
   const { width, fontScale } = useWindowDimensions();
   const tileWidth = Math.min(218, Math.round(width * (fontScale > 1.3 ? 0.62 : 0.415)));
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: frameless ? 3 : 10 }}>
       <AccountsHeading />
       {accounts.length ? (
         <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false}
           style={{ marginHorizontal: -16 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 9 }}
           snapToInterval={tileWidth + 9} decelerationRate="fast">
-          {accounts.map((account) => {
+          {accounts.map((account, index) => {
             const amount = balances[account.id] ?? 0;
             const tone = account.type === 'bank' || account.type === 'foreign_bank' ? p.income : p.tint;
             return (
               <Pressable key={account.id} accessibilityRole="button" accessibilityLabel={account.name + ' ' + formatJPY(amount)}
                 onPress={() => { tick(); onOpen(account.id); }}
-                style={({ pressed }) => ({ backgroundColor: pressed ? p.fill : p.card, width: tileWidth, padding: 11, gap: 8,
-                  borderRadius: 19, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: p.separator })}>
+                style={({ pressed }) => [
+                  { width: tileWidth, padding: 11, gap: 8, backgroundColor: pressed ? p.fill : frameless ? 'transparent' : p.card },
+                  frameless
+                    ? { borderRightWidth: index < accounts.length - 1 ? StyleSheet.hairlineWidth : 0, borderColor: p.fill }
+                    : { borderRadius: 19, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: p.separator },
+                ]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <IconBadge name={ACCOUNT_ICONS[account.type]} color={tone} size={32} />
                   <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} tintColor={p.textSecondary} size={13} />
@@ -298,7 +300,7 @@ function WalletAccounts({ accounts, balances, bankAccounts, onOpen }: {
   ));
 
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.separator, paddingHorizontal: 6 }}>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.fill, paddingTop: 6 }}>
       <AccountsHeading />
       {accounts.length ? <AccountSummaryGroup flat>{rows}</AccountSummaryGroup> : (
         <Text style={{ color: p.textSecondary, paddingHorizontal: 4, paddingBottom: 10 }}>この家計グループに表示する口座がありません</Text>

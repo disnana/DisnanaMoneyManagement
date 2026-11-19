@@ -4,6 +4,7 @@ import { Pressable, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
 import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
+import { useHomeLayout } from '@/lib/homePreferences';
 import { useCurrentBalances } from '@/lib/currentBalances';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -80,6 +81,7 @@ export default function Home() {
 
 function HomeActivity({ month, balances, flat }: { month: string; balances: Record<string, number>; flat: boolean }) {
   const { state, visibleState } = useFinance();
+  const [layout] = useHomeLayout();
   const recent = visibleState.transactions
     .filter((tx) => tx.date.startsWith(month))
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -104,7 +106,7 @@ function HomeActivity({ month, balances, flat }: { month: string; balances: Reco
         </>
       ) : null}
       <SectionTitle action="すべて見る" onAction={() => router.navigate('/transactions')}>最近の取引</SectionTitle>
-      <Group>
+      <Group flat={flat && layout !== 'month'}>
         {recent.length > 0 ? recent.map((tx) => <TxRow key={tx.id} tx={tx} showDate />)
           : <Row compact title="この月の取引はまだありません" />}
       </Group>
