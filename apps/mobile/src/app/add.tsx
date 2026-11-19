@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Keyboard, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
@@ -82,6 +82,7 @@ export default function AddScreen() {
     ? getTransactionLedger(editing, accountsById, ledgers).id
     : paymentMonth ? undefined : activeLedger?.id);
   const [ratio, setRatio] = useState(String(editing?.businessRatio ?? 100));
+  const [ratioFocused, setRatioFocused] = useState(false);
   const [subject, setSubject] = useState(editing?.accountingSubject ?? '');
   const [counterparty, setCounterparty] = useState(editing?.counterparty ?? '');
   const [taxCat, setTaxCat] = useState<IncomeTaxCategory | undefined>(editing?.incomeTaxCategory);
@@ -91,6 +92,7 @@ export default function AddScreen() {
   const [advanceFor, setAdvanceFor] = useState(editing?.advance?.for ?? '');
   const isBusiness = scope === 'business' && !advanceOn;
   const businessRatio = Math.min(100, Math.max(0, Math.round(Number(ratio) || 0)));
+  const expenseAmount = Number(amount);
   const ledger = getTransactionLedger({ accountId, ledgerId, scope }, accountsById, ledgers);
 
   const customCategories = state.customCategories;
@@ -171,7 +173,7 @@ export default function AddScreen() {
       Alert.alert('カテゴリを選んでください');
       return;
     }
-    const value = Number(amount);
+    const value = expenseAmount;
     if (!Number.isSafeInteger(value) || value <= 0) {
       Alert.alert('金額を入力してください');
       return;
@@ -429,41 +431,46 @@ export default function AddScreen() {
             <CardHeader style={{ paddingHorizontal: 14, paddingVertical: 10 }}>
               <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>経費の内訳</Text>
             </CardHeader>
-            <View style={{ padding: 12, gap: 10 }}>
-              <Pressable accessibilityRole="button" accessibilityLabel={`勘定科目 ${subject || category.defaultAccountingSubject || '未設定'}`}
-                onPress={async () => {
-                  Keyboard.dismiss();
-                  tick();
-                  const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((name) => ({
-                    id: name, label: name, selected: name === (subject || category.defaultAccountingSubject),
-                  })), { layout: 'divided' });
-                  if (choice) setSubject(choice);
-                }}
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 10,
-                  borderWidth: 1, borderColor: p.outline, paddingHorizontal: 12, minHeight: 56,
-                  backgroundColor: pressed ? p.fill : p.card })}>
-                <SymbolView name={{ ios: 'tag', android: 'label' }} size={16} tintColor={p.tint} />
-                <View style={{ flex: 1, gap: 2, paddingVertical: 6 }}>
-                  <Text style={{ color: p.textSecondary, fontSize: 12 }}>勘定科目</Text>
-                  <Text style={{ color: p.text, fontSize: 16, fontWeight: '700' }}>{subject || category.defaultAccountingSubject || '選択する'}</Text>
+            {fieldRow('勘定科目', subject || category.defaultAccountingSubject || '選択する', async () => {
+              const choice = await pickOne('勘定科目', ACCOUNTING_SUBJECTS.map((name) => ({
+                id: name, label: name, selected: name === (subject || category.defaultAccountingSubject),
+              })), { layout: 'divided' });
+              if (choice) setSubject(choice);
+            })}
+            <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline, padding: 14, gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <View style={{ flex: 1, minWidth: 125, gap: 3 }}>
+                  <Text style={{ color: p.text, fontSize: 14, fontWeight: '600' }}>事業で使った割合</Text>
+                  <Text style={{ color: p.textSecondary, fontSize: 12 }}>0〜100%</Text>
                 </View>
-                <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={14} tintColor={p.tint} />
-              </Pressable>
-              <View style={{ borderRadius: 10, borderWidth: 1, borderColor: p.outline, backgroundColor: p.card }}>
-                <TransactionInput label="事業で使った割合" icon={{ ios: 'percent', android: 'percent' }} unit="%"
-                  value={ratio} onChangeText={(value) => {
-                    const digits = value.normalize('NFKC').replace(/[^0-9]/g, '');
-                    setRatio(digits ? String(Math.min(100, Number(digits))) : '');
-                  }} accessibilityHint="0から100まで入力"
-                  keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} />
+                <View style={{ minWidth: 92, flexDirection: 'row', gap: 6, alignItems: 'center', paddingRight: 10,
+                  borderRadius: 8, borderWidth: 1, borderColor: ratioFocused ? p.tint : p.outline, backgroundColor: p.fill }}>
+                  <TextInput accessibilityLabel="事業で使った割合" accessibilityHint="0から100まで入力" value={ratio}
+                    onFocus={() => setRatioFocused(true)} onBlur={() => setRatioFocused(false)} onChangeText={(value) => {
+                      const digits = value.normalize('NFKC').replace(/[^0-9]/g, '');
+                      setRatio(digits ? String(Math.min(100, Number(digits))) : '');
+                    }} keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID} underlineColorAndroid="transparent"
+                    style={{ width: 62, minHeight: 46, paddingLeft: 8, color: p.text, textAlign: 'right',
+                      fontSize: 19, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
+                  <Text style={{ color: p.textSecondary, fontSize: 14 }}>%</Text>
+                </View>
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                flexWrap: 'wrap', gap: 8, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, backgroundColor: p.fill }}>
-                <Text style={{ color: p.textSecondary, fontSize: 13 }}>経費算入額</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+                gap: 8, paddingTop: 11, borderTopColor: p.separator === 'transparent' ? p.outline : p.separator,
+                borderTopWidth: StyleSheet.hairlineWidth }}>
+                <View style={{ flexShrink: 1, gap: 3 }}>
+                  <Text style={{ color: p.textSecondary, fontSize: 13 }}>経費算入額</Text>
+                  {Number.isSafeInteger(expenseAmount) && expenseAmount > 0 ? (
+                    <Text style={{ color: p.textSecondary, fontSize: 12 }}>{formatJPY(expenseAmount)} × {businessRatio}%</Text>
+                  ) : null}
+                </View>
                 <Text accessibilityLiveRegion="polite" style={{ color: p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
-                  {formatJPY(Math.round((Number(amount) || 0) * (businessRatio / 100)))}
+                  {Number.isSafeInteger(expenseAmount) && expenseAmount > 0
+                    ? formatJPY(Math.round(expenseAmount * (businessRatio / 100))) : '—'}
                 </Text>
               </View>
+            </View>
+            <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline }}>
               <TransactionInput label="取引先" icon={{ ios: 'person.crop.rectangle', android: 'badge' }} optional
                 value={counterparty} onChangeText={setCounterparty} placeholder="会社名など" />
             </View>
