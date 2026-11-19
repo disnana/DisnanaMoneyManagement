@@ -82,10 +82,10 @@ function AssetsTrend({ assets }: { assets: number }) {
 
 export function ModernHomeOverview({ assets }: { assets: number }) {
   const p = usePalette();
-  const { month, setMonth, visibleState } = useFinance();
+  const { month, setMonth, setTransactionFilter, visibleState } = useFinance();
   const { income, expense, net } = computeMonthMetrics(visibleState, month);
   const activity = [
-    { label: '収入', amount: income, color: p.income, icon: { ios: 'arrow.down.left', android: 'south_west' } },
+    { label: '収入', amount: income, color: p.income, icon: { ios: 'arrow.down.right', android: 'south_east' } },
     { label: '支出', amount: expense, color: p.danger, icon: { ios: 'arrow.up.right', android: 'north_east' } },
   ] as const;
   const plotted = activity.filter(({ amount }) => amount !== 0);
@@ -116,9 +116,18 @@ export function ModernHomeOverview({ assets }: { assets: number }) {
           <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '800', color: p.text }}>月の収支</Text>
           <MonthBar month={month} onChange={setMonth} compact />
         </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit style={[money, { color: net < 0 ? p.danger : p.income, fontSize: 30, letterSpacing: -0.5 }]}>
-          {net > 0 ? '+' : ''}{formatJPY(net)}
-        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', columnGap: 8 }}>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[money, { flexShrink: 1, color: net < 0 ? p.danger : p.income,
+            fontSize: 30, letterSpacing: -0.5 }]}>
+            {net > 0 ? '+' : ''}{formatJPY(net)}
+          </Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="選択月の取引を見る"
+            onPress={() => { tick(); setTransactionFilter('all'); router.navigate('/transactions'); }}
+            style={({ pressed }) => ({ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.65 : 1 })}>
+            <Text style={{ color: p.tint, fontWeight: '700', fontSize: 13 }}>取引を見る</Text>
+            <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} tintColor={p.tint} size={12} />
+          </Pressable>
+        </View>
         <View aria-hidden style={{ height: 7, backgroundColor: p.fill, flexDirection: 'row',
           gap: plotted.length > 1 ? 4 : 0, borderRadius: 6, overflow: 'hidden' }}>
           {plotted.map(({ label, amount, color }) => (

@@ -79,21 +79,21 @@ export default function TabsLayout() {
       {modern ? (
         <TabList asChild>
           <View style={{ display: hideDock ? 'none' : 'flex', flexDirection: 'row', alignItems: 'center', gap: 4,
-            marginTop: 4, marginBottom: insets.bottom + 8, marginLeft: Math.max(insets.left, 16) + 4,
-            marginRight: Math.max(insets.right, 16), paddingLeft: 5 }}>
+            marginTop: 4, marginBottom: insets.bottom + 8, marginLeft: Math.max(insets.left, 16),
+            marginRight: Math.max(insets.right, 16), paddingHorizontal: 5, paddingVertical: 3 }}>
             {glass ? (
               <GlassView pointerEvents="none" glassEffectStyle="regular" colorScheme={scheme}
-                style={[StyleSheet.absoluteFill, { right: 68, borderRadius: 32 }]} />
+                style={[StyleSheet.absoluteFill, { borderRadius: 32 }]} />
             ) : (
-              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { right: 68, borderRadius: 32,
+              <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: 32,
                 backgroundColor: p.card, borderColor: p.separator, borderWidth: StyleSheet.hairlineWidth,
                 boxShadow: scheme === 'dark' ? '0 3px 12px #00000045' : '0 3px 12px #10252320' }]} />
             )}
             {tab('home', 'ホーム', { ios: 'house', android: 'home' })}
             {tab('transactions', '取引', { ios: 'list.bullet.rectangle', android: 'receipt_long' })}
+            <AddButton />
             {tab('analytics', '分析', { ios: 'chart.pie', android: 'pie_chart' })}
             {tab('accounts', '口座', { ios: 'wallet.pass', android: 'account_balance_wallet' })}
-            <AddButton />
           </View>
         </TabList>
       ) : (
