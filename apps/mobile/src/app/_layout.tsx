@@ -1,20 +1,27 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FinanceProvider } from '@/lib/store';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
 import { usePalette } from '@/lib/theme';
-import '@/lib/themePref';
+import { useAppearanceStyle, useThemeColorScheme } from '@/lib/themePref';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const scheme = useColorScheme();
+  const scheme = useThemeColorScheme();
   const p = usePalette();
+  const [style] = useAppearanceStyle();
+  const navigationTheme = useMemo(() => {
+    const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+    return style === 'standard' ? base : {
+      ...base,
+      colors: { background: p.bg, card: p.card, text: p.text, primary: p.tint, border: p.outline, notification: p.danger },
+    };
+  }, [p, scheme, style]);
 
   useEffect(() => {
     // Storage is synchronous, so the first frame already has data
@@ -24,7 +31,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <LockGate>
-    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={navigationTheme}>
       <FinanceProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />

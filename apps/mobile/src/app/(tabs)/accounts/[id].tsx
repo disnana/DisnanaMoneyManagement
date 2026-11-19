@@ -10,7 +10,7 @@ import { useCurrentBalances } from '@/lib/currentBalances';
 import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { useFinance } from '@/lib/store';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { AccountSummaryGroup, isPaymentCard } from '@/ui/AccountSummaryRow';
 import { CreditPaymentCard } from '@/ui/CreditPaymentCard';
 import { IconBadge, MonthBar, Row, SectionTitle } from '@/ui/kit';
@@ -54,7 +54,7 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
 
   return (
     <>
-      {!summary ? <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
+      {!summary ? <View style={{ backgroundColor: p.card, borderRadius: p.cardRadius, borderCurve: 'continuous',
         borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, padding: 16, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <IconBadge name={ACCOUNT_ICONS[account.type]} color={account.type === 'credit' ? '#8167BF' : p.tint} size={36} />

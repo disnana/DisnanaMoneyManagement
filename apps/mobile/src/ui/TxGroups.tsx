@@ -2,7 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { Transaction } from '@dmm/core/types/finance';
 import { groupTransactionsByDate } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { Group } from '@/ui/kit';
 import { TxRow } from '@/ui/TxRow';
 
@@ -26,7 +26,7 @@ export function TxGroups({ transactions, empty, dayCards }: { transactions: Tran
         if (dayCards) {
           const total = `${g.net > 0 ? '+' : ''}${formatJPY(g.net)}`;
           return (
-            <View key={g.date} style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
+            <View key={g.date} style={{ backgroundColor: p.card, borderRadius: p.cardRadius, borderCurve: 'continuous',
               borderWidth: StyleSheet.hairlineWidth, borderColor: divider, overflow: 'hidden' }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                 paddingHorizontal: 14, paddingVertical: 9, backgroundColor: p.sectionHeader,

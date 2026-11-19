@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { formatMonthLabel } from '@dmm/core/utils/format';
 import { tick } from '@/lib/haptics';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { CalendarDialog } from './CalendarDialog';
 
 const GRID_SIZE = 12;
@@ -35,7 +35,7 @@ export function MonthPicker({ month, onCancel, onPick }: {
         }}
         style={({ pressed }) => ({
           width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
-          borderRadius: metrics.controlRadius, backgroundColor: pressed ? p.fill : 'transparent',
+          borderRadius: p.controlRadius, backgroundColor: pressed ? p.fill : 'transparent',
         })}>
         <SymbolView name={previous ? { ios: 'chevron.left', android: 'chevron_left' } : { ios: 'chevron.right', android: 'chevron_right' }}
           size={17} tintColor={p.tint} />
@@ -52,7 +52,7 @@ export function MonthPicker({ month, onCancel, onPick }: {
           onPress={() => { tick(); setYearPage(choosingYear ? undefined : year - (GRID_SIZE - 2)); }}
           style={({ pressed }) => ({
             paddingHorizontal: 12, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6,
-            backgroundColor: pressed ? p.fill : 'transparent', borderRadius: metrics.controlRadius,
+            backgroundColor: pressed ? p.fill : 'transparent', borderRadius: p.controlRadius,
           })}>
           <Text style={{ color: p.text, fontSize: 16, fontWeight: '700' }}>{pageLabel}</Text>
           <SymbolView name={choosingYear ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
@@ -79,7 +79,7 @@ export function MonthPicker({ month, onCancel, onPick }: {
                 }}
                 style={({ pressed }) => ({
                   minHeight: 48, alignItems: 'center', justifyContent: 'center',
-                  borderRadius: metrics.controlRadius + 4, backgroundColor: active ? p.tint : pressed ? p.fill : 'transparent',
+                  borderRadius: p.controlRadius + 4, backgroundColor: active ? p.tint : pressed ? p.fill : 'transparent',
                 })}>
                 <Text style={{ color: active ? p.onTint : p.text, fontSize: 15, fontWeight: active ? '700' : '500' }}>
                   {value}{choosingYear ? '年' : '月'}

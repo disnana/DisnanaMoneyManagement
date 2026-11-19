@@ -4,7 +4,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { tick } from '@/lib/haptics';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 
 const ROW_HEIGHT = 68;
 
@@ -114,7 +114,7 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, getLa
 
   if (!items.length) return null;
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous', overflow: 'hidden' }}>
+    <View style={{ backgroundColor: p.card, borderRadius: p.cardRadius, borderCurve: 'continuous', overflow: 'hidden' }}>
       {items.map((item, index) => (
         <ReorderRow key={item.id} label={getLabel(item)} index={index} count={items.length} drag={{ from, target, offset }} move={move}>
           {renderItem(item)}

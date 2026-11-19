@@ -1,10 +1,11 @@
 /** iOS theme: system grouped backgrounds, hairline separators, continuous corners. */
-import { useColorScheme } from 'react-native';
-import type { Palette } from './theme';
+import { useStyledPalette, type Palette } from './themePresets';
+import type { AppearanceStyle } from './themePref';
 
-export type { Palette } from './theme';
+export type { Palette } from './themePresets';
 
 const light: Palette = {
+  cardRadius: 12, controlRadius: 9,
   bg: '#F2F2F7',
   card: '#FFFFFF',
   fill: 'rgba(118,118,128,0.12)',
@@ -21,6 +22,7 @@ const light: Palette = {
 };
 
 const dark: Palette = {
+  cardRadius: 12, controlRadius: 9,
   bg: '#000000',
   card: '#1C1C1E',
   fill: 'rgba(118,118,128,0.24)',
@@ -36,14 +38,12 @@ const dark: Palette = {
   danger: '#FF786E',
 };
 
-export function usePalette(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+export function usePalette(preview?: AppearanceStyle): Palette {
+  return useStyledPalette(light, dark, preview);
 }
 
 export const metrics = {
-  cardRadius: 12,
   rowRadius: 0,
-  controlRadius: 9,
   rowMinHeight: 56,
   screenPaddingTop: 0,
 };

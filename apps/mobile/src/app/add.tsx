@@ -308,7 +308,7 @@ export default function AddScreen() {
           ]}
         /> : null}
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: p.card, borderRadius: metrics.cardRadius }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: p.card, borderRadius: p.cardRadius }}>
           {dateStep(-1, '前の日', { ios: 'chevron.left', android: 'chevron_left' })}
           <Pressable accessibilityRole="button" accessibilityLabel={`取引日 ${dateLabel(date)}`}
             style={{ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}
@@ -401,7 +401,7 @@ export default function AddScreen() {
                   }}
                   style={({ pressed }) => ({
                     marginHorizontal: 12, marginVertical: 8, padding: 10, gap: 4, borderWidth: 1,
-                    borderColor: p.tint, borderRadius: metrics.controlRadius, backgroundColor: pressed ? p.fill : p.card,
+                    borderColor: p.tint, borderRadius: p.controlRadius, backgroundColor: pressed ? p.fill : p.card,
                   })}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={{ color: p.textSecondary, fontSize: 14, flexBasis: '30%' }}>所得区分</Text>

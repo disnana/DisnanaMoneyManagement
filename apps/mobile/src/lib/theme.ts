@@ -2,25 +2,13 @@
  * Android / default theme: Material 3 inspired (tonal surfaces, rounded cards, no hairlines).
  * iOS overrides this file in theme.ios.ts (system grouped backgrounds, hairline separators).
  */
-import { useColorScheme } from 'react-native';
+import { useStyledPalette, type Palette } from './themePresets';
+import type { AppearanceStyle } from './themePref';
 
-export interface Palette {
-  bg: string;
-  card: string;
-  fill: string;
-  text: string;
-  textSecondary: string;
-  separator: string;
-  outline: string;
-  sectionHeader: string;
-  tint: string;
-  onTint: string;
-  income: string;
-  expense: string;
-  danger: string;
-}
+export type { Palette } from './themePresets';
 
 const light: Palette = {
+  cardRadius: 20, controlRadius: 100,
   bg: '#F3F7F6',
   card: '#FFFFFF',
   fill: '#E4ECEA',
@@ -37,6 +25,7 @@ const light: Palette = {
 };
 
 const dark: Palette = {
+  cardRadius: 20, controlRadius: 100,
   bg: '#0E1413',
   card: '#182120',
   fill: '#25312F',
@@ -52,14 +41,12 @@ const dark: Palette = {
   danger: '#F2B8B5',
 };
 
-export function usePalette(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+export function usePalette(preview?: AppearanceStyle): Palette {
+  return useStyledPalette(light, dark, preview);
 }
 
 export const metrics = {
-  cardRadius: 20,
   rowRadius: 0,
-  controlRadius: 100,
   rowMinHeight: 64,
   /** Android has no large-title nav bar; keep a bit more air above content */
   screenPaddingTop: 8,

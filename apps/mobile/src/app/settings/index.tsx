@@ -5,8 +5,8 @@ import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import Constants from 'expo-constants';
-import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
-import { useThemePref, type ThemePref } from '@/lib/themePref';
+import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
+import { AppearanceSettings } from '@/ui/AppearanceSettings';
 import { usePalette } from '@/lib/theme';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 import { Alert, Linking, Platform } from 'react-native';
@@ -18,7 +18,6 @@ function openLegalPage(page: 'terms' | 'privacy') {
 
 export default function Settings() {
   const p = usePalette();
-  const [pref, setPref] = useThemePref();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
   const lockOn = useLockEnabled();
   const { state } = useFinance();
@@ -27,18 +26,7 @@ export default function Settings() {
     <>
       <Screen>
         <SectionTitle>外観</SectionTitle>
-        <Segmented<ThemePref>
-          value={pref}
-          onChange={setPref}
-          options={[
-            { id: 'system', label: '自動' },
-            { id: 'light', label: 'ライト' },
-            { id: 'dark', label: 'ダーク' },
-          ]}
-        />
-        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
-          「自動」は端末の設定に合わせます。
-        </Text>
+        <AppearanceSettings />
 
         <SectionTitle>操作</SectionTitle>
         <Group>

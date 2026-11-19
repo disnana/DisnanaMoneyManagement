@@ -3,7 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { formatFullDate, formatMonthLabel, formatShortDate, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { tick } from '@/lib/haptics';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { CalendarDialog } from './CalendarDialog';
 import { MonthPicker } from './MonthPicker';
 
@@ -41,7 +41,7 @@ export function TransactionDatePicker({ date, title = '取引日を選ぶ', allo
       onPress={() => { tick(); setMonth((current) => shiftMonth(current, direction)); }}
       style={({ pressed }) => ({
         width: 44, height: 44, alignItems: 'center', justifyContent: 'center',
-        borderRadius: metrics.controlRadius, backgroundColor: pressed ? p.fill : 'transparent',
+        borderRadius: p.controlRadius, backgroundColor: pressed ? p.fill : 'transparent',
       })}>
       <SymbolView name={direction < 0 ? { ios: 'chevron.left', android: 'chevron_left' } : { ios: 'chevron.right', android: 'chevron_right' }}
         size={17} tintColor={p.tint} />
@@ -78,7 +78,7 @@ export function TransactionDatePicker({ date, title = '取引日を選ぶ', allo
               onPress={() => { tick(); setSelected(value); }}
               style={({ pressed }) => ({
                 width: COLUMN_WIDTH, height: 44, alignItems: 'center', justifyContent: 'center', padding: 2,
-                borderRadius: metrics.controlRadius + 4, backgroundColor: active ? p.tint : pressed ? p.fill : 'transparent',
+                borderRadius: p.controlRadius + 4, backgroundColor: active ? p.tint : pressed ? p.fill : 'transparent',
               })}>
               <Text style={{ color: active ? p.onTint : value === today ? p.tint : p.text,
                 fontSize: 15, fontWeight: active || value === today ? '700' : '500' }}>{day}</Text>

@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react';
 import Animated from 'react-native-reanimated';
-import { Platform, Pressable, type PressableProps, useColorScheme, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, type PressableProps, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
+import { useThemeColorScheme } from '@/lib/themePref';
 import { tick } from '@/lib/haptics';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { MonthPicker } from './MonthPicker';
@@ -41,7 +42,7 @@ export function Group({ children }: { children: ReactNode }) {
   const p = usePalette();
   const items = Array.isArray(children) ? children.flat().filter(Boolean) : [children];
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, overflow: 'hidden', borderCurve: 'continuous' }}>
+    <View style={{ backgroundColor: p.card, borderRadius: p.cardRadius, overflow: 'hidden', borderCurve: 'continuous' }}>
       {items.map((child, i) => (
         <View key={i}>
           {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 16, backgroundColor: p.separator }} /> : null}
@@ -63,7 +64,7 @@ function iconOnColor(hex: string) {
 export function IconBadge({ name, color, size = 40, filledInDark = false }: {
   name: SymbolViewProps['name']; color: string; size?: number; filledInDark?: boolean;
 }) {
-  const scheme = useColorScheme();
+  const scheme = useThemeColorScheme();
   const filled = filledInDark && scheme === 'dark';
   return (
     <View
@@ -161,10 +162,10 @@ export function Segmented<T extends string>({
   minHeight?: number;
 }) {
   const p = usePalette();
-  const dark = useColorScheme() === 'dark';
+  const dark = useThemeColorScheme() === 'dark';
   const activeIndex = options.findIndex((o) => o.id === value);
   return (
-    <View style={{ flexDirection: 'row', backgroundColor: p.fill, borderRadius: metrics.controlRadius + 2, padding: 3 }}>
+    <View style={{ flexDirection: 'row', backgroundColor: p.fill, borderRadius: p.controlRadius + 2, padding: 3 }}>
       {options.map((o, i) => {
         const active = i === activeIndex;
         // thin divider between neighbours, hidden next to the selected thumb
@@ -184,7 +185,7 @@ export function Segmented<T extends string>({
                 minHeight,
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: metrics.controlRadius,
+                borderRadius: p.controlRadius,
                 backgroundColor: active ? (prominent ? p.tint : dark ? 'rgba(255,255,255,0.2)' : p.card) : 'transparent',
                 ...(active
                   ? { shadowColor: '#000', shadowOpacity: dark ? 0 : 0.14, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: dark ? 0 : 2 }
