@@ -13,12 +13,13 @@ export function isPaymentCard(account: Account) {
   return account.type === 'credit' || account.type === 'debit';
 }
 
-export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting = false, onPress }: {
+export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting = false, flat = false, onPress }: {
   account: Account;
   balance: number;
   bill?: { label: string; remaining: number; warning?: string };
   linkedBank?: Account;
   sorting?: boolean;
+  flat?: boolean;
   onPress?: () => void;
 }) {
   const p = usePalette();
@@ -52,25 +53,26 @@ export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting 
     </>
   );
   const rowStyle = { minHeight: 60, flexDirection: 'row' as const, alignItems: 'center' as const,
-    paddingHorizontal: 12, paddingVertical: 8, gap: 9 };
+    paddingHorizontal: flat ? 4 : 12, paddingVertical: 8, gap: 9 };
 
   return sorting
     ? <View style={rowStyle}>{content}</View>
     : <Pressable accessibilityRole="button" onPress={onPress}
-        style={({ pressed }) => [rowStyle, { backgroundColor: pressed ? p.fill : p.card }]}>{content}</Pressable>;
+        style={({ pressed }) => [rowStyle, { backgroundColor: pressed ? p.fill : flat ? 'transparent' : p.card }]}>{content}</Pressable>;
 }
 
-export function AccountSummaryGroup({ children, header }: { children: ReactNode; header?: ReactNode }) {
+export function AccountSummaryGroup({ children, header, flat = false }: { children: ReactNode; header?: ReactNode; flat?: boolean }) {
   const p = usePalette();
-  return (
-    <CardSurface>
+  const content = (
+    <>
       {header}
       {Children.toArray(children).map((child, index) => (
         <View key={index}>
-          {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.outline, marginHorizontal: 12 }} /> : null}
+          {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.outline, marginHorizontal: flat ? 4 : 12 }} /> : null}
           {child}
         </View>
       ))}
-    </CardSurface>
+    </>
   );
+  return flat ? <View>{content}</View> : <CardSurface>{content}</CardSurface>;
 }

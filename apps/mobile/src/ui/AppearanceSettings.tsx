@@ -8,7 +8,7 @@ import { Group, Row, Segmented } from './kit';
 
 const choices = [
   [{ id: 'standard', label: '標準', detail: '今の配置' }, { id: 'classic', label: 'クラシック', detail: '一覧で読む' }],
-  [{ id: 'modern', label: 'モダン', detail: '概要から見る' }, { id: 'soft', label: 'やわらか', detail: '余白を広く' }],
+  [{ id: 'modern', label: 'モダン', detail: '数字とグラフで見る' }, { id: 'soft', label: 'やわらか', detail: '余白を広く' }],
 ] as const;
 
 function LayoutDiagram({ style }: { style: AppearanceStyle }) {
@@ -41,18 +41,12 @@ function LayoutDiagram({ style }: { style: AppearanceStyle }) {
           ))}
         </View>
       ) : style === 'modern' ? (
-        <>
-          <View style={{ ...sheet, backgroundColor: p.sectionHeader, flex: 1, borderRadius: 6, justifyContent: 'center', paddingHorizontal: 6 }}>
-            <View style={{ ...metric, width: '54%' }} />
-          </View>
-          <View style={{ flexDirection: 'row', flex: 1, gap: 4 }}>
-            {[0, 1].map((i) => (
-              <View key={i} style={{ ...sheet, flex: 1, borderRadius: 5, justifyContent: 'center', paddingHorizontal: 6 }}>
-                <View style={{ ...line, width: '60%' }} />
-              </View>
-            ))}
-          </View>
-        </>
+        <View style={{ flex: 1, paddingHorizontal: 5, justifyContent: 'space-around' }}>
+          <View style={{ ...metric, width: '60%', height: 8 }} />
+          <View style={{ backgroundColor: p.outline, height: 1 }} />
+          <View style={{ ...metric, width: '94%', height: 3 }} />
+          <View style={{ ...metric, width: '41%', height: 3 }} />
+        </View>
       ) : (
         <View style={{ ...sheet, flex: 1, gap: 4, alignItems: 'center', justifyContent: 'center', borderRadius: 11 }}>
           <View style={{ ...line, width: '24%' }} />

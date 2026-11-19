@@ -6,7 +6,7 @@ import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { CardHeader, CardSurface } from './CardSurface';
 import { HeroCard, MonthlyCashFlow } from './HeroCard';
-import { IconBadge, MonthBar, SectionTitle } from './kit';
+import { MonthBar, SectionTitle } from './kit';
 import { LedgerPill } from './LedgerPill';
 
 export function HomeOverview({ month, assets }: { month: string; assets: number }) {
@@ -78,34 +78,40 @@ function StyledOverview({ appearance, month, assets }: {
   }
 
   if (appearance === 'modern') {
+    const activityScale = Math.max(Math.abs(income), Math.abs(expense), 1);
+
     return (
-      <>
-        <CardSurface>
-          <CardHeader><MonthBar month={month} onChange={setMonth} /></CardHeader>
-          <View style={{ backgroundColor: `${p.tint}14`, padding: 16, gap: 8 }}>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700', flexShrink: 1 }}>月の収支</Text>
-              <LedgerPill />
-            </View>
-            <Text numberOfLines={1} adjustsFontSizeToFit
-              style={[moneyStyle, { color: netColor, fontSize: 39 }]}>{netAmount}</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {activity.map(({ label, amount, color }) => (
-                <View key={label} style={{ flex: 1, backgroundColor: p.card, borderRadius: p.controlRadius, padding: 9, gap: 3 }}>
-                  <Text style={{ color: p.textSecondary, fontSize: 12 }}>{label}</Text>
-                  <Text numberOfLines={1} adjustsFontSizeToFit style={[moneyStyle, { color, fontSize: 17 }]}>{formatJPY(amount)}</Text>
-                </View>
-              ))}
-            </View>
+      <View style={{ paddingHorizontal: 4, paddingTop: 8, gap: 13 }}>
+        <View style={{ gap: 5 }}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text accessibilityRole="header" style={{ color: p.textSecondary, fontSize: 14, fontWeight: '600', flexShrink: 1 }}>現在の総資産</Text>
+            <LedgerPill />
           </View>
-        </CardSurface>
-        <CardSurface style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 }}>
-          <IconBadge name={{ ios: 'wallet.pass', android: 'account_balance_wallet' }} color={p.tint} size={34} />
-          <Text accessibilityRole="header" style={{ flex: 1, color: p.text, fontSize: 13, fontWeight: '700' }}>現在の総資産</Text>
           <Text numberOfLines={1} adjustsFontSizeToFit
-            style={[moneyStyle, { maxWidth: '50%', color: assetsColor, fontSize: 21 }]}>{formatJPY(assets)}</Text>
-        </CardSurface>
-      </>
+            style={[moneyStyle, { color: assetsColor, fontSize: 48, letterSpacing: -1.8 }]}>{formatJPY(assets)}</Text>
+        </View>
+
+        <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderColor: p.outline, gap: 8 }}>
+          <MonthBar month={month} onChange={setMonth} />
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+            <Text accessibilityRole="header" style={{ flexShrink: 0, color: p.text, fontSize: 16, fontWeight: '700' }}>月の収支</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit
+              style={[moneyStyle, { flexShrink: 1, color: netColor, fontSize: 26 }]}>{netAmount}</Text>
+          </View>
+          {activity.map(({ label, amount, color }) => (
+            <View key={label} style={{ gap: 5 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                <Text style={{ color: p.textSecondary, fontSize: 13 }}>{label}</Text>
+                <Text numberOfLines={1} adjustsFontSizeToFit
+                  style={[moneyStyle, { flexShrink: 1, color, fontSize: 15 }]}>{formatJPY(amount)}</Text>
+              </View>
+              <View aria-hidden style={{ height: 5, backgroundColor: p.fill, borderRadius: 3, overflow: 'hidden' }}>
+                <View style={{ height: '100%', width: `${Math.abs(amount) / activityScale * 100}%`, backgroundColor: color, borderRadius: 3 }} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
     );
   }
 
