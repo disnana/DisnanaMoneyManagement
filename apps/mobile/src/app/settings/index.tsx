@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Text } from 'react-native';
 import { router } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
@@ -10,7 +10,7 @@ import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
-import { Alert, Linking, Platform } from 'react-native';
+import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
 
 function openLegalPage(page: 'terms' | 'privacy') {
@@ -44,45 +44,21 @@ export default function Settings() {
 
         <SectionTitle>操作</SectionTitle>
         <Group>
-          <View style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>モーションを抑える</Text>
-              <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: 2 }}>画面切り替えや月送りの動きを減らす</Text>
-            </View>
-            <Switch accessibilityLabel="モーションを抑える" value={reduceMotion} onValueChange={setReduceMotion}
-              trackColor={{ false: p.fill, true: p.tint }} />
-          </View>
-          <Pressable accessibilityRole="switch" accessibilityLabel="操作時の振動" accessibilityState={{ checked: haptics }}
-            onPress={() => {
-              setHapticsEnabled(!haptics);
-              setHaptics(!haptics);
-            }}
-            style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Text style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: '600' }}>操作時の振動</Text>
-            <View style={{ width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center',
-              alignItems: haptics ? 'flex-end' : 'flex-start', backgroundColor: haptics ? p.tint : p.fill }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: haptics ? p.onTint : p.card }} />
-            </View>
-          </Pressable>
+          <SettingsSwitchRow title="モーションを抑える" subtitle="タップや画面切り替え、月送りの動きを減らす"
+            checked={reduceMotion} onChange={setReduceMotion} />
+          <SettingsSwitchRow title="操作時の振動" checked={haptics} onChange={(enabled) => {
+            setHapticsEnabled(enabled);
+            setHaptics(enabled);
+          }} />
           {Platform.OS !== 'web' ? (
-            <Pressable accessibilityRole="switch" accessibilityLabel="アプリのロック" accessibilityState={{ checked: lockOn }}
-              onPress={async () => {
-                if (!lockOn && !(await canAuthenticate())) {
+            <SettingsSwitchRow title="アプリのロック" subtitle="起動時に顔認証・パスコードで開く"
+              checked={lockOn} onChange={async (enabled) => {
+                if (enabled && !(await canAuthenticate())) {
                   Alert.alert('ロックを使えません', 'この端末で顔認証・指紋認証・パスコードのいずれかを設定してください。');
                   return;
                 }
-                await setLockEnabled(!lockOn);
-              }}
-              style={{ minHeight: 56, paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>アプリのロック</Text>
-                <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: 2 }}>起動時に顔認証・パスコードで開く</Text>
-              </View>
-              <View style={{ width: 48, height: 28, borderRadius: 14, padding: 3, justifyContent: 'center',
-                alignItems: lockOn ? 'flex-end' : 'flex-start', backgroundColor: lockOn ? p.tint : p.fill }}>
-                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: lockOn ? p.onTint : p.card }} />
-              </View>
-            </Pressable>
+                await setLockEnabled(enabled);
+              }} />
           ) : null}
         </Group>
 

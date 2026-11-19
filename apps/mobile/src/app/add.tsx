@@ -12,6 +12,7 @@ import { categoryIcon } from '@/lib/categoryIcons';
 import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { useCategoryPicker } from '@/lib/categoryPicker';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { useFinance } from '@/lib/store';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
@@ -47,6 +48,7 @@ function dateLabel(date: string): string {
 
 export default function AddScreen() {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   const pickLedger = useLedgerPicker();
   const pickCategory = useCategoryPicker();
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
@@ -249,8 +251,10 @@ export default function AddScreen() {
         tick();
         onPress();
       }}
-      android_ripple={{ color: p.fill }}
-      style={{ minHeight: metrics.rowMinHeight, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      android_ripple={reduceMotion ? undefined : { color: p.fill }}
+      style={({ pressed }) => ({ minHeight: metrics.rowMinHeight, paddingHorizontal: 14, paddingVertical: 8,
+        flexDirection: 'row', alignItems: 'center', gap: 10,
+        backgroundColor: reduceMotion && pressed ? p.fill : 'transparent' })}>
       <Text style={{ color: p.textSecondary, fontSize: 14, flexBasis: '31%' }}>{label}</Text>
       {badge ? <IconBadge name={badge.name} color={badge.color} size={36} /> : null}
       <View style={{ flex: 1, gap: 2 }}>

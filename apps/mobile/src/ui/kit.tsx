@@ -3,6 +3,7 @@ import Animated from 'react-native-reanimated';
 import { Platform, Pressable, type PressableProps, useColorScheme, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { MonthPicker } from './MonthPicker';
@@ -108,11 +109,12 @@ export function Row({
   compact?: boolean;
 }) {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   return (
     <Pressable
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: p.fill }}
+      android_ripple={reduceMotion ? undefined : { color: p.fill }}
       style={({ pressed }) => ({
         minHeight: compact ? 52 : metrics.rowMinHeight,
         paddingHorizontal: compact ? 10 : 16,

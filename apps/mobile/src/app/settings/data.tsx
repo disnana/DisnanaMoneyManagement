@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Platform, Switch, Text, View, type GestureResponderEvent } from 'react-native';
+import { Alert, Platform, Text, type GestureResponderEvent } from 'react-native';
 import { requireOptionalNativeModule } from 'expo';
 import { Stack } from 'expo-router';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
@@ -8,6 +8,7 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
+import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { Group, Row, Screen } from '@/ui/kit';
 
 type Mode = 'clear' | 'sample';
@@ -30,22 +31,23 @@ export default function DataSettings() {
     <>
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
-        {financeBackup ? (
+        {Platform.OS === 'android' ? (
           <Group>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 }}>
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>家計データの自動バックアップ</Text>
-                <Text style={{ color: p.textSecondary, fontSize: 13 }}>オンにするとAndroidのバックアップ対象に含まれます。端末側でもバックアップを有効にしてください。</Text>
-              </View>
-              <Switch accessibilityLabel="家計データの自動バックアップ" value={backupEnabled} onValueChange={(enabled) => {
-                try {
-                  if (!financeBackup.setEnabled(enabled)) throw new Error('Could not save backup preference');
-                  setBackupEnabled(enabled);
-                } catch {
-                  Alert.alert('設定を保存できませんでした');
-                }
-              }} />
-            </View>
+            {financeBackup ? (
+              <SettingsSwitchRow title="家計データの自動バックアップ" checked={backupEnabled}
+                subtitle="このアプリと端末のバックアップを両方オンにすると、家計データがAndroidのバックアップ対象に含まれます。"
+                onChange={(enabled) => {
+                  try {
+                    if (!financeBackup.setEnabled(enabled)) throw new Error('Could not save backup preference');
+                    setBackupEnabled(enabled);
+                  } catch {
+                    Alert.alert('設定を保存できませんでした');
+                  }
+                }} />
+            ) : (
+              <Row title="家計データの自動バックアップ"
+                subtitle="Androidの専用ビルドで利用できます。Expo Goでは切り替えできません。" />
+            )}
           </Group>
         ) : null}
         <Group>
