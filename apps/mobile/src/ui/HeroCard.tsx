@@ -30,9 +30,9 @@ export function HeroCard({ assets }: { assets: number }) {
           <LedgerPill />
         </View>
         <Text accessibilityLabel={hidden ? '総資産は非表示' : undefined} numberOfLines={1} adjustsFontSizeToFit
-          style={{ color: hidden ? p.textSecondary : assets < 0 ? p.danger : p.income,
+          style={{ color: hidden ? p.text : assets < 0 ? p.danger : p.income,
             fontSize: 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-          {hidden ? '••••••' : formatJPY(assets)}
+          {hidden ? '¥・・・・' : formatJPY(assets)}
         </Text>
       </View>
     </CardSurface>
