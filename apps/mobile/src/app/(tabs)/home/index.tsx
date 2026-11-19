@@ -11,7 +11,7 @@ import { usePalette } from '@/lib/theme';
 import { useAppearanceStyle } from '@/lib/themePref';
 import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
 import { HomeOverview } from '@/ui/HomeOverview';
-import { ModernHomeSections } from '@/ui/ModernHome';
+import { HomeSection, ModernHomeSections } from '@/ui/ModernHome';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
@@ -87,11 +87,12 @@ function HomeActivity({ month, balances, flat }: { month: string; balances: Reco
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 6);
   const cards = visibleState.accounts.filter((account) => account.type === 'credit');
+  const divided = flat && layout !== 'month';
 
   return (
     <>
       {cards.length > 0 ? (
-        <>
+        <HomeSection divided={divided}>
           <SectionTitle>カードの支払い</SectionTitle>
           <AccountSummaryGroup flat={flat}>
             {cards.map((card) => {
@@ -103,13 +104,15 @@ function HomeActivity({ month, balances, flat }: { month: string; balances: Reco
                   warning: warning === null ? undefined : warning === 0 ? '今日が支払日' : `支払日まであと${warning}日` }} onPress={() => openAccount(card.id)} />;
             })}
           </AccountSummaryGroup>
-        </>
+        </HomeSection>
       ) : null}
-      <SectionTitle action="すべて見る" onAction={() => router.navigate('/transactions')}>最近の取引</SectionTitle>
-      <Group flat={flat && layout !== 'month'}>
-        {recent.length > 0 ? recent.map((tx) => <TxRow key={tx.id} tx={tx} showDate />)
-          : <Row compact title="この月の取引はまだありません" />}
-      </Group>
+      <HomeSection divided={divided}>
+        <SectionTitle action="すべて見る" onAction={() => router.navigate('/transactions')}>最近の取引</SectionTitle>
+        <Group flat={divided}>
+          {recent.length > 0 ? recent.map((tx) => <TxRow key={tx.id} tx={tx} showDate />)
+            : <Row compact title="この月の取引はまだありません" />}
+        </Group>
+      </HomeSection>
     </>
   );
 }

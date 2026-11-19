@@ -10,12 +10,12 @@ import { formatJPY, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { tick } from '@/lib/haptics';
-import { homeLayouts, useHomeAssetVisibility, useHomeLayout } from '@/lib/homePreferences';
-import { pickOne } from '@/lib/pick';
+import { useHomeAssetVisibility, useHomeLayout } from '@/lib/homePreferences';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from './HeaderAction';
 import { AccountSummaryGroup, AccountSummaryRow } from './AccountSummaryRow';
+import { HomeLayoutMenu } from './HomeLayoutMenu';
 import { HomeAssetsHeading, hiddenAssetsLabel } from './HomeAssets';
 import { ModernHeroAmount, featureColors } from './ModernHero';
 import { IconBadge, MonthBar } from './kit';
@@ -87,15 +87,8 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
   assets: number; accounts: Account[]; balances: Record<string, number>; onOpen: (id: string) => void;
 }) {
   const p = usePalette();
-  const [layout, setLayout] = useHomeLayout();
+  const [layout] = useHomeLayout();
   const { state } = useFinance();
-  const switchLayout = async () => {
-    const choice = await pickOne('ホームのレイアウト', homeLayouts.map((item) => ({
-      ...item, selected: item.id === layout,
-    })), { layout: 'divided' });
-    const selected = homeLayouts.find(({ id }) => id === choice);
-    if (selected) setLayout(selected.id);
-  };
   const rail = (
     <ModernAccountRail accounts={accounts} balances={balances} onOpen={onOpen} frameless={layout === 'trend'} />
   );
@@ -104,8 +97,7 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
     <>
       <SafeAreaView edges={['top', 'left', 'right']} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 5 }}>
         <Text accessibilityRole="header" style={{ flex: 1, fontSize: 34, fontWeight: '800', color: p.text, letterSpacing: -0.8 }}>ホーム</Text>
-        <HeaderAction name={{ ios: 'rectangle.3.group', android: 'dashboard_customize' }} label="ホームのレイアウト" circular inContent
-          onPress={switchLayout} />
+        <HomeLayoutMenu />
         <HeaderAction name={{ ios: 'list.clipboard', android: 'assignment' }} label="予算・計画" circular inContent
           onPress={() => router.push('/planning')} />
         <HeaderAction name={{ ios: 'gearshape', android: 'settings' }} label="設定" circular inContent
@@ -116,7 +108,7 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
         <>
           <ModernAssets assets={assets} emphasis="trend" />
           <ModernCashFlow />
-          {rail}
+          <HomeSection divided>{rail}</HomeSection>
         </>
       ) : layout === 'month' ? (
         <>
@@ -132,9 +124,11 @@ export function ModernHomeSections({ assets, accounts, balances, onOpen }: {
             <View style={{ paddingHorizontal: 3, paddingBottom: 6 }}>
               <ModernAssets assets={assets} emphasis="wallet" />
             </View>
-            <WalletAccounts accounts={accounts} balances={balances} bankAccounts={state.accounts} onOpen={onOpen} />
+            <HomeSection divided>
+              <WalletAccounts accounts={accounts} balances={balances} bankAccounts={state.accounts} onOpen={onOpen} />
+            </HomeSection>
           </View>
-          <ModernCashFlow />
+          <HomeSection divided><ModernCashFlow /></HomeSection>
         </>
       )}
     </>
@@ -300,7 +294,7 @@ function WalletAccounts({ accounts, balances, bankAccounts, onOpen }: {
   ));
 
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.fill, paddingTop: 6 }}>
+    <View>
       <AccountsHeading />
       {accounts.length ? <AccountSummaryGroup flat>{rows}</AccountSummaryGroup> : (
         <Text style={{ color: p.textSecondary, paddingHorizontal: 4, paddingBottom: 10 }}>この家計グループに表示する口座がありません</Text>
@@ -313,6 +307,16 @@ function WalletAccounts({ accounts, balances, bankAccounts, onOpen }: {
           </Text>
         </Pressable>
       ) : null}
+    </View>
+  );
+}
+
+export function HomeSection({ children, divided }: { children: ReactNode; divided: boolean }) {
+  const p = usePalette();
+  if (!divided) return children;
+  return (
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline + '65', paddingTop: 11, gap: 10 }}>
+      {children}
     </View>
   );
 }
