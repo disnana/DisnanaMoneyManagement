@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View, type PressableProps } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
@@ -19,8 +19,9 @@ import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { PlanningProgress, PlanningSummary } from '@/ui/PlanningSummary';
+import { SavingsGoals } from '@/ui/SavingsGoals';
 
-type Section = 'budget' | 'purchase';
+type Section = 'budget' | 'savings' | 'purchase';
 type PlanningData = Pick<ReturnType<typeof useFinance>, 'visibleState' | 'month'>;
 function useMonthlySpending({ visibleState, month }: PlanningData) {
   return useMemo(() => new Map(computeMonthMetrics(visibleState, month).categoryBreakdown.map(({ categoryId, amount }) => [
@@ -239,7 +240,8 @@ function PurchaseAction({ label, color, primary, onPress }: { label: string; col
 
 export default function Planning() {
   const { month, setMonth, activeLedger } = useFinance();
-  const [section, setSection] = useState<Section>('budget');
+  const { section: initialSection } = useLocalSearchParams<{ section?: string }>();
+  const [section, setSection] = useState<Section>(initialSection === 'savings' ? 'savings' : 'budget');
   const key = activeLedger?.id ?? 'all';
 
   return (
@@ -248,10 +250,11 @@ export default function Planning() {
       <Screen automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         <LedgerPicker />
         <Segmented<Section> value={section} onChange={setSection} options={[
-          { id: 'budget', label: '予算' }, { id: 'purchase', label: '買い物試算' },
+          { id: 'budget', label: '予算' }, { id: 'savings', label: '貯金' }, { id: 'purchase', label: '買い物試算' },
         ]} />
-        <MonthBar month={month} onChange={setMonth} />
+        {section !== 'savings' ? <MonthBar month={month} onChange={setMonth} /> : null}
         {section === 'budget' ? <Budgets key={key} /> : null}
+        {section === 'savings' ? <SavingsGoals key={key} /> : null}
         {section === 'purchase' ? <Purchases key={`${key}-${month}`} /> : null}
       </Screen>
     </>

@@ -5,38 +5,29 @@ import { planSavings } from '@dmm/core/utils/planning';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { CardHeader, CardSurface } from '@/ui/CardSurface';
-import { IconBadge, Row, Screen, SectionTitle } from '@/ui/kit';
-import { LedgerPill } from '@/ui/LedgerPill';
-import { PlanningProgress } from '@/ui/PlanningSummary';
+import { IconBadge, Row, SectionTitle } from '@/ui/kit';
+import { PlanningProgress, PlanningSummary } from '@/ui/PlanningSummary';
 
-export default function Savings() {
+export function SavingsGoals() {
   const p = usePalette();
   const { state, activeLedger } = useFinance();
   const goals = state.savingsGoals.filter((goal) => !activeLedger || goal.ledgerId === activeLedger.id);
   const saved = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
   const achieved = goals.filter((goal) => goal.currentAmount >= goal.targetAmount).length;
   const today = getTodayString();
-  const add = () => router.push({ pathname: '/savings/[id]', params: { id: 'new' } });
+  const add = () => router.push({ pathname: '/planning/savings-editor', params: { id: 'new' } });
 
   return (
-    <Screen>
-      <CardSurface style={{ padding: 16, gap: 6, backgroundColor: p.card }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text accessibilityRole="header" style={{ color: p.text, fontSize: 15, fontWeight: '700', flexShrink: 1 }}>貯めた金額</Text>
-          <LedgerPill />
-        </View>
-        <Text numberOfLines={1} adjustsFontSizeToFit
-          style={{ color: p.income, fontSize: 34, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{formatJPY(saved)}</Text>
-        <Text style={{ color: p.textSecondary, fontSize: 13 }}>達成 {achieved} / {goals.length} 件</Text>
-      </CardSurface>
-
+    <>
+      <PlanningSummary label="貯めた金額" value={formatJPY(saved)} color={p.income}
+        detail={`達成 ${achieved} / ${goals.length} 件`} />
       <SectionTitle action={goals.length ? '目標を追加' : undefined} onAction={add}>貯金目標</SectionTitle>
       {goals.length === 0 ? (
         <CardSurface><Row title="貯金目標を追加" subtitle="目標額を決めて、積立を記録"
           icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={add} /></CardSurface>
       ) : goals.map((goal) => {
         const plan = planSavings(goal, today);
-        const open = (mode: 'edit' | 'deposit') => router.push({ pathname: '/savings/[id]', params: { id: goal.id, mode } });
+        const open = (mode: 'edit' | 'deposit') => router.push({ pathname: '/planning/savings-editor', params: { id: goal.id, mode } });
         return (
           <CardSurface key={goal.id}>
             <CardHeader style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 8 }}>
@@ -82,6 +73,6 @@ export default function Savings() {
           </CardSurface>
         );
       })}
-    </Screen>
+    </>
   );
 }

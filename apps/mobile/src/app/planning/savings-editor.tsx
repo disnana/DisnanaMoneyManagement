@@ -29,7 +29,7 @@ export default function SavingsGoalEditor() {
   const valid = depositing
     ? Boolean(goal && Number(amount) > 0 && Number.isSafeInteger(goal.currentAmount + Number(amount)))
     : Boolean(title.trim()) && Number(target) > 0 && validDate;
-  const close = () => router.canGoBack() ? router.back() : router.replace('/savings');
+  const close = () => router.canGoBack() ? router.back() : router.replace({ pathname: '/planning', params: { section: 'savings' } });
   const save = () => {
     if (!valid || closing.current) return;
     closing.current = true;

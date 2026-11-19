@@ -11,7 +11,7 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { AddButton } from '@/ui/AddButton';
 
-type Tab = 'home' | 'transactions' | 'analytics' | 'accounts' | 'savings';
+type Tab = 'home' | 'transactions' | 'analytics' | 'accounts';
 
 function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: ComponentProps<typeof Pressable> & Pick<TabTriggerSlotProps, 'href' | 'isFocused'> & {
   label: string;
@@ -73,7 +73,6 @@ export default function TabsLayout() {
           <AddButton />
           {tab('analytics', '分析', { ios: 'chart.pie', android: 'pie_chart' })}
           {tab('accounts', '口座', { ios: 'wallet.pass', android: 'account_balance_wallet' })}
-          {tab('savings', '貯金', { ios: 'banknote', android: 'savings' })}
         </SafeAreaView>
       </TabList>
     </Tabs>
