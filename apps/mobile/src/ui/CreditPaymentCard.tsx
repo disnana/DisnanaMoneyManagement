@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { getCycleRangeLabel, getPaymentWarning, type CreditCardStatementSummary } from '@dmm/core/utils/creditCard';
 import { formatDayLabel, formatJPY, formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { usePalette } from '@/lib/theme';
+import { CardHeader } from './CardSurface';
 
 export function CreditPaymentCard({ statement, onRecord }: {
   statement: CreditCardStatementSummary;
@@ -12,8 +13,7 @@ export function CreditPaymentCard({ statement, onRecord }: {
   const warning = getPaymentWarning(statement, getTodayString());
 
   return (
-    <View style={{ padding: 16, gap: 10, backgroundColor: p.sectionHeader,
-      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.outline }}>
+    <CardHeader style={{ padding: 16, gap: 10 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <Text style={{ color: p.text, flexShrink: 1, fontSize: 14, fontWeight: '700' }}>
           {formatMonthLabel(currentMonthKey)}の支払残額
@@ -43,6 +43,6 @@ export function CreditPaymentCard({ statement, onRecord }: {
           <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700' }}>選択月分の支払いを記録</Text>
         </Pressable>
       ) : null}
-    </View>
+    </CardHeader>
   );
 }

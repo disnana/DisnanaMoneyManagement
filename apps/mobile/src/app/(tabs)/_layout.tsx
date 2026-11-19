@@ -5,15 +5,18 @@ import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTimin
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Screen as NativeScreen } from 'react-native-screens';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import { tick } from '@/lib/haptics';
+import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { AddButton } from '@/ui/AddButton';
 
-type Tab = 'home' | 'transactions' | 'analytics' | 'accounts';
+type Tab = 'home' | 'transactions' | 'analytics' | 'accounts' | 'savings';
 
-function TabButton({ label, icon, isFocused, ...props }: ComponentProps<typeof Pressable> & Pick<TabTriggerSlotProps, 'href' | 'isFocused'> & {
+function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: ComponentProps<typeof Pressable> & Pick<TabTriggerSlotProps, 'href' | 'isFocused'> & {
   label: string;
   icon: SymbolViewProps['name'];
+  onSwitch: () => void;
 }) {
   const p = usePalette();
   const emphasis = useSharedValue(0);
@@ -26,6 +29,10 @@ function TabButton({ label, icon, isFocused, ...props }: ComponentProps<typeof P
   const color = isFocused ? p.tint : p.textSecondary;
   return (
     <Pressable {...props} accessibilityRole="tab" accessibilityState={{ selected: !!isFocused }} accessibilityLabel={label}
+      onPress={(event) => {
+        if (!isFocused && !event.isDefaultPrevented()) onSwitch();
+        onPress?.(event);
+      }}
       onPressIn={() => {
         emphasis.value = withTiming(1, { duration: 65 });
         tick();
@@ -42,9 +49,10 @@ function TabButton({ label, icon, isFocused, ...props }: ComponentProps<typeof P
 
 export default function TabsLayout() {
   const p = usePalette();
+  const { setMonth } = useFinance();
   const tab = (name: Tab, label: string, icon: SymbolViewProps['name']) => (
     <TabTrigger name={name} href={`/${name}`} resetOnFocus asChild>
-      <TabButton label={label} icon={icon} />
+      <TabButton label={label} icon={icon} onSwitch={() => setMonth(getCurrentMonthKey())} />
     </TabTrigger>
   );
 
@@ -65,6 +73,7 @@ export default function TabsLayout() {
           <AddButton />
           {tab('analytics', '分析', { ios: 'chart.pie', android: 'pie_chart' })}
           {tab('accounts', '口座', { ios: 'wallet.pass', android: 'account_balance_wallet' })}
+          {tab('savings', '貯金', { ios: 'banknote', android: 'savings' })}
         </SafeAreaView>
       </TabList>
     </Tabs>

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { usePalette } from '@/lib/theme';
-import { Group } from '@/ui/kit';
+import { CardSurface } from './CardSurface';
 
 export function PlanningSummary({ label, value, color, detail, children }: {
   label: string;
@@ -12,15 +12,15 @@ export function PlanningSummary({ label, value, color, detail, children }: {
 }) {
   const p = usePalette();
   return (
-    <Group>
+    <CardSurface>
       <View style={{ padding: 16, gap: 8 }}>
-        <Text style={{ color: p.textSecondary, fontSize: 13, fontWeight: '600' }}>{label}</Text>
+        <Text accessibilityRole="header" style={{ color: p.text, fontSize: 13, fontWeight: '600' }}>{label}</Text>
         <Text numberOfLines={1} adjustsFontSizeToFit
           style={{ color: color ?? p.text, fontSize: 30, fontWeight: '800', fontVariant: ['tabular-nums'] }}>{value}</Text>
         {detail ? <Text style={{ color: p.textSecondary, fontSize: 13 }}>{detail}</Text> : null}
         {children}
       </View>
-    </Group>
+    </CardSurface>
   );
 }
 

@@ -2,16 +2,16 @@ import { StyleSheet, Text, View } from 'react-native';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { LedgerPill } from '@/ui/LedgerPill';
 import { MonthBar } from '@/ui/kit';
+import { CardHeader, CardSurface } from './CardSurface';
 
 export function HeroCard({ assets }: { assets: number }) {
   const p = usePalette();
 
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
-      borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, overflow: 'hidden' }}>
+    <CardSurface>
       <View style={{ backgroundColor: `${p.tint}0A`, paddingHorizontal: 18, paddingVertical: 14, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text accessibilityRole="header" style={{ color: p.text, flexShrink: 1, fontSize: 15, fontWeight: '700' }}>現在の総資産</Text>
@@ -22,7 +22,7 @@ export function HeroCard({ assets }: { assets: number }) {
           {formatJPY(assets)}
         </Text>
       </View>
-    </View>
+    </CardSurface>
   );
 }
 
@@ -37,11 +37,10 @@ export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; 
   ];
 
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
-      borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, overflow: 'hidden' }}>
-      <View style={{ backgroundColor: p.sectionHeader, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.outline }}>
+    <CardSurface>
+      <CardHeader>
         <MonthBar month={month} onChange={setMonth} />
-      </View>
+      </CardHeader>
       <View style={{ flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 11 }}>
         {stats.map(({ label, amount, color }, index) => (
           <View key={label} style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4, gap: 3,
@@ -54,6 +53,6 @@ export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; 
           </View>
         ))}
       </View>
-    </View>
+    </CardSurface>
   );
 }

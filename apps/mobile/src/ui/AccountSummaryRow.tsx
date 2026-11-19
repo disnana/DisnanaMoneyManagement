@@ -5,8 +5,9 @@ import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import type { Account } from '@dmm/core/types/finance';
 import { formatJPY } from '@dmm/core/utils/format';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
 import { IconBadge } from './kit';
+import { CardSurface } from './CardSurface';
 
 export function isPaymentCard(account: Account) {
   return account.type === 'credit' || account.type === 'debit';
@@ -62,14 +63,13 @@ export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting 
 export function AccountSummaryGroup({ children }: { children: ReactNode }) {
   const p = usePalette();
   return (
-    <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
-      borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, overflow: 'hidden' }}>
+    <CardSurface>
       {Children.toArray(children).map((child, index) => (
         <View key={index}>
           {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.outline, marginHorizontal: 12 }} /> : null}
           {child}
         </View>
       ))}
-    </View>
+    </CardSurface>
   );
 }

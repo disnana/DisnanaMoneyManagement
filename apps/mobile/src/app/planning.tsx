@@ -3,33 +3,25 @@ import { Pressable, Text, View, type PressableProps } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
-import type { SavingsGoal } from '@dmm/core/types/finance';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { filterLedger } from '@dmm/core/utils/ledgers';
-import { assessPurchase, isPlanningDate, planSavings } from '@dmm/core/utils/planning';
+import { assessPurchase } from '@dmm/core/utils/planning';
 import { buildPurchaseTransaction, groupPurchases, markPurchased, PRIORITY_LABELS, revertToCandidate } from '@dmm/core/utils/purchasePlan';
 import { success } from '@/lib/haptics';
 import { BudgetPie } from '@/ui/PurchaseInsights';
-import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { Group, IconBadge, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
-import { PlanningInput as Input, PlanningActions as Actions } from '@/ui/PlanningForm';
 import { formatPurchaseBudget } from '@/ui/PurchaseCashPreview';
 import { AnchoredDeleteDialog } from '@/ui/AnchoredDeleteDialog';
 import type { PopoverAnchor } from '@/ui/AnchoredPopover';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { PlanningProgress, PlanningSummary } from '@/ui/PlanningSummary';
 
-type Section = 'budget' | 'savings' | 'purchase';
+type Section = 'budget' | 'purchase';
 type PlanningData = Pick<ReturnType<typeof useFinance>, 'visibleState' | 'month'>;
-async function confirmRemoval(title: string, onRemove: () => void) {
-  const choice = await pickOne(title, [{ id: 'remove', label: '削除', destructive: true }]);
-  if (choice === 'remove') onRemove();
-}
-
 function useMonthlySpending({ visibleState, month }: PlanningData) {
   return useMemo(() => new Map(computeMonthMetrics(visibleState, month).categoryBreakdown.map(({ categoryId, amount }) => [
     categoryId, amount,
@@ -101,114 +93,6 @@ function Budgets() {
           );
         })}
       </Group>
-    </>
-  );
-}
-
-function Savings() {
-  const { state, activeLedger, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal, contributeToGoal } = useFinance();
-  const p = usePalette();
-  const ledgerId = activeLedger?.id;
-  const goals = state.savingsGoals.filter((goal) => !ledgerId || goal.ledgerId === ledgerId);
-  const [editor, setEditor] = useState<'new' | SavingsGoal>();
-  const [deposit, setDeposit] = useState<SavingsGoal>();
-  const [title, setTitle] = useState('');
-  const [target, setTarget] = useState('');
-  const [date, setDate] = useState('');
-  const [monthly, setMonthly] = useState('');
-  const [amount, setAmount] = useState('');
-  const edit = (goal: 'new' | SavingsGoal) => {
-    setEditor(goal);
-    setDeposit(undefined);
-    setTitle(goal === 'new' ? '' : goal.title);
-    setTarget(goal === 'new' ? '' : String(goal.targetAmount));
-    setDate(goal === 'new' ? '' : goal.targetDate ?? '');
-    setMonthly(goal === 'new' || !goal.monthlyContribution ? '' : String(goal.monthlyContribution));
-  };
-  const validDate = !date || isPlanningDate(date);
-  const saved = goals.reduce((sum, goal) => sum + goal.currentAmount, 0);
-  const achieved = goals.filter((goal) => goal.currentAmount >= goal.targetAmount).length;
-
-  return (
-    <>
-      {goals.length > 0 ? <PlanningSummary label="貯めた金額" value={formatJPY(saved)} color={p.income}
-        detail={`達成 ${achieved} / ${goals.length} 件`} /> : null}
-      <SectionTitle action={goals.length ? '追加' : undefined} onAction={() => edit('new')}>貯金目標</SectionTitle>
-      {editor ? (
-        <>
-          <Group>
-            <Row title={editor === 'new' ? '貯金目標を追加' : '貯金目標を編集'} />
-            <Input label="目標名" value={title} onChange={setTitle} />
-            <Input label="目標額（円）" value={target} onChange={setTarget} yen />
-            <Input label="目標日（任意・YYYY-MM-DD）" value={date} onChange={setDate} />
-            <Input label="毎月の積立予定（円・任意）" value={monthly} onChange={setMonthly} yen />
-          </Group>
-          {!validDate ? <Text style={{ color: p.danger }}>目標日は YYYY-MM-DD 形式で入力してください。</Text> : null}
-          <Actions close={() => setEditor(undefined)} valid={Boolean(title.trim()) && Number(target) > 0 && validDate} save={() => {
-            const details = { title: title.trim(), targetAmount: Number(target), targetDate: date || undefined,
-              monthlyContribution: Number(monthly) || undefined };
-            if (editor === 'new') addSavingsGoal({ ...details, currentAmount: 0, ledgerId });
-            else updateSavingsGoal(editor.id, details);
-            setEditor(undefined);
-          }} />
-        </>
-      ) : null}
-      {deposit ? (
-        <>
-          <Group><Input label={`${deposit.title}への積立額（円）`} value={amount} onChange={setAmount} yen /></Group>
-          <Actions label="積立を記録" close={() => setDeposit(undefined)} valid={Number(amount) > 0} save={() => {
-            contributeToGoal(deposit.id, Number(amount));
-            setDeposit(undefined);
-          }} />
-        </>
-      ) : null}
-      {goals.map((goal) => {
-        const plan = planSavings(goal, getTodayString());
-        return (
-          <Group key={goal.id}>
-            <Row title={goal.title} subtitle={goal.targetDate ? `目標日 ${formatFullDate(goal.targetDate)}` : undefined}
-              chevron
-              onPress={() => edit(goal)} onLongPress={() => void confirmRemoval('貯金目標を削除しますか？', () => {
-                deleteSavingsGoal(goal.id);
-                if (editor && editor !== 'new' && editor.id === goal.id) setEditor(undefined);
-                if (deposit?.id === goal.id) setDeposit(undefined);
-              })} />
-            <View style={{ padding: 14, gap: 9 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                <Text style={{ color: p.income, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-                  {formatJPY(goal.currentAmount)}
-                </Text>
-                <Text style={{ color: p.textSecondary, fontSize: 13 }}>目標 {formatJPY(goal.targetAmount)}</Text>
-              </View>
-              <PlanningProgress amount={goal.currentAmount} total={goal.targetAmount} color={p.tint} label={`${goal.title}の達成率`} />
-              <Text style={{ color: plan.overdue ? p.danger : p.text, fontSize: 13, fontWeight: '600' }}>
-                {plan.remaining ? `残り ${formatJPY(plan.remaining)}` : '目標達成'}
-                {plan.overdue ? ' · 目標日を経過' : ''}
-              </Text>
-              {plan.monthlyRequired !== undefined && plan.remaining > 0 ? (
-                <Text style={{ color: plan.monthlyShortfall ? p.danger : p.textSecondary }}>
-                  目標日まで月 {formatJPY(plan.monthlyRequired)}
-                  {plan.monthlyShortfall && goal.monthlyContribution ? ` · 積立予定より月 ${formatJPY(plan.monthlyShortfall)} 不足` : ''}
-                </Text>
-              ) : null}
-              {goal.monthlyContribution && plan.remaining > 0 ? (
-                <Text style={{ color: p.textSecondary }}>
-                  毎月 {formatJPY(goal.monthlyContribution)} の予定 · あと {plan.monthsToGoal} か月
-                </Text>
-              ) : null}
-            </View>
-            <Row title="積立を記録" chevron onPress={() => {
-              setEditor(undefined);
-              setDeposit(goal);
-              setAmount(goal.monthlyContribution ? String(goal.monthlyContribution) : '');
-            }} />
-          </Group>
-        );
-      })}
-      {goals.length === 0 && !editor ? (
-        <Group><Row title="貯金目標を追加" subtitle="目標額を決めて、積立を記録"
-          icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => edit('new')} /></Group>
-      ) : null}
     </>
   );
 }
@@ -364,11 +248,10 @@ export default function Planning() {
       <Screen automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         <LedgerPicker />
         <Segmented<Section> value={section} onChange={setSection} options={[
-          { id: 'budget', label: '予算' }, { id: 'savings', label: '貯金' }, { id: 'purchase', label: '買い物試算' },
+          { id: 'budget', label: '予算' }, { id: 'purchase', label: '買い物試算' },
         ]} />
-        {section !== 'savings' ? <MonthBar month={month} onChange={setMonth} /> : null}
+        <MonthBar month={month} onChange={setMonth} />
         {section === 'budget' ? <Budgets key={key} /> : null}
-        {section === 'savings' ? <Savings key={key} /> : null}
         {section === 'purchase' ? <Purchases key={`${key}-${month}`} /> : null}
       </Screen>
     </>
