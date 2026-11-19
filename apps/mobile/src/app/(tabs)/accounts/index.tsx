@@ -99,7 +99,7 @@ export default function Accounts() {
               <Pressable accessibilityRole="button" onPress={() => {
                 tick();
                 setDraft({ accounts: accounts.map((account) => account.id), cards: cards.map((account) => account.id) });
-              }} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 }}>
+              }} style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 8 }}>
                 <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>並べ替え</Text>
               </Pressable>
             ) : null}

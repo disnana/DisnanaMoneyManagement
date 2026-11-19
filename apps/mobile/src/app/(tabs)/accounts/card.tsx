@@ -106,7 +106,7 @@ export default function CardSettings() {
         ) : (
           <>
             {!card ? (
-              <Segmented<CardType> prominent
+              <Segmented<CardType> prominent minHeight={48}
                 value={type}
                 onChange={setType}
                 options={[{ id: 'credit', label: 'クレジット' }, { id: 'debit', label: 'デビット' }]}

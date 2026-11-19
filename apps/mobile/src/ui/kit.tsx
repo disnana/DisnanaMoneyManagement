@@ -110,6 +110,7 @@ export function Row({
   const p = usePalette();
   return (
     <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
       onPress={onPress}
       onLongPress={onLongPress}
       android_ripple={{ color: p.fill }}
@@ -151,11 +152,13 @@ export function Segmented<T extends string>({
   options,
   onChange,
   prominent = false,
+  minHeight = 36,
 }: {
   value: T;
   options: { id: T; label: string }[];
   onChange: (v: T) => void;
   prominent?: boolean;
+  minHeight?: number;
 }) {
   const p = usePalette();
   const dark = useColorScheme() === 'dark';
@@ -178,7 +181,7 @@ export function Segmented<T extends string>({
               }}
               style={{
                 flex: 1,
-                minHeight: 36,
+                minHeight,
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: metrics.controlRadius,

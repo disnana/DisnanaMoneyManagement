@@ -54,8 +54,8 @@ export function CreditPaymentCard({ statement, onChangeMonth, onRecord }: {
           {thisMonthRemaining > 0 ? (
             <Pressable accessibilityRole="button" onPress={onRecord}
               style={({ pressed }) => ({
-                minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
-                backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
+                minHeight: 48, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10,
+                backgroundColor: p.tint, transform: [{ scale: pressed ? 0.98 : 1 }],
               })}>
               <Text style={{ color: p.onTint, fontSize: 14, fontWeight: '700', textAlign: 'center' }}>支払いを記録</Text>
             </Pressable>
