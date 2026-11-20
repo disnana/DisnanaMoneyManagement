@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type NativeStackNavigationOptions } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -18,6 +18,11 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const p = usePalette();
   const reduceMotion = useAppReducedMotion();
+  const settingsTransition = androidSettingsTransition(reduceMotion);
+  const detailOptions: NativeStackNavigationOptions = {
+    headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
+    headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
+  };
   const navigationTheme = useMemo(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
     return Platform.OS === 'android'
@@ -37,22 +42,15 @@ export default function RootLayout() {
     <ThemeProvider value={navigationTheme}>
       <FinanceProvider>
         <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="settings" options={androidSettingsTransition(reduceMotion)} />
-          {(['categories', 'category-editor', 'category-detail', 'planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm'] as const).map((name) => (
-            <Stack.Screen key={name} name={name} options={{
-              headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
-              headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
-            }} />
+          {/* Back from a direct settings link replaces the route with /accounts. */}
+          <Stack.Screen name="(tabs)" options={Platform.OS === 'android' ? { animationTypeForReplace: 'pop' } : undefined} />
+          <Stack.Screen name="settings" options={settingsTransition} />
+          {(['categories', 'category-editor', 'category-detail'] as const).map((name) => (
+            <Stack.Screen key={name} name={name} options={{ ...detailOptions, ...settingsTransition }} />
           ))}
-          <Stack.Screen name="planning" options={{
-            headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
-            headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
-          }} />
-          <Stack.Screen name="search" options={{
-            headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
-            headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
-          }} />
+          {(['planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm', 'planning', 'search'] as const).map((name) => (
+            <Stack.Screen key={name} name={name} options={detailOptions} />
+          ))}
           <Stack.Screen
             name="add"
             options={{
