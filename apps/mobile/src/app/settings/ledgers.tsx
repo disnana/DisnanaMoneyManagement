@@ -7,6 +7,7 @@ import type { Ledger } from '@dmm/core/types/finance';
 import { LEDGER_COLORS, LEDGER_ICONS, ledgerColor, ledgerIcon, ledgerOptions } from '@/lib/ledgerAppearance';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
+import { useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { getOrderedLedgers } from '@dmm/core/utils/ledgers';
 import { usePalette } from '@/lib/theme';
 import { DeleteDialog } from '@/ui/DeleteDialog';
@@ -22,6 +23,7 @@ const LEDGER_KINDS: { id: Ledger['kind']; label: string }[] = [
 const COLOR_ICON = { ios: 'circle.fill', android: 'circle' } as const;
 
 export default function Ledgers() {
+  const submit = useFinanceSubmit('stay');
   const p = usePalette();
   const { state, activeLedger, setActiveLedgerId, addLedger, updateLedger, deleteLedger } = useFinance();
   const ledgers = getOrderedLedgers(state);
@@ -37,8 +39,10 @@ export default function Ledgers() {
   const openRow = useRef<string | null>(null);
   const canDelete = ledgers.length > 1;
   const isEditing = Boolean(editing || creating);
+  const editorVersion = useRef(0);
 
   const reset = () => {
+    editorVersion.current++;
     setEditing(undefined);
     setCreating(false);
     setName('');
@@ -49,6 +53,7 @@ export default function Ledgers() {
   };
 
   const displayEditor = (ledger?: Ledger) => {
+    editorVersion.current++;
     if (openRow.current) swipeRows.current.get(openRow.current)?.close();
     setEditing(ledger);
     setCreating(!ledger);
@@ -59,15 +64,15 @@ export default function Ledgers() {
     setError('');
   };
 
-  const save = () => {
+  const save = async () => {
     const trimmed = name.trim();
     if (!trimmed || trimmed === 'すべて' || ledgers.some((ledger) => ledger.id !== editing?.id && ledger.name === trimmed)) {
       setError('他のグループと重複しない名前を入力してください');
       return;
     }
-    if (editing) updateLedger(editing.id, { name: trimmed, icon, color });
-    else addLedger(trimmed, kind, { icon, color });
-    reset();
+    const version = editorVersion.current;
+    const saved = await submit(() => editing ? updateLedger(editing.id, { name: trimmed, icon, color }) : addLedger(trimmed, kind, { icon, color }));
+    if (saved && version === editorVersion.current) reset();
   };
 
   const remove = async (ledger: Ledger) => {
@@ -170,13 +175,14 @@ export default function Ledgers() {
       </Screen>
       <DeleteDialog visible={Boolean(deletion)} heading="家計グループを削除しますか？" title={deletion?.ledger.name}
         description={deletion ? `口座と記録は「${ledgers.find((ledger) => ledger.id === deletion.destination)?.name ?? ''}」に移動します。` : undefined}
-        onCancel={() => setDeletion(undefined)} onDelete={() => {
+        onCancel={() => setDeletion(undefined)} onDelete={async () => {
           if (!deletion) return;
           const { ledger, destination } = deletion;
+          const version = editorVersion.current;
+          if (!await submit(() => deleteLedger(ledger.id, destination))) return;
           setDeletion(undefined);
-          deleteLedger(ledger.id, destination);
           if (activeLedger?.id === ledger.id) setActiveLedgerId(destination);
-          if (editing?.id === ledger.id) reset();
+          if (editing?.id === ledger.id && version === editorVersion.current) reset();
         }} />
     </>
   );

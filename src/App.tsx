@@ -44,6 +44,7 @@ import {
 import { DataModal } from './components/DataModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { Toast } from './components/Toast';
+import { WriteErrorDialog } from './components/WriteErrorDialog';
 
 const IS_IOS =
   typeof navigator !== 'undefined' &&
@@ -131,20 +132,6 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryS
               >
                 再読み込みする
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    localStorage.removeItem('kakeibo_finance_state_v3');
-                  } catch {
-                    // ignore
-                  }
-                  window.location.reload();
-                }}
-                className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                初期データに戻して再読み込み
-              </button>
             </div>
           </div>
         </div>
@@ -179,6 +166,8 @@ export default function App() {
     importState,
     resetToSampleData,
     clearAllData,
+    writeError,
+    dismissWriteError,
   } = useFinanceStore();
 
   useViewportVars();
@@ -302,12 +291,12 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== 'n') return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
-      if (document.querySelector('[role="dialog"]')) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       e.preventDefault();
       setEditingTx(null);
       setTxPrefill({ type: 'expense' });
@@ -329,33 +318,27 @@ export default function App() {
     setTxModalOpen(true);
   };
 
-  const handleSaveTransaction = (
-    payload: Omit<Transaction, 'id'>,
-    existingId?: string
-  ) => {
-    if (existingId) {
-      updateTransaction(existingId, payload);
-      showToast(`「${payload.title}」を更新しました`);
-    } else {
-      addTransaction(payload);
-      showToast(`「${payload.title}」を記録しました`);
-    }
+  const notifySaved = async (write: Promise<boolean>, message: string) => {
+    setToastMessage(null);
+    const saved = await write;
+    if (saved) showToast(message);
+    return saved;
   };
 
-  const handleSaveTransactionBatch = (
-    txs: Omit<Transaction, 'id'>[],
-    summaryTitle: string
-  ) => {
-    addTransactionsBatch(txs);
-    showToast(`「${summaryTitle}」を${txs.length}件まとめて記帳しました`);
-  };
+  const handleSaveTransaction = (payload: Omit<Transaction, 'id'>, existingId?: string) =>
+    existingId
+      ? notifySaved(updateTransaction(existingId, payload), `「${payload.title}」を更新しました`)
+      : notifySaved(addTransaction(payload), `「${payload.title}」を記録しました`);
+
+  const handleSaveTransactionBatch = (txs: Omit<Transaction, 'id'>[], summaryTitle: string) =>
+    notifySaved(addTransactionsBatch(txs), `「${summaryTitle}」を${txs.length}件まとめて記帳しました`);
 
   const handleMainTouchStart = (e: TouchEvent<HTMLElement>) => {
     if (isDesktop || txModalOpen || dataModalOpen || e.touches.length !== 1) {
       tabSwipeRef.current = null;
       return;
     }
-    if (document.querySelector('[role="dialog"]')) {
+    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) {
       tabSwipeRef.current = null;
       return;
     }
@@ -394,7 +377,7 @@ export default function App() {
     if (!stateRef || stateRef.locked !== 'h' || e.changedTouches.length !== 1) {
       return;
     }
-    if (document.querySelector('[role="dialog"]')) return;
+    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
 
     const touch = e.changedTouches[0];
     const dx = touch.clientX - stateRef.startX;
@@ -443,14 +426,8 @@ export default function App() {
           accountNameMap={accountNameMap}
           selectedMonth={selectedMonth}
           onEditTransaction={openEditTransaction}
-          onDeleteTransaction={(id) => {
-            deleteTransaction(id);
-            showToast('取引を削除しました');
-          }}
-          onDeleteSettlementGroup={(groupId) => {
-            deleteSettlementGroup(groupId);
-            showToast('連動する外貨・Stripe決済セットを削除しました');
-          }}
+          onDeleteTransaction={(id) => notifySaved(deleteTransaction(id), '取引を削除しました')}
+          onDeleteSettlementGroup={(groupId) => notifySaved(deleteSettlementGroup(groupId), '連動する外貨・Stripe決済セットを削除しました')}
           onOpenAddTransaction={() => openAddTransaction({ type: 'expense' })}
         />
       )}
@@ -461,14 +438,8 @@ export default function App() {
           transactions={state.transactions}
           selectedMonth={selectedMonth}
           onChangeMonth={setSelectedMonth}
-          onUpsertBudget={(b) => {
-            upsertBudget(b);
-            showToast('予算を保存しました');
-          }}
-          onRemoveBudget={(catId) => {
-            removeBudget(catId);
-            showToast('予算設定を削除しました');
-          }}
+          onUpsertBudget={(b) => notifySaved(upsertBudget(b), '予算を保存しました')}
+          onRemoveBudget={(catId) => notifySaved(removeBudget(catId), '予算設定を削除しました')}
         />
       )}
 
@@ -479,18 +450,9 @@ export default function App() {
           accountBalances={accountBalances}
           totalAssets={totalAssets}
           selectedMonth={selectedMonth}
-          onAddAccount={(acc) => {
-            addAccount(acc);
-            showToast(`「${acc.name}」を追加しました`);
-          }}
-          onUpdateAccount={(id, patch) => {
-            updateAccount(id, patch);
-            showToast('口座・カード情報を更新しました');
-          }}
-          onDeleteAccount={(id) => {
-            deleteAccount(id);
-            showToast('口座・カードを削除しました');
-          }}
+          onAddAccount={(acc) => notifySaved(addAccount(acc), `「${acc.name}」を追加しました`)}
+          onUpdateAccount={(id, patch) => notifySaved(updateAccount(id, patch), '口座・カード情報を更新しました')}
+          onDeleteAccount={(id) => notifySaved(deleteAccount(id), '口座・カードを削除しました')}
           onOpenPrefilledTransaction={openAddTransaction}
         />
       )}
@@ -504,30 +466,12 @@ export default function App() {
           accountNameMap={accountNameMap}
           selectedMonth={selectedMonth}
           onChangeMonth={setSelectedMonth}
-          onAddRecurring={(item) => {
-            addRecurringItem(item);
-            showToast(`定期項目「${item.title}」を追加しました`);
-          }}
-          onDeleteRecurring={(id) => {
-            deleteRecurringItem(id);
-            showToast('定期項目を削除しました');
-          }}
-          onRecordRecurring={(item, monthKey) => {
-            recordRecurringForMonth(item, monthKey);
-            showToast(`「${item.title}」を記帳しました`);
-          }}
-          onAddGoal={(goal) => {
-            addSavingsGoal(goal);
-            showToast(`貯蓄目標「${goal.title}」を追加しました`);
-          }}
-          onContributeGoal={(id, delta) => {
-            contributeToGoal(id, delta);
-            showToast('貯蓄目標を更新しました');
-          }}
-          onDeleteGoal={(id) => {
-            deleteSavingsGoal(id);
-            showToast('貯蓄目標を削除しました');
-          }}
+          onAddRecurring={(item) => notifySaved(addRecurringItem(item), `定期項目「${item.title}」を追加しました`)}
+          onDeleteRecurring={(id) => notifySaved(deleteRecurringItem(id), '定期項目を削除しました')}
+          onRecordRecurring={(item, monthKey) => notifySaved(recordRecurringForMonth(item, monthKey), `「${item.title}」を記帳しました`)}
+          onAddGoal={(goal) => notifySaved(addSavingsGoal(goal), `貯蓄目標「${goal.title}」を追加しました`)}
+          onContributeGoal={(id, delta) => notifySaved(contributeToGoal(id, delta), '貯蓄目標を更新しました')}
+          onDeleteGoal={(id) => notifySaved(deleteSavingsGoal(id), '貯蓄目標を削除しました')}
         />
       )}
 
@@ -653,23 +597,15 @@ export default function App() {
             state={state}
             accountNameMap={accountNameMap}
             onClose={() => setDataModalOpen(false)}
-            onImportState={(next) => {
-              importState(next);
-              showToast('バックアップデータを復元しました');
-            }}
-            onResetToSample={() => {
-              resetToSampleData();
-              showToast('サンプルデータを再読み込みしました');
-            }}
-            onClearAll={() => {
-              clearAllData();
-              showToast('すべてのデータを消去しました');
-            }}
+            onImportState={(next) => notifySaved(importState(next), 'バックアップデータを復元しました')}
+            onResetToSample={() => notifySaved(resetToSampleData(), 'サンプルデータを再読み込みしました')}
+            onClearAll={() => notifySaved(clearAllData(), 'すべてのデータを消去しました')}
           />
 
           <KeyboardAccessory />
           <OfflineIndicator />
-          <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
+          {writeError && <WriteErrorDialog message={writeError} onDismiss={dismissWriteError} />}
+          <Toast message={writeError ? null : toastMessage} onDismiss={() => setToastMessage(null)} />
         </div>
       </MotionConfig>
     </AppErrorBoundary>

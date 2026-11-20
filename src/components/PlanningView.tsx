@@ -4,6 +4,7 @@ import { Account, RecurringItem, SavingsGoal, Transaction } from '../types/finan
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryById } from '../data/categories';
 import { formatFullDate, formatJPY, formatMonthLabel } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
+import { usePendingSave } from '../hooks/usePendingSave';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
 
@@ -15,12 +16,12 @@ interface PlanningViewProps {
   accountNameMap: Record<string, string>;
   selectedMonth: string;
   onChangeMonth: (monthKey: string) => void;
-  onAddRecurring: (item: Omit<RecurringItem, 'id'>) => void;
-  onDeleteRecurring: (id: string) => void;
-  onRecordRecurring: (item: RecurringItem, monthKey: string) => void;
-  onAddGoal: (goal: Omit<SavingsGoal, 'id'>) => void;
-  onContributeGoal: (id: string, delta: number) => void;
-  onDeleteGoal: (id: string) => void;
+  onAddRecurring: (item: Omit<RecurringItem, 'id'>) => Promise<boolean>;
+  onDeleteRecurring: (id: string) => Promise<boolean>;
+  onRecordRecurring: (item: RecurringItem, monthKey: string) => Promise<boolean>;
+  onAddGoal: (goal: Omit<SavingsGoal, 'id'>) => Promise<boolean>;
+  onContributeGoal: (id: string, delta: number) => Promise<boolean>;
+  onDeleteGoal: (id: string) => Promise<boolean>;
 }
 
 export const PlanningView: React.FC<PlanningViewProps> = ({
@@ -80,11 +81,16 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
     return { fixedIncome, fixedExpense, fixedNet: fixedIncome - fixedExpense };
   }, [recurringItems]);
 
-  const handleSaveRecurring = (e: React.FormEvent) => {
+  const recurringForm = usePendingSave(recModalOpen);
+  const goalForm = usePendingSave(goalModalOpen);
+  const contributionForm = usePendingSave(customContribGoal);
+  const quickSave = usePendingSave(selectedMonth);
+
+  const handleSaveRecurring = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(recAmount);
     if (!recTitle.trim() || !Number.isFinite(amount) || amount <= 0) return;
-    onAddRecurring({
+    const saved = await recurringForm.submit(() => onAddRecurring({
       title: recTitle.trim(),
       type: recType,
       amount: Math.round(amount),
@@ -92,24 +98,26 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
       accountId: recAccountId || accounts[0]?.id || '',
       dayOfMonth: Math.min(28, Math.max(1, Number(recDay) || 1)),
       isActive: true,
-    });
+    }));
+    if (!saved) return;
     setRecModalOpen(false);
     setRecTitle('');
     setRecAmount('');
   };
 
-  const handleSaveGoal = (e: React.FormEvent) => {
+  const handleSaveGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetAmount = Number(goalTarget);
     const currentAmount = Number(goalCurrent) || 0;
     if (!goalTitle.trim() || !Number.isFinite(targetAmount) || targetAmount <= 0) return;
-    onAddGoal({
+    const saved = await goalForm.submit(() => onAddGoal({
       title: goalTitle.trim(),
       targetAmount: Math.round(targetAmount),
       currentAmount: Math.max(0, Math.round(currentAmount)),
       targetDate: goalDate || undefined,
       note: goalNote.trim() || undefined,
-    });
+    }));
+    if (!saved) return;
     setGoalModalOpen(false);
     setGoalTitle('');
     setGoalTarget('');
@@ -118,13 +126,12 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
     setGoalNote('');
   };
 
-  const handleContribSubmit = (e: React.FormEvent) => {
+  const handleContribSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customContribGoal) return;
     const val = Number(contribAmount);
     if (!Number.isFinite(val) || val === 0) return;
-    onContributeGoal(customContribGoal.id, Math.round(val));
-    setCustomContribGoal(null);
+    if (await contributionForm.submit(() => onContributeGoal(customContribGoal.id, Math.round(val)))) setCustomContribGoal(null);
   };
 
   return (
@@ -247,7 +254,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => onRecordRecurring(item, selectedMonth)}
+                          onClick={() => void quickSave.submit(() => onRecordRecurring(item, selectedMonth))}
+                          disabled={quickSave.pending}
                           className="min-h-[44px] rounded-xl border border-teal-700 bg-teal-50 px-3.5 py-2 text-xs font-semibold text-teal-800 transition-all hover:bg-teal-100 active:scale-[0.98] whitespace-nowrap"
                         >
                           今月分を記帳
@@ -367,7 +375,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                     <button
                       type="button"
-                      onClick={() => onContributeGoal(goal.id, 10000)}
+                      onClick={() => void quickSave.submit(() => onContributeGoal(goal.id, 10000))}
+                      disabled={quickSave.pending}
                       className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs font-semibold text-slate-800 transition-all hover:bg-slate-100 active:scale-[0.98] tabular-nums whitespace-nowrap"
                     >
                       +¥10,000 積立
@@ -409,6 +418,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
             <button
               type="submit"
               form="rec-modal-form"
+              disabled={recurringForm.pending}
               className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
             >
               追加する
@@ -416,7 +426,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           </div>
         }
       >
-        <form id="rec-modal-form" onSubmit={handleSaveRecurring} className="space-y-4">
+        <form inert={recurringForm.pending} aria-busy={recurringForm.pending} id="rec-modal-form" onSubmit={handleSaveRecurring} className="space-y-4">
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
             <button
               type="button"
@@ -533,6 +543,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
             <button
               type="submit"
               form="goal-modal-form"
+              disabled={goalForm.pending}
               className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
             >
               追加する
@@ -540,7 +551,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           </div>
         }
       >
-        <form id="goal-modal-form" onSubmit={handleSaveGoal} className="space-y-4">
+        <form inert={goalForm.pending} aria-busy={goalForm.pending} id="goal-modal-form" onSubmit={handleSaveGoal} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-600">目標タイトル</label>
             <input
@@ -617,6 +628,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
             <button
               type="submit"
               form="contrib-modal-form"
+              disabled={contributionForm.pending}
               className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
             >
               更新する
@@ -624,7 +636,7 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
           </div>
         }
       >
-        <form id="contrib-modal-form" onSubmit={handleContribSubmit} className="space-y-4">
+        <form inert={contributionForm.pending} aria-busy={contributionForm.pending} id="contrib-modal-form" onSubmit={handleContribSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-slate-600">
               増減額 (円) — 引き出す場合はマイナスを入力
@@ -649,13 +661,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
         }
         confirmLabel="削除する"
         danger={true}
-        onConfirm={() => {
-          if (deletingRec) {
-            onDeleteRecurring(deletingRec.id);
-            setDeletingRec(null);
-          }
-        }}
-        onCancel={() => setDeletingRec(null)}
+        onConfirm={() => onDeleteRecurring(deletingRec!.id)}
+        onClose={() => setDeletingRec(null)}
       />
 
       <ConfirmDialog
@@ -666,13 +673,8 @@ export const PlanningView: React.FC<PlanningViewProps> = ({
         }
         confirmLabel="削除する"
         danger={true}
-        onConfirm={() => {
-          if (deletingGoal) {
-            onDeleteGoal(deletingGoal.id);
-            setDeletingGoal(null);
-          }
-        }}
-        onCancel={() => setDeletingGoal(null)}
+        onConfirm={() => onDeleteGoal(deletingGoal!.id)}
+        onClose={() => setDeletingGoal(null)}
       />
     </div>
   );

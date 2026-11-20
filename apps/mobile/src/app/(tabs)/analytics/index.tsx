@@ -4,7 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { getOrderedCategories } from '@dmm/core/data/categories';
-import { kv } from '@/lib/kv';
+import { readPreference, savePreference } from '@/lib/preferences';
 import { ReorderList, SortActions } from '@/ui/ReorderList';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
@@ -30,10 +30,9 @@ const MODES: { id: Mode; label: string }[] = [
 export default function Analytics() {
   const [mode, setMode] = useState<Mode>('expense-breakdown');
   const kind = mode.startsWith('expense') ? 'expense' : 'income';
-  const [sort, setSort] = useState<Sort>(() => kv.getItem('dmm_analytics_sort') === 'custom' ? 'custom' : 'amount');
+  const [sort, setSort] = useState<Sort>(() => readPreference('dmm_analytics_sort') === 'custom' ? 'custom' : 'amount');
   const changeSort = (value: Sort) => {
-    setSort(value);
-    kv.setItem('dmm_analytics_sort', value);
+    if (savePreference('dmm_analytics_sort', value)) setSort(value);
   };
   return (
     <MonthScreen showMonthBar={false}>{(month, isPreview) => (
@@ -69,10 +68,11 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
   const reorderable = rows.filter((r) => r.categoryId !== 'transfer_fee' && rank(r.categoryId) < fullOrder.length);
   const canReorder = sort === 'custom' && !isPreview && reorderable.length > 1;
   const shown = new Set(reorderable.map((r) => r.categoryId));
-  const reorder = (ids: string[]) => {
+  const reorder = async (ids: string[]) => {
     let next = 0;
-    if (!before) setBefore(fullOrder);
-    setCategoryOrder(kind, fullOrder.map((id) => (shown.has(id) ? ids[next++] : id)));
+    const saved = await setCategoryOrder(kind, fullOrder.map((id) => (shown.has(id) ? ids[next++] : id)));
+    if (saved) setBefore((original) => original ?? fullOrder);
+    return saved;
   };
   const fixed = rows.filter((r) => !shown.has(r.categoryId));
 
@@ -111,7 +111,7 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
       ) : null}
       {canReorder ? (
         before
-          ? <SortActions title="並べ替え中" cancelLabel="元に戻す" onCancel={() => { setCategoryOrder(kind, before); setBefore(undefined); }} onDone={() => setBefore(undefined)} />
+          ? <SortActions title="並べ替え中" cancelLabel="元に戻す" onCancel={async () => { if (await setCategoryOrder(kind, before)) setBefore(undefined); }} onDone={() => setBefore(undefined)} />
           : <Text style={{ color: p.textSecondary, fontSize: 13, marginTop: -8, paddingHorizontal: 4 }}>行を長押しして並べ替え</Text>
       ) : null}
       {breakdown.length === 0 ? (

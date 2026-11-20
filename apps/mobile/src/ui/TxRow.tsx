@@ -53,9 +53,9 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
       />
       {deleteOpen ? (
         <DeleteDialog visible heading="取引を削除しますか？" title={tx.title}
-          onCancel={() => setDeleteOpen(false)} onDelete={() => {
+          onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+            if (!await deleteTransaction(tx.id)) return;
             setDeleteOpen(false);
-            deleteTransaction(tx.id);
             success();
           }} />
       ) : null}

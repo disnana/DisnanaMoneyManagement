@@ -5,11 +5,13 @@ import { Stack } from 'expo-router';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import { success } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
+import { useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { DeleteDialog } from '@/ui/DeleteDialog';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { Group, Row, Screen } from '@/ui/kit';
 
+import { LocalFinanceBackup } from '@/ui/LocalFinanceBackup';
 import { MonemyImport } from '@/ui/MonemyImport';
 
 type Mode = 'clear' | 'sample';
@@ -19,8 +21,9 @@ const financeBackup = Platform.OS === 'android'
   : null;
 
 export default function DataSettings() {
-  const { state, clearAllData, resetToSampleData, setActiveLedgerId, setMonth, setTransactionFilter } = useFinance();
+  const { state, restoreBackup, clearAllData, resetToSampleData, setActiveLedgerId, setMonth, setTransactionFilter } = useFinance();
   const p = usePalette();
+  const submit = useFinanceSubmit('stay');
   const [pending, setPending] = useState<Mode>();
   const [message, setMessage] = useState('');
   const [backupEnabled, setBackupEnabled] = useState(() => financeBackup?.isEnabled() ?? false);
@@ -31,6 +34,11 @@ export default function DataSettings() {
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
         <MonemyImport />
+        <LocalFinanceBackup state={state} restore={async (next) => {
+          await restoreBackup(next);
+          setActiveLedgerId(null);
+          setTransactionFilter('all');
+        }} />
         {Platform.OS === 'android' ? (
           <Group>
             {financeBackup ? (
@@ -62,10 +70,8 @@ export default function DataSettings() {
         title={pending ? `口座 ${state.accounts.length}件 · 取引 ${state.transactions.length}件` : undefined}
         description="現在の口座・取引・予算・貯金目標などが消えます。この操作は元に戻せません。"
         confirmLabel={isSample ? '置き換える' : '初期化する'} visible={Boolean(pending)}
-        onCancel={() => setPending(undefined)} onDelete={() => {
-          if (!pending) return;
-          if (isSample) resetToSampleData();
-          else clearAllData();
+        onCancel={() => setPending(undefined)} onDelete={async () => {
+          if (!pending || !await submit(isSample ? resetToSampleData : clearAllData)) return;
           setActiveLedgerId(null);
           setMonth(getCurrentMonthKey());
           setTransactionFilter('all');

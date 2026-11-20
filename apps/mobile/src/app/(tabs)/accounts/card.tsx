@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Alert, Text } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { formatDayLabel } from '@dmm/core/utils/format';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
@@ -8,6 +8,7 @@ import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne, type PickOption } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionInput } from '@/ui/TransactionForm';
@@ -22,6 +23,7 @@ const DAYS = Array.from({ length: 31 }, (_, i) => ({
 export default function CardSettings() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, ledgers, activeLedger, addAccount, updateAccount } = useFinance();
+  const submit = useFinanceSubmit();
   const p = usePalette();
   const pickLedger = useLedgerPicker();
   const existing = state.accounts.find((account) => account.id === id);
@@ -42,7 +44,7 @@ export default function CardSettings() {
   const fixedBank = card?.type === 'debit' && Boolean(bank) &&
     state.transactions.some((tx) => tx.accountId === card.id);
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       Alert.alert('カード名を入力してください');
       return;
@@ -65,9 +67,8 @@ export default function CardSettings() {
         closingDay, paymentDay, paymentMonthOffset: offset, creditLimit, paymentWarningDays: warningDays || undefined,
       } : {}),
     } satisfies Partial<Account>;
-    if (card) updateAccount(card.id, details);
-    else addAccount({ ...details, type, initialBalance: 0 });
-    router.back();
+    const saved = await submit(() => card ? updateAccount(card.id, details) : addAccount({ ...details, type, initialBalance: 0 }));
+    if (saved) closeEditor('/accounts');
   };
 
   const selectDay = async (label: string, setDay: (day: number) => void) => {

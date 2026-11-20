@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { isOwnFlow } from '@dmm/core/utils/advances';
 import { Download, Plus, AlertCircle, ChevronRight, Globe } from 'lucide-react';
 import { Account, Transaction } from '../types/finance';
 import {
@@ -47,7 +48,7 @@ export const TaxView: React.FC<TaxViewProps> = ({
   );
 
   const yearTransactions = useMemo(
-    () => transactions.filter((tx) => tx.date.slice(0, 4) === selectedYear),
+    () => transactions.filter((tx) => tx.date.slice(0, 4) === selectedYear && isOwnFlow(tx)),
     [transactions, selectedYear]
   );
 

@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
 import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/format';
 import { assessPurchaseForMonth } from '@dmm/core/utils/planning';
 import { confirmPurchase } from '@dmm/core/utils/purchasePlan';
 import { pickOne } from '@/lib/pick';
+import { confirmAction } from '@/lib/confirmAction';
 import { success } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, Screen } from '@/ui/kit';
 import { PlanningInput } from '@/ui/PlanningForm';
@@ -20,6 +22,7 @@ const toDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padSt
 export default function PurchaseConfirm() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, accountBalances, savePurchaseCandidate } = useFinance();
+  const submit = useFinanceSubmit();
   const p = usePalette();
   const c = state.purchaseCandidates?.find((item) => item.id === id);
   const [price, setPrice] = useState(c ? String(c.amount) : '');
@@ -38,19 +41,18 @@ export default function PurchaseConfirm() {
   const category = getCategoryById(c.categoryId, state.customCategories);
 
   const confirm = () => {
-    const done = () => {
-      savePurchaseCandidate(confirmPurchase(c, {
+    const done = async () => {
+      const saved = await submit(() => savePurchaseCandidate(confirmPurchase(c, {
         amount, plannedDate: date, accountId,
         installment: count > 1 ? { count, annualRatePct: c.installment?.annualRatePct ?? 0 } : undefined,
-      }), c.id);
+      }), c.id));
+      if (!saved) return;
       success();
-      router.back();
+      closeEditor('/planning');
     };
     if (budgetOk && cashOk) return done();
-    Alert.alert('このまま確定しますか？', [!budgetOk ? '予算を超えます。' : '', !cashOk ? '口座の残高が足りません。' : ''].filter(Boolean).join(''), [
-      { text: '見直す', style: 'cancel' },
-      { text: '確定する', style: 'destructive', onPress: done },
-    ]);
+    confirmAction('このまま確定しますか？', [!budgetOk ? '予算を超えます。' : '', !cashOk ? '口座の残高が足りません。' : ''].filter(Boolean).join(''),
+      { text: '確定する', style: 'destructive', onPress: done }, '見直す');
   };
 
   const check = (ok: boolean, label: string, detail: string) => (

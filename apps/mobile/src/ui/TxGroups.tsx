@@ -7,6 +7,23 @@ import { metrics, usePalette } from '@/lib/theme';
 import { Group } from '@/ui/kit';
 import { TxRow } from '@/ui/TxRow';
 
+const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
+
+export function TransactionDayHeading({ date, net }: { date: string; net: number }) {
+  const p = usePalette();
+  const d = new Date(`${date}T00:00:00`);
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+      <Text style={{ color: p.textSecondary, fontSize: 13, fontWeight: '700' }}>
+        {d.getMonth() + 1}月{d.getDate()}日（{weekdays[d.getDay()]}）
+      </Text>
+      <Text style={{ color: p.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] }}>
+        {net >= 0 ? '+' : '-'}{formatJPY(Math.abs(net))}
+      </Text>
+    </View>
+  );
+}
+
 /** Transactions grouped by day, each day an inset group. */
 export const TxGroups = memo(function TxGroups({ transactions, empty, dayCards }: { transactions: readonly Transaction[]; empty: string; dayCards?: boolean }) {
   const p = usePalette();
@@ -22,9 +39,9 @@ export const TxGroups = memo(function TxGroups({ transactions, empty, dayCards }
   return (
     <>
       {groups.map((g) => {
-        const d = new Date(`${g.date}T00:00:00`);
-        const weekday = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()];
         if (dayCards) {
+          const d = new Date(`${g.date}T00:00:00`);
+          const weekday = weekdays[d.getDay()];
           const total = `${g.net > 0 ? '+' : ''}${formatJPY(g.net)}`;
           return (
             <View key={g.date} style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
@@ -56,15 +73,7 @@ export const TxGroups = memo(function TxGroups({ transactions, empty, dayCards }
         }
         return (
           <View key={g.date} style={{ gap: 8 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
-              <Text style={{ color: p.textSecondary, fontSize: 13, fontWeight: '700' }}>
-                {d.getMonth() + 1}月{d.getDate()}日（{weekday}）
-              </Text>
-              <Text style={{ color: p.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] }}>
-                {g.net >= 0 ? '+' : '-'}
-                {formatJPY(Math.abs(g.net))}
-              </Text>
-            </View>
+            <TransactionDayHeading date={g.date} net={g.net} />
             <Group>
               {g.items.map((tx) => (
                 <TxRow key={tx.id} tx={tx} />

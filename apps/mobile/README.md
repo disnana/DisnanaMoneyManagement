@@ -20,7 +20,7 @@ packages/core         型・計算・初期データ・ストア（React/DOM 非
 | 選択 | 共通の選択リスト（`pick.tsx`） | 共通の選択リスト |
 | テーマ | システム灰色背景・細い区切り線（`theme.ios.ts`） | トーナルサーフェス（`theme.ts`） |
 | 数字キーボード | 「完了」アクセサリバー（`KeyboardDone.ios.tsx`） | なし（システム側に確定キーあり） |
-| ストレージ | expo-sqlite kv-store（同期） | 同左（Web プレビューのみ localStorage） |
+| ストレージ | SQLite（家計データ）、kv-store（設定） | 同左（Web プレビューの家計データは IndexedDB） |
 
 ## PC なしで iOS・Android の Expo Go から起動する（GitHub Actions + EAS Update、無料）
 `main` に push するたびに、GitHub Actions が iOS と Android の JS バンドルを同じ Expo プロジェクト・チャネルに EAS Update で公開します。

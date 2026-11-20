@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
+import { usePendingSave } from '../hooks/usePendingSave';
 import { pushLayer } from '../utils/navHistory';
 
 interface ConfirmDialogProps {
@@ -11,10 +12,11 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   secondaryLabel?: string;
-  onSecondaryConfirm?: () => void;
+  onSecondaryConfirm?: () => Promise<boolean>;
   danger?: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
+  onConfirm: () => Promise<boolean>;
+  onSaved?: () => void;
+  onClose: () => void;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -27,22 +29,31 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onSecondaryConfirm,
   danger = true,
   onConfirm,
-  onCancel,
+  onSaved,
+  onClose,
 }) => {
+  const { pending, submit } = usePendingSave(open);
+  const confirm = async (write: () => Promise<boolean>) => {
+    if (await submit(write)) {
+      onSaved?.();
+      onClose();
+    }
+  };
+
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [open, onCancel]);
+  }, [open, onClose]);
 
-  const cancelRef = useRef(onCancel);
-  cancelRef.current = onCancel;
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     if (!open) return;
-    return pushLayer(() => cancelRef.current());
+    return pushLayer(() => closeRef.current());
   }, [open]);
 
   const dialogTree = (
@@ -55,7 +66,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
           onClick={(e) => {
-            if (e.target === e.currentTarget) onCancel();
+            if (e.target === e.currentTarget) onClose();
           }}
           className="fixed inset-x-0 top-[var(--vvt,0px)] z-[60] flex h-[var(--vvh,100%)] items-end justify-center bg-black/40 pb-safe sm:items-center sm:p-4"
           role="dialog"
@@ -91,7 +102,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               </div>
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={onClose}
                 className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:scale-95"
                 aria-label="閉じる"
               >
@@ -102,7 +113,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end sm:gap-2.5">
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={onClose}
                 className="min-h-[44px] whitespace-nowrap rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 active:scale-[0.98]"
               >
                 {cancelLabel}
@@ -110,7 +121,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               {secondaryLabel && onSecondaryConfirm && (
                 <button
                   type="button"
-                  onClick={onSecondaryConfirm}
+                  onClick={() => void confirm(onSecondaryConfirm)}
+                  disabled={pending}
                   className="min-h-[44px] whitespace-nowrap rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-700 transition-colors hover:bg-red-100 active:scale-[0.98]"
                 >
                   {secondaryLabel}
@@ -118,7 +130,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               )}
               <button
                 type="button"
-                onClick={onConfirm}
+                onClick={() => void confirm(onConfirm)}
+                disabled={pending}
                 className={`min-h-[44px] whitespace-nowrap rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-colors active:scale-[0.98] ${
                   danger
                     ? 'bg-red-600 hover:bg-red-700'

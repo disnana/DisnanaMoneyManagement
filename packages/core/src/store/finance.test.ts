@@ -85,8 +85,8 @@ describe('computeAccountBalances', () => {
 });
 
 describe('sanitizeState', () => {
-  it('rejects data without accounts', () => {
-    expect(sanitizeState({ accounts: [], transactions: [], budgets: [], recurringItems: [], savingsGoals: [] })).toBeNull();
+  it('allows an empty account list and rejects a missing collection', () => {
+    expect(sanitizeState({ accounts: [], transactions: [], budgets: [], recurringItems: [], savingsGoals: [] })?.accounts).toEqual([]);
     expect(sanitizeState({})).toBeNull();
   });
 
@@ -134,8 +134,8 @@ describe('loadInitialState', () => {
     expect(loadInitialState(st).accounts).toHaveLength(3);
   });
 
-  it('falls back to sample data on corrupted or empty storage', () => {
-    expect(loadInitialState(memoryStorage({ [STORAGE_KEY]: '{oops' })).accounts.length).toBeGreaterThan(0);
+  it('protects unreadable saves and only seeds an empty storage', () => {
+    expect(() => loadInitialState(memoryStorage({ [STORAGE_KEY]: '{oops' }))).toThrow();
     expect(loadInitialState(memoryStorage()).accounts.length).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { abortNextFinanceWrite } from './abortFinanceWrite';
 
 test.beforeEach(async ({ page }) => {
   const errors: string[] = [];
@@ -50,4 +51,48 @@ test('accounts open a detail page', async ({ page }) => {
   await expect(accounts).toBeVisible();
   await accounts.getByRole('button', { name: /メインクレジットカード/ }).first().click();
   await expect(page.locator('[role=dialog]')).toContainText('メインクレジットカード');
+});
+
+test('a failed entry preserves the draft and a rapid retry records it only once', async ({ page }) => {
+  await page.locator('nav button[aria-label="収支を記録"]').click();
+  await page.locator('#tx-amount').fill('1250');
+  await page.locator('#tx-title').fill('保存エラー再試行');
+  await abortNextFinanceWrite(page);
+  await page.getByRole('button', { name: '続けて登録', exact: true }).click();
+
+  const failure = page.getByRole('alertdialog');
+  await expect(failure).toContainText('保存できませんでした');
+  await failure.getByRole('button', { name: '閉じる' }).click();
+  await expect(page.locator('#tx-amount')).toHaveValue('1250');
+  await expect(page.locator('#tx-title')).toHaveValue('保存エラー再試行');
+  await expect(page.locator('main')).toContainText('¥4,125,921');
+
+  const register = page.getByRole('button', { name: '登録', exact: true });
+  await register.evaluate(button => {
+    (button as HTMLButtonElement).click();
+    (button as HTMLButtonElement).click();
+  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('main')).toContainText('¥4,124,671');
+  await page.reload();
+  await expect(page.locator('main')).toContainText('¥4,124,671');
+});
+
+test('backup export reports the share result and clears success when sharing is cancelled', async ({ page }) => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'canShare', { value: () => true });
+    Object.defineProperty(navigator, 'share', { value: async ({ files }: ShareData) => {
+      if (files?.[0].name.endsWith('.csv')) throw new DOMException('user cancelled', 'AbortError');
+    } });
+  });
+  await page.getByRole('button', { name: 'メニュー', exact: true }).click();
+  await page.getByRole('button', { name: /データ管理・バックアップ/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'データ管理・バックアップ' });
+  await sheet.getByRole('button', { name: '保存する', exact: true }).click();
+  await expect(sheet.getByRole('status')).toContainText('JSONファイルを共有しました');
+  const csv = sheet.getByRole('button', { name: 'CSV出力' });
+  await csv.click();
+  await expect(csv).toBeEnabled();
+  await expect(sheet.getByRole('status')).toHaveCount(0);
+  await expect(sheet.getByRole('alert')).toHaveCount(0);
 });

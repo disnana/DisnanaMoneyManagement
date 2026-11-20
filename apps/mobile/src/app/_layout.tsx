@@ -20,7 +20,7 @@ export default function RootLayout() {
   const reduceMotion = useAppReducedMotion();
 
   useEffect(() => {
-    // Storage is synchronous, so the first frame already has data
+    // The finance provider shows loading or recovery until the saved ledger is available.
     void SplashScreen.hideAsync();
   }, []);
 

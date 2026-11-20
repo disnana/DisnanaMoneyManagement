@@ -7,10 +7,11 @@ import { formatFullDate, formatJPY, getTodayString } from '@dmm/core/utils/forma
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { filterLedger } from '@dmm/core/utils/ledgers';
 import { assessPurchase } from '@dmm/core/utils/planning';
-import { buildPurchaseTransaction, groupPurchases, markPurchased, PRIORITY_LABELS, revertToCandidate } from '@dmm/core/utils/purchasePlan';
+import { groupPurchases, PRIORITY_LABELS, revertToCandidate } from '@dmm/core/utils/purchasePlan';
 import { success } from '@/lib/haptics';
 import { BudgetPie } from '@/ui/PurchaseInsights';
 import { useFinance } from '@/lib/store';
+import { useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { Group, IconBadge, MonthBar, Row, Screen, SectionTitle, Segmented } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
@@ -98,7 +99,8 @@ function Budgets() {
 }
 
 function Purchases() {
-  const { state, activeLedger, ledgers, month, removePurchaseCandidate, savePurchaseCandidate, addTransaction } = useFinance();
+  const submit = useFinanceSubmit('stay');
+  const { state, activeLedger, ledgers, month, removePurchaseCandidate, savePurchaseCandidate, recordPurchase } = useFinance();
   const p = usePalette();
   const [deletion, setDeletion] = useState<string>();
   const ledgerId = activeLedger?.id;
@@ -108,13 +110,9 @@ function Purchases() {
   const plannedTotal = planned.reduce((sum, item) => sum + item.amount, 0);
   const pendingDelete = inView.find((item) => item.id === deletion);
   const accountName = (id?: string) => state.accounts.find((a) => a.id === id)?.name ?? '口座未設定';
-  const buy = (item: (typeof inView)[number]) => {
-    const today = getTodayString();
-    addTransaction(buildPurchaseTransaction(item, item.accountId ?? state.accounts[0]?.id ?? '', today));
-    const { id, ...rest } = item;
-    void id;
-    savePurchaseCandidate(markPurchased({ id: item.id, ...rest }, today), item.id);
-    success();
+  const buy = async (item: (typeof inView)[number]) => {
+    const accountId = item.accountId ?? state.accounts[0]?.id ?? '';
+    if (await submit(() => recordPurchase(item.id, accountId, getTodayString()))) success();
   };
   const spendingByGroup = useMemo(() => {
     const groups = new Set((state.purchaseCandidates ?? []).filter((item) => item.month === month).map((item) => item.ledgerId));
@@ -156,11 +154,7 @@ function Purchases() {
                 <View style={{ flexDirection: 'row', paddingHorizontal: 10, paddingVertical: 5, gap: 4 }}>
                   <PurchaseAction label="購入を記録" color={p.tint} primary onPress={() => buy(item)} />
                   <PurchaseAction label="調整" color={p.text} onPress={() => router.push({ pathname: '/purchase-confirm', params: { id: item.id } })} />
-                  <PurchaseAction label="候補に戻す" color={p.text} onPress={() => {
-                    const { id, ...rest } = item;
-                    void id;
-                    savePurchaseCandidate(revertToCandidate({ id: item.id, ...rest }), item.id);
-                  }} />
+                  <PurchaseAction label="候補に戻す" color={p.text} onPress={() => submit(() => savePurchaseCandidate(revertToCandidate(item), item.id))} />
                 </View>
               </Group>
             );
@@ -218,9 +212,8 @@ function Purchases() {
         <Group><Row title="購入候補を追加" subtitle="購入後の予算や残高を試算"
           icon={{ ios: 'plus.circle', android: 'add_circle' }} chevron onPress={() => router.push('/purchase-editor')} /></Group>
       ) : null}
-      <DeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} visible={Boolean(pendingDelete)} onCancel={() => setDeletion(undefined)} onDelete={() => {
-        if (pendingDelete) removePurchaseCandidate(pendingDelete.id);
-        setDeletion(undefined);
+      <DeleteDialog heading="購入候補を削除しますか？" title={pendingDelete?.title} visible={Boolean(pendingDelete)} onCancel={() => setDeletion(undefined)} onDelete={async () => {
+        if (pendingDelete && await submit(() => removePurchaseCandidate(pendingDelete.id))) setDeletion(undefined);
       }} />
     </>
   );

@@ -40,6 +40,7 @@ import {
 } from '../utils/format';
 import { computeCreditCardSummary, getCycleRangeLabel } from '../utils/creditCard';
 import { ConfirmDialog } from './ConfirmDialog';
+import { usePendingSave } from '../hooks/usePendingSave';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { TransactionModalPrefill } from './TransactionModal';
 import { InsetGroup, Segmented, SectionHeader, TxRowBody } from './mobile/MobileKit';
@@ -54,9 +55,9 @@ interface AccountsViewProps {
   accountBalances: Record<string, number>;
   totalAssets: number;
   selectedMonth: string;
-  onAddAccount: (acc: Omit<Account, 'id'>) => void;
-  onUpdateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => void;
-  onDeleteAccount: (id: string) => void;
+  onAddAccount: (acc: Omit<Account, 'id'>) => Promise<boolean>;
+  onUpdateAccount: (id: string, patch: Partial<Omit<Account, 'id'>>) => Promise<boolean>;
+  onDeleteAccount: (id: string) => Promise<boolean>;
   onOpenPrefilledTransaction: (prefill: TransactionModalPrefill) => void;
 }
 
@@ -231,7 +232,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setModalOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const { pending, submit } = usePendingSave(modalOpen ? editingAccount?.id ?? 'new' : null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     const initVal = Number(initialBalance) || 0;
@@ -265,12 +268,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         : {}),
     };
 
-    if (editingAccount) {
-      onUpdateAccount(editingAccount.id, payload);
-    } else {
-      onAddAccount(payload);
-    }
-    setModalOpen(false);
+    const saved = await submit(() => editingAccount ? onUpdateAccount(editingAccount.id, payload) : onAddAccount(payload));
+    if (saved) setModalOpen(false);
   };
 
   return (
@@ -1343,6 +1342,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             <button
               type="submit"
               form="account-form"
+              disabled={pending}
               className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-teal-700 px-6 text-sm font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98] sm:w-auto"
             >
               保存する
@@ -1350,7 +1350,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           </div>
         }
       >
-        <form id="account-form" onSubmit={handleSubmit} className="space-y-5">
+        <form inert={pending} aria-busy={pending} id="account-form" onSubmit={handleSubmit} className="space-y-5">
           {/* Visual Type Picker */}
           <div>
             <label className="block text-xs font-medium text-slate-600">
@@ -1708,14 +1708,9 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         }
         confirmLabel="削除する"
         danger={true}
-        onConfirm={() => {
-          if (deletingAccount) {
-            onDeleteAccount(deletingAccount.id);
-            setDetailId(null);
-            setDeletingAccount(null);
-          }
-        }}
-        onCancel={() => setDeletingAccount(null)}
+        onConfirm={() => onDeleteAccount(deletingAccount!.id)}
+        onSaved={() => setDetailId(null)}
+        onClose={() => setDeletingAccount(null)}
       />
     </div>
   );

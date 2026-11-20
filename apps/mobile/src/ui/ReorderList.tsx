@@ -92,7 +92,7 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, getLa
   items: T[];
   renderItem: (item: T) => ReactNode;
   getLabel: (item: T) => string;
-  onReorder: (ids: string[]) => void;
+  onReorder: (ids: string[]) => void | Promise<boolean>;
 }) {
   const p = usePalette();
   const from = useSharedValue(-1);
@@ -106,12 +106,16 @@ export function ReorderList<T extends { id: string }>({ items, renderItem, getLa
     offset.value = 0;
   }, [orderKey, from, target, offset]);
 
-  const move = (start: number, end: number) => {
+  const move = async (start: number, end: number) => {
     if (start === end || !items[start] || !items[end]) return;
     const ids = items.map((item) => item.id);
     const [id] = ids.splice(start, 1);
     ids.splice(end, 0, id);
-    onReorder(ids);
+    if (await onReorder(ids) === false) {
+      from.value = -1;
+      target.value = -1;
+      offset.value = 0;
+    }
   };
 
   if (!items.length) return null;

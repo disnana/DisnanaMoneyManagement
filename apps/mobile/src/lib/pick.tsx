@@ -27,7 +27,7 @@ interface PickerPresentation {
   layout?: 'divided';
   searchLabel?: string;
   reorderTitle?: string;
-  onReorder?: (ids: string[]) => void;
+  onReorder?: (ids: string[]) => Promise<boolean>;
 }
 
 interface Request extends PickerPresentation {
@@ -52,6 +52,7 @@ export function PickerHost() {
   const { height } = useWindowDimensions();
   const [req, setReq] = useState<Request | null>(null);
   const pending = useRef<Request | null>(null);
+  const savingOrder = useRef<Request | null>(null);
   const [dismissing, setDismissing] = useState(false);
   const dismissal = useRef<{ request: Request; result: string | null } | null>(null);
   const nextRequest = useRef<Request | null>(null);
@@ -100,7 +101,7 @@ export function PickerHost() {
 
   const close = useCallback((id: string | null) => {
     const request = pending.current;
-    if (!request || dismissal.current) return;
+    if (!request || dismissal.current || savingOrder.current === request) return;
     // iOS must finish dismissing its native sheet before a caller can open another modal.
     if (Platform.OS === 'ios') {
       dismissal.current = { request, result: id };
@@ -143,13 +144,21 @@ export function PickerHost() {
   const divided = req.layout === 'divided';
   const divider = p.outline;
   const searchLabel = req.searchLabel ?? '候補を検索';
-  const saveOrder = () => {
-    if (!draft) return;
-    const ids = draft.map((item) => item.id);
-    if (ids.some((id, index) => id !== movable[index].id)) req.onReorder?.(ids);
-    let index = 0;
-    setReq({ ...req, options: req.options.map((option) => option.reorderable === false ? option : draft[index++]) });
-    setDraft(undefined);
+  const saveOrder = async () => {
+    if (!draft || !req.onReorder || savingOrder.current === req) return;
+    savingOrder.current = req;
+    try {
+      const ids = draft.map((item) => item.id);
+      if (ids.some((id, index) => id !== movable[index].id) && !await req.onReorder(ids)) return;
+      if (pending.current !== req || dismissal.current) return;
+      let index = 0;
+      const reordered = { ...req, options: req.options.map((option) => option.reorderable === false ? option : draft[index++]) };
+      pending.current = reordered;
+      setReq(reordered);
+      setDraft(undefined);
+    } finally {
+      if (savingOrder.current === req) savingOrder.current = null;
+    }
   };
   const optionContent = (option: PickOption) => (
     <>
@@ -178,7 +187,7 @@ export function PickerHost() {
             </Text>
             {draft ? (
               <>
-                <Pressable accessibilityRole="button" onPress={() => setDraft(undefined)}
+                <Pressable accessibilityRole="button" onPress={() => { if (savingOrder.current !== req) setDraft(undefined); }}
                   style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}>
                   <Text style={{ color: p.textSecondary, fontSize: 14 }}>キャンセル</Text>
                 </Pressable>
@@ -232,7 +241,7 @@ export function PickerHost() {
               </View>
             )}
             onReorder={(ids) => setDraft((current) => {
-              if (!current) return current;
+              if (!current || savingOrder.current === req) return current;
               const byId = new Map(current.map((option) => [option.id, option]));
               const updated = ids.flatMap((id) => byId.get(id) ?? []);
               return updated.length === current.length ? updated : current;

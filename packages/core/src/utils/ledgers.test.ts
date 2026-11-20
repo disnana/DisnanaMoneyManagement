@@ -34,7 +34,7 @@ describe('finance groups', () => {
       ledgers: [{ id: 'second_home', name: '家庭用2', kind: 'household' }, ...getLedgers(savedState)],
       ledgerOrder: ['household', 'missing', 'business', 'second_home'],
     };
-    const loaded = loadInitialState({ getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null, setItem: () => {} });
+    const loaded = loadInitialState({ getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null });
     expect(getOrderedLedgers(loaded).map((ledger) => ledger.id)).toEqual(['household', 'business', 'second_home', 'personal']);
     expect(filterLedger(loaded, 'second_home').transactions.map((tx) => tx.id)).toEqual(['groceries']);
     expect(filterLedger(loaded, 'household').transactions).toEqual([]);
@@ -42,7 +42,7 @@ describe('finance groups', () => {
 
   it('moves saved records to a selected group when deleting a group and retains their tax fields on reload', () => {
     const state = removeLedger(savedState, 'business', 'personal');
-    const loaded = loadInitialState({ getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null, setItem: () => {} });
+    const loaded = loadInitialState({ getItem: (key) => key === STORAGE_KEY ? JSON.stringify(state) : null });
     expect(getLedgers(loaded).map((ledger) => ledger.id)).toEqual(['personal', 'household']);
     expect(filterLedger(loaded, 'personal').transactions).toMatchObject([
       { id: 'equipment', ledgerId: 'personal', scope: 'business', businessRatio: 50 },

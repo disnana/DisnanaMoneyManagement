@@ -35,6 +35,7 @@ import {
   getTodayString,
   shiftMonth,
 } from '../utils/format';
+import { usePendingSave } from '../hooks/usePendingSave';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { ChevronLeft as StepPrev, ChevronRight as StepNext } from 'lucide-react';
 import { haptic } from '../utils/haptics';
@@ -57,8 +58,8 @@ interface TransactionModalProps {
   accounts: Account[];
   prefill?: TransactionModalPrefill | null;
   onClose: () => void;
-  onSave: (tx: Omit<Transaction, 'id'>, existingId?: string) => void;
-  onSaveBatch: (txs: Omit<Transaction, 'id'>[], summaryTitle: string) => void;
+  onSave: (tx: Omit<Transaction, 'id'>, existingId?: string) => Promise<boolean>;
+  onSaveBatch: (txs: Omit<Transaction, 'id'>[], summaryTitle: string) => Promise<boolean>;
 }
 
 type ModalTab = TransactionType | 'fx_payout';
@@ -87,6 +88,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSave,
   onSaveBatch,
 }) => {
+  const { pending, submit } = usePendingSave(open ? editingTransaction ?? prefill ?? 'new' : null);
   const amountInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<ModalTab>('expense');
@@ -244,7 +246,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         amountInputRef.current?.focus();
       }, 60);
     }
-  }, [open, editingTransaction, prefill, accounts]);
+    // Initialize this draft only when opening it. Refreshing account data must preserve typed values.
+  }, [open, editingTransaction, prefill]);
 
   const selectedFromAccount = useMemo(
     () => accounts.find((a) => a.id === accountId),
@@ -413,7 +416,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setAmountStr(String(current + delta));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const accountSelectPool =
+    activeTab === 'transfer'
+      ? transferEligibleAccounts
+      : activeTab === 'fx_payout'
+      ? bankAccounts.length > 0
+        ? bankAccounts
+        : accounts
+      : accounts;
+  const hasSource = !!selectedFromAccount && accountSelectPool.includes(selectedFromAccount);
+  const hasDestination = !!selectedToAccount && selectedToAccount.type !== 'debit';
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (activeTab === 'fx_payout') {
@@ -425,7 +439,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setError('手数料合計が総売上高以上になっています。手数料額をご確認ください。');
         return;
       }
-      if (!accountId) {
+      if (!hasSource) {
         setError('着金先の銀行または決済口座を選択してください。');
         return;
       }
@@ -509,8 +523,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         });
       }
 
-      onSaveBatch(batch, baseTitle);
-      onClose();
+      if (await submit(() => onSaveBatch(batch, baseTitle))) onClose();
       return;
     }
 
@@ -519,7 +532,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setError('金額は1円以上の数値を入力してください。');
       return;
     }
-    if (!accountId) {
+    if (!hasSource) {
       setError('口座を選択してください。');
       return;
     }
@@ -532,7 +545,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
     if (type === 'transfer') {
-      if (!toAccountId || toAccountId === accountId) {
+      if (!hasDestination || toAccountId === accountId) {
         setError('振替先には振替元と異なる口座を選択してください。');
         return;
       }
@@ -559,51 +572,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           : 0
         : undefined;
 
-    onSave(
-      {
-        type,
-        amount: Math.round(numericAmount),
-        date,
-        categoryId: type === 'transfer' ? 'transfer' : categoryId,
-        accountId,
-        toAccountId: type === 'transfer' ? toAccountId : undefined,
-        title: trimmedTitle || fallbackTitle,
-        memo: memo.trim() || undefined,
-        scope,
-        transferFee:
-          type === 'transfer' && numericFee > 0 ? Math.round(numericFee) : undefined,
-        fxConversionFee:
-          type === 'transfer' && numericTransferFxFee > 0
-            ? Math.round(numericTransferFxFee)
-            : undefined,
-        pointUsed:
-          allowsPoints && numericPoints > 0
-            ? Math.round(numericPoints)
-            : undefined,
-        businessRatio: effectiveRatio,
-        accountingSubject:
-          type === 'expense' && scope === 'business' ? accountingSubject : undefined,
-        counterparty: counterparty.trim() || undefined,
-        receiptMethod: type === 'income' ? receiptMethod : undefined,
-        incomeTaxCategory: type === 'income' ? incomeTaxCategory : undefined,
-        withholdingTax:
-          type === 'income' && numericWithholding > 0
-            ? Math.round(numericWithholding)
-            : undefined,
-        isPrepayment:
-          type === 'transfer' && selectedToAccount?.type === 'credit'
-            ? isPrepayment
-            : undefined,
-        targetBillingMonth:
-          type === 'transfer' && selectedToAccount?.type === 'credit'
-            ? targetBillingMonth
-            : undefined,
-      },
-      editingTransaction?.id
-    );
-    if (continueRef.current && !editingTransaction) {
+    const keepOpen = continueRef.current && !editingTransaction;
+    continueRef.current = false;
+    const payload: Omit<Transaction, 'id'> = {
+      type,
+      amount: Math.round(numericAmount),
+      date,
+      categoryId: type === 'transfer' ? 'transfer' : categoryId,
+      accountId,
+      toAccountId: type === 'transfer' ? toAccountId : undefined,
+      title: trimmedTitle || fallbackTitle,
+      memo: memo.trim() || undefined,
+      scope,
+      transferFee:
+        type === 'transfer' && numericFee > 0 ? Math.round(numericFee) : undefined,
+      fxConversionFee:
+        type === 'transfer' && numericTransferFxFee > 0
+          ? Math.round(numericTransferFxFee)
+          : undefined,
+      pointUsed:
+        allowsPoints && numericPoints > 0
+          ? Math.round(numericPoints)
+          : undefined,
+      businessRatio: effectiveRatio,
+      accountingSubject:
+        type === 'expense' && scope === 'business' ? accountingSubject : undefined,
+      counterparty: counterparty.trim() || undefined,
+      receiptMethod: type === 'income' ? receiptMethod : undefined,
+      incomeTaxCategory: type === 'income' ? incomeTaxCategory : undefined,
+      withholdingTax:
+        type === 'income' && numericWithholding > 0
+          ? Math.round(numericWithholding)
+          : undefined,
+      isPrepayment:
+        type === 'transfer' && selectedToAccount?.type === 'credit'
+          ? isPrepayment
+          : undefined,
+      targetBillingMonth:
+        type === 'transfer' && selectedToAccount?.type === 'credit'
+          ? targetBillingMonth
+          : undefined,
+    };
+    if (!await submit(() => onSave(payload, editingTransaction?.id))) return;
+    if (keepOpen) {
       // Keep the page open for rapid consecutive entry
-      continueRef.current = false;
       haptic(12);
       setAmountStr('');
       setTitle('');
@@ -615,7 +627,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setError(null);
       return;
     }
-    continueRef.current = false;
     onClose();
   };
 
@@ -627,14 +638,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     shiftMonth(getCurrentMonthKey(), 2),
   ];
 
-  const accountSelectPool =
-    activeTab === 'transfer'
-      ? transferEligibleAccounts
-      : activeTab === 'fx_payout'
-      ? bankAccounts.length > 0
-        ? bankAccounts
-        : accounts
-      : accounts;
 
   return (
     <ResponsiveSheet
@@ -663,6 +666,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <button
               type="submit"
               form="tx-modal-form"
+              disabled={pending}
               onClick={() => {
                 continueRef.current = true;
               }}
@@ -674,6 +678,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <button
             type="submit"
             form="tx-modal-form"
+            disabled={pending}
             onClick={() => {
               continueRef.current = false;
             }}
@@ -688,7 +693,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
       }
     >
-      <form id="tx-modal-form" onSubmit={handleSubmit} className="space-y-5">
+      <form inert={pending} aria-busy={pending} id="tx-modal-form" onSubmit={handleSubmit} className="space-y-5">
         {/* Date stepper (phones) */}
         <div className="flex items-center justify-between sm:hidden">
           <button
@@ -1094,10 +1099,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   最終着金先口座（銀行等）
                 </label>
                 <select
-                  value={accountId}
+                  value={hasSource ? accountId : ''}
                   onChange={(e) => setAccountId(e.target.value)}
                   className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900"
                 >
+                  {!hasSource && <option value="" disabled>口座を選択</option>}
                   {accountSelectPool.map((acc) => (
                     <option key={acc.id} value={acc.id}>
                       {acc.name} · {ACCOUNT_USAGE_LABELS[acc.usageScope ?? 'personal']}
@@ -1232,10 +1238,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </label>
                   <select
                     id="tx-to-account"
-                    value={toAccountId}
+                    value={hasDestination ? toAccountId : ''}
                     onChange={(e) => setToAccountId(e.target.value)}
                     className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
                   >
+                    {!hasDestination && <option value="" disabled>振替先を選択</option>}
                     {transferEligibleAccounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
                         {acc.name}（{ACCOUNT_TYPE_LABELS[acc.type]}）
@@ -1255,10 +1262,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </label>
                 <select
                   id="tx-account"
-                  value={accountId}
+                  value={hasSource ? accountId : ''}
                   onChange={(e) => handleAccountChange(e.target.value)}
                   className="mt-1.5 min-h-[44px] w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-600 focus:outline-none"
                 >
+                  {!hasSource && <option value="" disabled>口座を選択</option>}
                   {accountSelectPool.map((acc) => (
                     <option key={acc.id} value={acc.id}>
                       {acc.name} · {ACCOUNT_USAGE_LABELS[acc.usageScope ?? 'personal']}

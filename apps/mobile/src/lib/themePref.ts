@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { Appearance } from 'react-native';
-import { kv } from '@/lib/kv';
+import { readPreference, savePreference } from './preferences';
 
 /** "system" (default) follows the OS live; "light"/"dark" are explicit user choices. */
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -9,7 +9,7 @@ const KEY = 'dmm_theme';
 const listeners = new Set<() => void>();
 
 export function getThemePref(): ThemePref {
-  const v = kv.getItem(KEY);
+  const v = readPreference(KEY);
   return v === 'light' || v === 'dark' ? v : 'system';
 }
 
@@ -22,7 +22,7 @@ export function applyThemePref(pref: ThemePref = getThemePref()): void {
 }
 
 export function setThemePref(pref: ThemePref): void {
-  kv.setItem(KEY, pref);
+  if (!savePreference(KEY, pref)) return;
   applyThemePref(pref);
   listeners.forEach((l) => l());
 }

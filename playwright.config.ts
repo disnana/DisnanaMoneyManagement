@@ -15,7 +15,7 @@ export default defineConfig({
     timeout: 120_000,
   },
   projects: [
-    { name: 'mobile', use: { ...devices['iPhone 14'], defaultBrowserType: 'chromium' }, testMatch: /mobile\.spec\.ts/ },
-    { name: 'desktop', use: { viewport: { width: 1280, height: 800 } }, testMatch: /(desktop|theme)\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['iPhone 14'], defaultBrowserType: 'chromium' }, testMatch: /(mobile|transaction-pages)\.spec\.ts/ },
+    { name: 'desktop', use: { viewport: { width: 1280, height: 800 } }, testMatch: /(desktop|theme|transaction-pages)\.spec\.ts/ },
   ],
 });

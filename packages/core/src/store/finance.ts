@@ -10,169 +10,27 @@ import {
   Transaction,
 } from '../types/finance';
 import { createInitialSeedData } from '../data/seedData';
-import { ALL_CATEGORIES } from '../data/categories';
 import {
   getCurrentMonthKey,
   getEffectiveOutflow,
   getTransferTotalFees,
 } from '../utils/format';
 import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
-import { estimatePurchaseJPY } from '../utils/planning';
-
+import type { TransactionChange } from './financeDatabase';
+import { buildPurchaseTransaction, markPurchased } from '../utils/purchasePlan';
+import { buildReimbursementTx } from '../utils/advances';
+import { createEmptyFinanceState } from './financeState';
 import { appendMonemyRows, type planMonemyImport } from '../utils/monemyImport';
 
-export const STORAGE_KEY = 'kakeibo_finance_state_v3';
+export { STORAGE_KEY, sanitizeState, requireFinanceState, legacyFinanceKeys, readLegacyFinanceState, loadInitialState, createEmptyFinanceState } from './financeState';
 
-const VALID_ACCOUNT_TYPES = new Set([
-  'bank',
-  'psp',
-  'foreign_bank',
-  'credit',
-  'debit',
-  'cash',
-  'emoney',
-  'investment',
-]);
-
-export function sanitizeState(parsed: Partial<FinanceState>): FinanceState | null {
-  if (
-    !Array.isArray(parsed.accounts) ||
-    !Array.isArray(parsed.transactions) ||
-    !Array.isArray(parsed.budgets) ||
-    !Array.isArray(parsed.recurringItems) ||
-    !Array.isArray(parsed.savingsGoals)
-  ) {
-    return null;
-  }
-
-  const accounts: Account[] = parsed.accounts
-    .filter((a): a is Account => Boolean(a && typeof a.id === 'string' && typeof a.name === 'string'))
-    .map((a) => ({
-      ...a,
-      type: VALID_ACCOUNT_TYPES.has(a.type) ? a.type : 'bank',
-      usageScope:
-        a.usageScope === 'personal' || a.usageScope === 'household' || a.usageScope === 'business'
-          ? a.usageScope
-          : 'personal',
-      initialBalance: Number.isFinite(Number(a.initialBalance)) ? Number(a.initialBalance) : 0,
-    }));
-
-  if (accounts.length === 0) return null;
-
-  const transactions: Transaction[] = parsed.transactions
-    .filter(
-      (t): t is Transaction =>
-        Boolean(
-          t &&
-            typeof t.id === 'string' &&
-            typeof t.date === 'string' &&
-            typeof t.title === 'string' &&
-            typeof t.accountId === 'string'
-        )
-    )
-    .map((t) => ({
-      ...t,
-      type:
-        t.type === 'income' || t.type === 'expense' || t.type === 'transfer'
-          ? t.type
-          : 'expense',
-      amount: Number.isFinite(Number(t.amount)) ? Number(t.amount) : 0,
-    }));
-
-  const budgets: Budget[] = parsed.budgets.filter(
-    (b): b is Budget =>
-      Boolean(b && typeof b.categoryId === 'string' && Number.isFinite(Number(b.monthlyLimit)))
-  );
-
-  const recurringItems: RecurringItem[] = parsed.recurringItems.filter(
-    (r): r is RecurringItem =>
-      Boolean(r && typeof r.id === 'string' && typeof r.title === 'string' && Number.isFinite(Number(r.amount)))
-  );
-
-  const savingsGoals: SavingsGoal[] = parsed.savingsGoals.filter(
-    (g): g is SavingsGoal =>
-      Boolean(g && typeof g.id === 'string' && typeof g.title === 'string' && Number.isFinite(Number(g.targetAmount)))
-  );
-
-  const ledgers = Array.isArray(parsed.ledgers)
-    ? parsed.ledgers.filter((ledger): ledger is Ledger => Boolean(ledger &&
-      typeof ledger.id === 'string' && typeof ledger.name === 'string' &&
-      (ledger.kind === 'personal' || ledger.kind === 'household' || ledger.kind === 'business')))
-    : undefined;
-  const purchaseCandidates = Array.isArray(parsed.purchaseCandidates)
-    ? parsed.purchaseCandidates.filter((item) => item && typeof item.id === 'string' &&
-      typeof item.title === 'string' && typeof item.categoryId === 'string' &&
-      typeof item.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(item.month) &&
-      Number.isSafeInteger(item.amount) && item.amount > 0)
-      .map((item) => {
-        if (!item.foreignPrice) return item;
-        const amount = estimatePurchaseJPY(item.foreignPrice);
-        return amount === undefined ? { ...item, foreignPrice: undefined } : { ...item, amount };
-      })
-    : undefined;
-  const readIds = (value: unknown): string[] | undefined =>
-    Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : undefined;
-  const categoryOrder = { income: readIds(parsed.categoryOrder?.income), expense: readIds(parsed.categoryOrder?.expense) };
-  const hiddenCategoryIds = readIds(parsed.hiddenCategoryIds);
-  const ledgerOrder = readIds(parsed.ledgerOrder);
-
-  return {
-    ...(ledgers?.length ? { ledgers } : {}),
-    ...(ledgerOrder?.length ? { ledgerOrder } : {}),
-    ...(purchaseCandidates?.length ? { purchaseCandidates } : {}),
-    ...(Array.isArray(parsed.customCategories) ? {
-      customCategories: parsed.customCategories.filter((item) => item && typeof item.id === 'string' &&
-        (item.id.startsWith('custom_') || ALL_CATEGORIES.some((category) => category.id === item.id && category.type === item.type)) &&
-        typeof item.name === 'string' && item.name.trim() &&
-        (item.type === 'expense' || item.type === 'income') && typeof item.color === 'string' && /^#[0-9a-f]{6}$/i.test(item.color)),
-    } : {}),
-    ...(categoryOrder.income || categoryOrder.expense ? { categoryOrder } : {}),
-    ...(hiddenCategoryIds ? { hiddenCategoryIds } : {}),
-    accounts,
-    transactions,
-    budgets,
-    recurringItems,
-    savingsGoals,
-  };
+export interface FinanceStorage {
+  loadState(): FinanceState | null | Promise<FinanceState | null>;
+  saveState(state: FinanceState, change?: TransactionChange): void | Promise<void>;
+  /** Called only after the user confirms recovery from a backup on the load-error screen. */
+  replaceState(state: FinanceState): void | Promise<void>;
+  clearLegacyCopies?(): void | Promise<void>;
 }
-
-/** Minimal synchronous key-value storage (localStorage on web, expo-sqlite/kv-store on mobile). */
-export interface StorageAdapter {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
-export function createEmptyFinanceState(): FinanceState {
-  return {
-    accounts: [
-      { id: 'acc_default_wallet', name: '財布（現金）', type: 'cash', usageScope: 'personal', initialBalance: 0 },
-    ],
-    transactions: [],
-    budgets: [],
-    recurringItems: [],
-    savingsGoals: [],
-  };
-}
-
-export function loadInitialState(storage: StorageAdapter, fallback = () => createInitialSeedData(getCurrentMonthKey())): FinanceState {
-  try {
-    const raw =
-      storage.getItem(STORAGE_KEY) ??
-      storage.getItem('kakeibo_finance_state_v2') ??
-      storage.getItem('kakeibo_finance_state_v1');
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<FinanceState>;
-      const sanitized = sanitizeState(parsed);
-      if (sanitized) {
-        return sanitized;
-      }
-    }
-  } catch {
-    // Use the starting state when no readable save is available.
-  }
-  return fallback();
-}
-
 
 /** Per-account balance. Debit-card spending is deducted from the linked bank account. */
 export function computeAccountBalances(state: Pick<FinanceState, 'accounts' | 'transactions'>): Record<string, number> {
@@ -229,28 +87,55 @@ export interface ReactHooks {
   useCallback<T extends (...args: any[]) => any>(callback: T, deps: readonly unknown[]): T;
 }
 
-export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter, initialState?: () => FinanceState) {
-  const { useState, useEffect, useMemo, useCallback, useRef } = react;
+const writeFailed = '家計データを保存できませんでした。空き容量や保存先を確認して、もう一度お試しください。';
 
-  return function useFinanceStore() {
-  const [state, setRenderedState] = useState<FinanceState>(() => loadInitialState(storage, initialState));
+class FinanceInputError extends Error {}
+
+/** All mutations, including compound transactions, are published to React only after their write commits. */
+export function createFinanceStoreHook(react: ReactHooks, storage: FinanceStorage, emptyState = createEmptyFinanceState) {
+  const { useState, useMemo, useCallback, useRef } = react;
+
+  return function useFinanceStore(loaded: FinanceState) {
+  const [state, setRenderedState] = useState(loaded);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const latestState = useRef(state);
-  const persistedState = useRef<FinanceState | undefined>(undefined);
-  const setState = useCallback((update: FinanceState | ((previous: FinanceState) => FinanceState)) => {
-    const next = typeof update === 'function' ? update(latestState.current) : update;
-    latestState.current = next;
-    setRenderedState(next);
+  const queue = useRef(Promise.resolve());
+  const dismissWriteError = useCallback(() => setWriteError(null), []);
+  type Update = FinanceState | ((previous: FinanceState) => FinanceState);
+  const persist = useCallback((update: Update, id?: string) => {
+    const job = queue.current.then(async () => {
+      const before = latestState.current;
+      const next = typeof update === 'function' ? update(before) : update;
+      if (next === before) return;
+      try {
+        await storage.saveState(next, id === undefined ? undefined : { before, id });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'FinanceConflictError') {
+          const current = await storage.loadState();
+          if (current) {
+            latestState.current = current;
+            setRenderedState(current);
+          }
+          throw new FinanceInputError('ほかの画面で家計データが更新されました。最新の内容を確認してから再試行してください。');
+        }
+        throw new Error(writeFailed, { cause: error });
+      }
+      latestState.current = next;
+      setRenderedState(next);
+    });
+    // A rejected write must not poison the queue or become the base of the next edit.
+    queue.current = job.catch(() => {});
+    return job;
   }, []);
-
-  useEffect(() => {
-    if (state !== latestState.current || state === persistedState.current) return;
+  const setState = useCallback(async (update: Update, id?: string) => {
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(state));
-      persistedState.current = state;
-    } catch {
-      // Ignore storage quota errors
+      await persist(update, id);
+      return true;
+    } catch (error) {
+      setWriteError(error instanceof FinanceInputError ? error.message : writeFailed);
+      return false;
     }
-  }, [state]);
+  }, [persist]);
 
   const accountBalances = useMemo(() => computeAccountBalances(state), [state.accounts, state.transactions]);
 
@@ -268,10 +153,10 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const addTransaction = useCallback((tx: Omit<Transaction, 'id'>) => {
     const id = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       transactions: [{ ...tx, id }, ...prev.transactions],
-    }));
+    }), id);
   }, []);
 
   const addTransactionsBatch = useCallback((items: Omit<Transaction, 'id'>[]) => {
@@ -280,7 +165,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
       ...tx,
       id: `tx_${now}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
     }));
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       transactions: [...created, ...prev.transactions],
     }));
@@ -288,25 +173,26 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const updateTransaction = useCallback(
     (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
-      setState((prev) => ({
-        ...prev,
-        transactions: prev.transactions.map((tx) =>
-          tx.id === id ? { ...tx, ...patch } : tx
-        ),
-      }));
+      return setState((prev) => {
+        const index = prev.transactions.findIndex((tx) => tx.id === id);
+        if (index < 0) throw new FinanceInputError('この取引はすでに削除されています。');
+        const transactions = prev.transactions.slice();
+        transactions[index] = { ...transactions[index], ...patch };
+        return { ...prev, transactions };
+      }, id);
     },
     []
   );
 
   const deleteTransaction = useCallback((id: string) => {
-    setState((prev) => ({
-      ...prev,
-      transactions: prev.transactions.filter((tx) => tx.id !== id),
-    }));
+    return setState((prev) => {
+      const transactions = prev.transactions.filter((tx) => tx.id !== id);
+      return transactions.length === prev.transactions.length ? prev : { ...prev, transactions };
+    }, id);
   }, []);
 
   const deleteSettlementGroup = useCallback((groupId: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((tx) => tx.settlementGroupId !== groupId),
     }));
@@ -314,7 +200,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const addAccount = useCallback((acc: Omit<Account, 'id'>) => {
     const id = `acc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       accounts: [...prev.accounts, { ...acc, id }],
     }));
@@ -322,7 +208,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const updateAccount = useCallback(
     (id: string, patch: Partial<Omit<Account, 'id'>>) => {
-      setState((prev) => {
+      return setState((prev) => {
         const accounts = prev.accounts.map((acc) => acc.id === id ? { ...acc, ...patch } : acc);
         if (!patch.ledgerId) return { ...prev, accounts };
         const ledgers = getLedgers(prev);
@@ -337,7 +223,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   );
 
   const deleteAccount = useCallback((id: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       accounts: prev.accounts.filter((acc) => acc.id !== id),
     }));
@@ -345,8 +231,8 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const setConfirmedCardBilling = useCallback((id: string, month: string, amount?: number) => {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) ||
-      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
-    setState((prev) => ({
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return Promise.resolve(false);
+    return setState((prev) => ({
       ...prev,
       accounts: prev.accounts.map((account) => {
         if (account.id !== id || account.type !== 'credit') return account;
@@ -360,7 +246,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const saveCustomCategory = useCallback((category: Omit<CategoryDef, 'id'>, existingId?: string) => {
     const id = existingId ?? `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    setState((prev) => {
+    return setState((prev) => {
       const categories = prev.customCategories ?? [];
       return {
         ...prev, customCategories: categories.some((item) => item.id === id)
@@ -371,12 +257,12 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const setCategoryOrder = useCallback((type: 'expense' | 'income', ids: string[]) => {
-    setState((prev) => ({ ...prev, categoryOrder: { ...prev.categoryOrder, [type]: [...new Set(ids)] } }));
+    return setState((prev) => ({ ...prev, categoryOrder: { ...prev.categoryOrder, [type]: [...new Set(ids)] } }));
   }, []);
 
   /** Reorder accounts: the given ids first in that order, anything not listed keeps its relative order after them. */
   const reorderAccounts = useCallback((ids: string[]) => {
-    setState((prev) => {
+    return setState((prev) => {
       const rank = new Map(ids.map((id, i) => [id, i]));
       const accounts = [...prev.accounts].sort((a, b) => (rank.get(a.id) ?? ids.length) - (rank.get(b.id) ?? ids.length));
       return { ...prev, accounts };
@@ -384,7 +270,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const setCategoryHidden = useCallback((id: string, hidden: boolean) => {
-    setState((prev) => {
+    return setState((prev) => {
       const ids = new Set(prev.hiddenCategoryIds);
       if (hidden) ids.add(id);
       else ids.delete(id);
@@ -393,33 +279,33 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const setLedgerOrder = useCallback((ids: string[]) => {
-    setState((prev) => {
+    return setState((prev) => {
       const existing = new Set(getLedgers(prev).map((ledger) => ledger.id));
       return { ...prev, ledgerOrder: [...new Set(ids.filter((id) => existing.has(id)))] };
     });
   }, []);
 
-  const addLedger = useCallback((name: string, kind: Ledger['kind'], appearance?: Pick<Ledger, 'icon' | 'color'>) => {
+  const addLedger = useCallback(async (name: string, kind: Ledger['kind'], appearance?: Pick<Ledger, 'icon' | 'color'>) => {
     const id = `ledger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind, ...appearance }] }));
-    return id;
+    const saved = await setState((prev) => ({ ...prev, ledgers: [...getLedgers(prev), { id, name, kind, ...appearance }] }));
+    return saved ? id : null;
   }, []);
 
   const updateLedger = useCallback((id: string, changes: Partial<Pick<Ledger, 'name' | 'icon' | 'color'>>) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       ledgers: getLedgers(prev).map((ledger) => ledger.id === id ? { ...ledger, ...changes } : ledger),
     }));
   }, []);
 
   const deleteLedger = useCallback((id: string, destinationId: string) => {
-    setState((prev) => removeLedger(prev, id, destinationId));
+    return setState((prev) => removeLedger(prev, id, destinationId));
   }, []);
 
   const setLedgerTaxExemption = useCallback((id: string, year: number, amount?: number) => {
     if (!Number.isInteger(year) || year < 1000 || year > 9999 ||
-      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return;
-    setState((prev) => ({
+      (amount !== undefined && (!Number.isSafeInteger(amount) || amount < 0))) return Promise.resolve(false);
+    return setState((prev) => ({
       ...prev,
       ledgers: getLedgers(prev).map((ledger) => {
         if (ledger.id !== id) return ledger;
@@ -432,7 +318,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const upsertBudget = useCallback((budget: Budget) => {
-    setState((prev) => {
+    return setState((prev) => {
       const matches = (b: Budget) => b.categoryId === budget.categoryId && b.ledgerId === budget.ledgerId;
       const exists = prev.budgets.some(matches);
       const nextBudgets = exists
@@ -443,7 +329,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const removeBudget = useCallback((categoryId: string, ledgerId?: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       budgets: prev.budgets.filter((b) => b.categoryId !== categoryId || b.ledgerId !== ledgerId),
     }));
@@ -451,14 +337,14 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const addRecurringItem = useCallback((item: Omit<RecurringItem, 'id'>) => {
     const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       recurringItems: [...prev.recurringItems, { ...item, id }],
     }));
   }, []);
 
   const deleteRecurringItem = useCallback((id: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       recurringItems: prev.recurringItems.filter((r) => r.id !== id),
     }));
@@ -472,46 +358,38 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
       );
       const date = `${monthKey}-${dayStr}`;
       const id = `tx_rec_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      setState((prev) => ({
-        ...prev,
-        transactions: [
-          {
-            id,
-            type: item.type,
-            amount: item.amount,
-            date,
-            categoryId: item.categoryId,
-            accountId: item.accountId,
-            title: item.title,
-            recurringId: item.id,
-            scope: item.scope ?? 'personal',
-            accountingSubject: item.accountingSubject,
-            businessRatio: item.scope === 'business' ? 100 : 0,
-          },
-          ...prev.transactions,
-        ],
-      }));
+      return setState((prev) => {
+        if (prev.transactions.some((tx) => tx.recurringId === item.id && tx.date.startsWith(monthKey + '-'))) {
+          throw new FinanceInputError('この月の定期項目はすでに記録されています。');
+        }
+        const transaction: Transaction = {
+          id, type: item.type, amount: item.amount, date, categoryId: item.categoryId, accountId: item.accountId,
+          title: item.title, recurringId: item.id, scope: item.scope ?? 'personal',
+          accountingSubject: item.accountingSubject, businessRatio: item.scope === 'business' ? 100 : 0,
+        };
+        return { ...prev, transactions: [transaction, ...prev.transactions] };
+      }, id);
     },
     []
   );
 
   const addSavingsGoal = useCallback((goal: Omit<SavingsGoal, 'id'>) => {
     const id = `goal_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       savingsGoals: [...prev.savingsGoals, { ...goal, id }],
     }));
   }, []);
 
   const deleteSavingsGoal = useCallback((id: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       savingsGoals: prev.savingsGoals.filter((g) => g.id !== id),
     }));
   }, []);
 
   const updateSavingsGoal = useCallback((id: string, patch: Partial<Omit<SavingsGoal, 'id' | 'currentAmount'>>) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       savingsGoals: prev.savingsGoals.map((goal) => goal.id === id ? { ...goal, ...patch } : goal),
     }));
@@ -519,7 +397,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const savePurchaseCandidate = useCallback((item: Omit<PurchaseCandidate, 'id'>, existingId?: string) => {
     const id = existingId ?? `purchase_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    setState((prev) => {
+    return setState((prev) => {
       const items = prev.purchaseCandidates ?? [];
       return {
         ...prev,
@@ -531,14 +409,14 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const removePurchaseCandidate = useCallback((id: string) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       purchaseCandidates: prev.purchaseCandidates?.filter((item) => item.id !== id),
     }));
   }, []);
 
   const contributeToGoal = useCallback((id: string, delta: number) => {
-    setState((prev) => ({
+    return setState((prev) => ({
       ...prev,
       savingsGoals: prev.savingsGoals.map((g) =>
         g.id === id
@@ -548,33 +426,58 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
-  const importMonemyRows = useCallback((plan: ReturnType<typeof planMonemyImport>) => {
-    if (plan.source !== latestState.current) throw new Error('家計データが変わりました。プレビューを確認し直してください。');
-    const next = appendMonemyRows(plan);
-    if (next === plan.source) return;
+  const reimburseAdvance = useCallback((id: string, accountId: string, date: string) =>
+    setState((prev) => {
+      const advance = prev.transactions.find((row) => row.id === id);
+      if (!advance?.advance || advance.type !== 'expense' || advance.advance.reimbursedAt) {
+        throw new FinanceInputError('この立替は回収できる状態ではありません。');
+      }
+      const accounts = new Map(prev.accounts.map((account) => [account.id, account]));
+      if (!accounts.has(accountId)) throw new FinanceInputError('回収先の口座を確認してください。');
+      const ledgerId = getTransactionLedger(advance, accounts, getLedgers(prev)).id;
+      const income = { ...buildReimbursementTx({ ...advance, ledgerId }, accountId, date),
+        id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
+      const settled = { ...advance, advance: { ...advance.advance, reimbursedAt: date, reimbursementTxId: income.id } };
+      return { ...prev, transactions: [income, ...prev.transactions.map((row) => row === advance ? settled : row)] };
+    }), [setState]);
+
+  const recordPurchase = useCallback((id: string, accountId: string, date: string) =>
+    setState((prev) => {
+      const candidates = prev.purchaseCandidates ?? [];
+      const candidate = candidates.find((item) => item.id === id);
+      if (!candidate || candidate.status === 'purchased') throw new FinanceInputError('この購入はすでに処理されています。');
+      if (!prev.accounts.some((account) => account.id === accountId)) throw new FinanceInputError('支払い口座を確認してください。');
+      const expense = { ...buildPurchaseTransaction(candidate, accountId, date),
+        id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` };
+      return {
+        ...prev, transactions: [expense, ...prev.transactions],
+        purchaseCandidates: candidates.map((item) => item === candidate ? { ...markPurchased(item, date), id } : item),
+      };
+    }), [setState]);
+
+  const importMonemyRows = useCallback((plan: ReturnType<typeof planMonemyImport>) => persist((prev) => {
+    if (plan.source !== prev) throw new FinanceInputError('家計データが変わりました。プレビューを確認し直してください。');
+    return appendMonemyRows(plan);
+  }), [persist]);
+
+  const importState = useCallback((next: FinanceState) => setState(next), [setState]);
+  const restoreBackup = useCallback((next: FinanceState) => persist(next), [persist]);
+
+  const reset = useCallback(async (next: FinanceState) => {
+    if (!await setState(next)) return false;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(next));
+      await storage.clearLegacyCopies?.();
     } catch {
-      throw new Error('データを保存できませんでした。空き容量などを確認して再試行してください。');
+      setWriteError('家計データは置き換わりましたが、移行前のコピーを削除できませんでした。再試行してください。');
+      return false;
     }
-    persistedState.current = next;
-    setState(next);
+    return true;
   }, [setState]);
-
-  const importState = useCallback((newState: FinanceState) => {
-    setState(newState);
-  }, []);
-
-  const resetToSampleData = useCallback(() => {
-    setState(createInitialSeedData(getCurrentMonthKey()));
-  }, []);
-
-  const clearAllData = useCallback(() => {
-    setState((initialState ?? createEmptyFinanceState)());
-  }, []);
+  const resetToSampleData = useCallback(() => reset(createInitialSeedData(getCurrentMonthKey())), [reset]);
+  const clearAllData = useCallback(() => reset(emptyState()), [reset]);
 
   return {
-    state,
+    state, writeError, dismissWriteError,
     accountBalances,
     totalAssets,
     accountNameMap,
@@ -607,6 +510,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     contributeToGoal,
     savePurchaseCandidate,
     removePurchaseCandidate,
+    reimburseAdvance, recordPurchase, restoreBackup,
     importState,
     importMonemyRows,
     resetToSampleData,

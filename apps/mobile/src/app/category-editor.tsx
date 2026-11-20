@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { getOrderedCategories } from '@dmm/core/data/categories';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionInput } from '@/ui/TransactionForm';
@@ -34,16 +35,15 @@ export default function CategoryEditor() {
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [icon, setIcon] = useState(editing?.icon ?? editing?.id ?? 'daily');
   const [color, setColor] = useState(editing?.color ?? COLORS[0].value);
-  const closing = useRef(false);
+  const submit = useFinanceSubmit();
   const taken = getOrderedCategories(type, state.customCategories)
     .some((category) => category.id !== editing?.id && category.type === type && category.name === name.trim());
   const canSave = Boolean(name.trim()) && !taken;
-  const save = () => {
-    if (!canSave || closing.current) return;
-    closing.current = true;
-    saveCustomCategory({ name: name.trim(), type, icon, color, memo: memo.trim() || undefined,
-      defaultAccountingSubject: editing?.defaultAccountingSubject }, editing?.id);
-    router.back();
+  const save = async () => {
+    if (!canSave) return;
+    const saved = await submit(() => saveCustomCategory({ name: name.trim(), type, icon, color, memo: memo.trim() || undefined,
+      defaultAccountingSubject: editing?.defaultAccountingSubject }, editing?.id));
+    if (saved) closeEditor('/categories');
   };
 
   return (

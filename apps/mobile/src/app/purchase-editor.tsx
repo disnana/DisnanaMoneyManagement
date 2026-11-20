@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Keyboard, Pressable, Text, View } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { CURRENCY_META, getCategoryById } from '@dmm/core/data/categories';
 import type { CurrencyCode, ForeignPurchasePrice } from '@dmm/core/types/finance';
 import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
@@ -12,6 +12,7 @@ import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { Group, Row, Screen, Segmented } from '@/ui/kit';
@@ -43,7 +44,7 @@ export default function PurchaseEditor() {
   const [count, setCount] = useState(existing?.installment?.count ?? 1);
   const [ratePct, setRatePct] = useState(existing?.installment ? String(existing.installment.annualRatePct) : '0');
   const [tab, setTab] = useState<EditorTab>('purchase');
-  const closing = useRef(false);
+  const submit = useFinanceSubmit();
   const targetMonth = existing?.month ?? month;
   const [ledgerId, setLedgerId] = useState(() => existing ? existing.ledgerId : activeLedger?.id);
   const ledger = ledgers.find((item) => item.id === ledgerId);
@@ -69,13 +70,12 @@ export default function PurchaseEditor() {
       setFee('');
     }
   };
-  const save = () => {
-    if (!valid || !purchaseAmount || (id && !existing) || closing.current) return;
-    closing.current = true;
-    savePurchaseCandidate({ title: title.trim(), categoryId: category, amount: purchaseAmount, foreignPrice,
+  const save = async () => {
+    if (!valid || !purchaseAmount || (id && !existing)) return;
+    const saved = await submit(() => savePurchaseCandidate({ title: title.trim(), categoryId: category, amount: purchaseAmount, foreignPrice,
       month: targetMonth, ledgerId, priority, note: note.trim() || undefined, url: url.trim() || undefined,
-      installment: count > 1 ? { count, annualRatePct: Number(ratePct) || 0 } : undefined }, existing?.id);
-    router.back();
+      installment: count > 1 ? { count, annualRatePct: Number(ratePct) || 0 } : undefined }, existing?.id));
+    if (saved) closeEditor('/planning');
   };
   const showTab = (next: EditorTab) => {
     Keyboard.dismiss();
