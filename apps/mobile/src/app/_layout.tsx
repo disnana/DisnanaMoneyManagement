@@ -1,14 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FinanceProvider } from '@/lib/store';
 import { AndroidKeyboardProvider } from '@/ui/AndroidKeyboardProvider';
 import { PickerHost } from '@/lib/pick';
 import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
-import { useAppReducedMotion } from '@/lib/motionPref';
+import { androidSettingsTransition, useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import '@/lib/themePref';
 
@@ -18,6 +18,12 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const p = usePalette();
   const reduceMotion = useAppReducedMotion();
+  const navigationTheme = useMemo(() => {
+    const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+    return Platform.OS === 'android'
+      ? { ...base, colors: { ...base.colors, background: p.bg } }
+      : base;
+  }, [scheme, p.bg]);
 
   useEffect(() => {
     // The finance provider shows loading or recovery until the saved ledger is available.
@@ -25,14 +31,14 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: Platform.OS === 'android' ? p.bg : undefined }}>
     <AndroidKeyboardProvider>
     <LockGate>
-    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={navigationTheme}>
       <FinanceProvider>
         <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="settings" />
+          <Stack.Screen name="settings" options={androidSettingsTransition(reduceMotion)} />
           {(['categories', 'category-editor', 'category-detail', 'planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm'] as const).map((name) => (
             <Stack.Screen key={name} name={name} options={{
               headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
