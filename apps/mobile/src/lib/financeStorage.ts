@@ -51,7 +51,7 @@ export const financeStorage: FinanceStorage = {
     db.save(migrated);
     return migrated;
   },
-  saveState: (state) => database().save(state),
+  saveState: (state, change) => database().save(state, change),
 };
 
 /** Explicit data erasure also removes the JSON copies retained by the migration. */

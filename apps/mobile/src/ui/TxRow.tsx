@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import type { Transaction } from '@dmm/core/types/finance';
@@ -55,7 +56,12 @@ export function TxRow({ tx, showDate, showMemo }: { tx: Transaction; showDate?: 
         <DeleteDialog visible heading="取引を削除しますか？" title={tx.title}
           onCancel={() => setDeleteOpen(false)} onDelete={() => {
             setDeleteOpen(false);
-            deleteTransaction(tx.id);
+            try {
+              deleteTransaction(tx.id, true);
+            } catch {
+              Alert.alert('取引を削除できませんでした', '取引は保存されています。再試行してください。');
+              return;
+            }
             success();
           }} />
       ) : null}

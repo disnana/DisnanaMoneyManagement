@@ -42,6 +42,7 @@ export const transactionQueries = {
 type SavedRow = { id: string; position: number; ledger_id: string; data: string };
 type Entry = { transaction: Transaction; position: number; ledgerId: string };
 type RestOfState = Omit<FinanceState, 'transactions'>;
+export type TransactionChange = { before: FinanceState; id: string };
 
 export function createFinanceDatabase(db: FinanceDatabase) {
   const version = db.all<{ user_version: number }>('PRAGMA user_version')[0].user_version;
@@ -74,12 +75,48 @@ export function createFinanceDatabase(db: FinanceDatabase) {
     return snapshot;
   }
 
-  function save(state: FinanceState) {
+  function writeEntry(entry: Entry) {
+    const { transaction, position, ledgerId } = entry;
+    db.run(`INSERT INTO finance_transactions VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET date = excluded.date, ledger_id = excluded.ledger_id,
+      account_id = excluded.account_id, destination_id = excluded.destination_id,
+      position = excluded.position, data = excluded.data`,
+    transaction.id, transaction.date, ledgerId, transaction.accountId, transaction.toAccountId ?? null,
+    position, JSON.stringify(transaction));
+  }
+
+  function saveOne(state: FinanceState, change: TransactionChange) {
+    const previous = entries.get(change.id);
+    const transaction = state.transactions.find((row) => row.id === change.id);
+    if (previous && state.transactions.length > change.before.transactions.length) throw new Error('取引IDが重複しています。');
+    // New transactions are prepended. Existing edits retain their original position.
+    const first = change.before.transactions[0];
+    const position = previous?.position ?? (first ? entries.get(first.id)!.position - 1 : 0);
+    const entry = transaction && {
+      transaction, position,
+      ledgerId: getTransactionLedger(transaction, new Map(state.accounts.map((item) => [item.id, item])), getLedgers(state)).id,
+    };
+    // A single SQLite statement is atomic on this connection.
+    if (entry) {
+      writeEntry(entry);
+      entries.set(change.id, entry);
+    } else if (previous) {
+      db.run('DELETE FROM finance_transactions WHERE id = ?', change.id);
+      entries.delete(change.id);
+    }
+    snapshot = state;
+  }
+
+  function save(state: FinanceState, change?: TransactionChange) {
     if (state === snapshot) return;
     const { transactions, ...rest } = state;
     const metadata = JSON.stringify(rest);
     const sameTransactions = transactions === snapshot?.transactions;
     const sameAssignment = state.accounts === snapshot?.accounts && state.ledgers === snapshot?.ledgers;
+    if (change && change.before === snapshot && sameAssignment && metadata === snapshotData) {
+      saveOne(state, change);
+      return;
+    }
     const next = sameTransactions && sameAssignment ? entries : new Map<string, Entry>();
     if (next !== entries) {
       const positions = transactionPositions(transactions, entries);
@@ -108,11 +145,7 @@ export function createFinanceDatabase(db: FinanceDatabase) {
           const previous = entries.get(id);
           const { transaction, position, ledgerId } = entry;
           if (previous?.transaction === transaction && previous.position === position && previous.ledgerId === ledgerId) continue;
-          db.run(`INSERT INTO finance_transactions VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET date = excluded.date, ledger_id = excluded.ledger_id,
-            account_id = excluded.account_id, destination_id = excluded.destination_id,
-            position = excluded.position, data = excluded.data`,
-          id, transaction.date, ledgerId, transaction.accountId, transaction.toAccountId ?? null, position, JSON.stringify(transaction));
+          writeEntry(entry);
         }
       }
       db.exec('COMMIT');

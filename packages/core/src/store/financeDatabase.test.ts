@@ -1,17 +1,19 @@
 /// <reference types="node" />
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createInitialSeedData } from '../data/seedData';
 import type { FinanceState, Transaction } from '../types/finance';
 import { getAccountLedger, getLedgers } from '../utils/ledgers';
 import { computeMonthMetrics } from '../utils/metrics';
-import { computeAccountBalances } from './finance';
+import { computeAccountBalances, createFinanceStoreHook, type ReactHooks } from './finance';
 import { parseFinanceBackup, serializeFinanceBackup } from './financeBackup';
 import { createFinanceDatabase, transactionQueries } from './financeDatabase';
 
 const opened: DatabaseSync[] = [];
-function setup() {
-  const sql = new DatabaseSync(':memory:');
+function setup(sql = new DatabaseSync(':memory:')) {
   opened.push(sql);
   const writes: string[] = [];
   const db = createFinanceDatabase({
@@ -75,6 +77,51 @@ describe('SQLite finance storage', () => {
     };
     expect(() => db.save(rejected)).toThrow('test write failure');
     expect(db.load()).toEqual(before);
+  });
+
+  it('keeps failed edits out of state and preserves committed writes after reopening the file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dmm-finance-test-'));
+    const path = join(dir, 'finance.db');
+    const openedDb = new DatabaseSync(path);
+    const { db } = setup(openedDb);
+    const before = createInitialSeedData('2026-11');
+    db.save(before);
+    const hooks: ReactHooks = {
+      useState: <S>(init: S | (() => S)) => [typeof init === 'function' ? (init as () => S)() : init, () => undefined],
+      useRef: (current) => ({ current }),
+      useEffect: () => undefined,
+      useMemo: (factory) => factory(),
+      useCallback: (callback) => callback,
+    };
+    const store = createFinanceStoreHook(hooks, { loadState: db.load, saveState: db.save })();
+    const transaction = before.transactions[0];
+    openedDb.exec("CREATE TRIGGER fail_update BEFORE UPDATE ON finance_transactions BEGIN SELECT RAISE(ABORT, 'write unavailable'); END");
+    expect(() => store.updateTransaction(transaction.id, { title: 'rejected' }, true)).toThrow('write unavailable');
+    openedDb.exec('DROP TRIGGER fail_update');
+    store.updateTransaction(transaction.id, { amount: 50 }, true);
+    store.addTransaction({ ...transaction, title: 'saved record', amount: 60 }, true);
+
+    opened.pop();
+    openedDb.close();
+    const reopened = new DatabaseSync(path);
+    try {
+      const result = setup(reopened).db.load()!;
+      expect(result.transactions[0]).toMatchObject({ title: 'saved record', amount: 60 });
+      expect(result.transactions.find((item) => item.id === transaction.id)).toMatchObject({
+        title: transaction.title, amount: 50,
+      });
+      const blank = { ...result, transactions: [] };
+      const reloaded = createFinanceStoreHook(hooks, {
+        loadState: () => result,
+        saveState: () => { throw new Error('restore blocked'); },
+      })();
+      expect(() => reloaded.restoreBackup(blank)).toThrow('restore blocked');
+      expect(result.transactions).toHaveLength(before.transactions.length + 1);
+    } finally {
+      opened.pop();
+      reopened.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('uses the date, ledger and both transfer-side indexes', () => {

@@ -17,6 +17,7 @@ import {
   getTransferTotalFees,
 } from '../utils/format';
 import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
+import type { TransactionChange } from './financeDatabase';
 import { estimatePurchaseJPY } from '../utils/planning';
 
 import { appendMonemyRows, type planMonemyImport } from '../utils/monemyImport';
@@ -144,7 +145,7 @@ export interface StorageAdapter {
 
 export interface FinanceStorage {
   loadState(): FinanceState | null;
-  saveState(state: FinanceState): void;
+  saveState(state: FinanceState, change?: TransactionChange): void;
 }
 
 export function createEmptyFinanceState(): FinanceState {
@@ -240,8 +241,8 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   const read = () => 'loadState' in storage
     ? storage.loadState() ?? (initialState ?? createEmptyFinanceState)()
     : loadInitialState(storage, initialState);
-  const save = (state: FinanceState) => {
-    if ('saveState' in storage) storage.saveState(state);
+  const save = (state: FinanceState, change?: TransactionChange) => {
+    if ('saveState' in storage) storage.saveState(state, change);
     else storage.setItem(STORAGE_KEY, JSON.stringify(state));
   };
 
@@ -279,13 +280,25 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     return map;
   }, [state.accounts]);
 
-  const addTransaction = useCallback((tx: Omit<Transaction, 'id'>) => {
+  const commitTransactionChange = useCallback((update: (prev: FinanceState) => FinanceState, immediate: boolean, id: string) => {
+    if (immediate && 'saveState' in storage) {
+      const before = latestState.current;
+      const next = update(before);
+      save(next, { before, id });
+      persistedState.current = next;
+      setState(next);
+    } else {
+      setState(update);
+    }
+  }, [setState]);
+
+  const addTransaction = useCallback((tx: Omit<Transaction, 'id'>, immediate = false) => {
     const id = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    setState((prev) => ({
+    commitTransactionChange((prev) => ({
       ...prev,
       transactions: [{ ...tx, id }, ...prev.transactions],
-    }));
-  }, []);
+    }), immediate, id);
+  }, [commitTransactionChange]);
 
   const addTransactionsBatch = useCallback((items: Omit<Transaction, 'id'>[]) => {
     const now = Date.now();
@@ -300,23 +313,23 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   }, []);
 
   const updateTransaction = useCallback(
-    (id: string, patch: Partial<Omit<Transaction, 'id'>>) => {
-      setState((prev) => ({
+    (id: string, patch: Partial<Omit<Transaction, 'id'>>, immediate = false) => {
+      commitTransactionChange((prev) => ({
         ...prev,
         transactions: prev.transactions.map((tx) =>
           tx.id === id ? { ...tx, ...patch } : tx
         ),
-      }));
+      }), immediate, id);
     },
-    []
+    [commitTransactionChange]
   );
 
-  const deleteTransaction = useCallback((id: string) => {
-    setState((prev) => ({
+  const deleteTransaction = useCallback((id: string, immediate = false) => {
+    commitTransactionChange((prev) => ({
       ...prev,
       transactions: prev.transactions.filter((tx) => tx.id !== id),
-    }));
-  }, []);
+    }), immediate, id);
+  }, [commitTransactionChange]);
 
   const deleteSettlementGroup = useCallback((groupId: string) => {
     setState((prev) => ({

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
@@ -54,6 +54,7 @@ export default function AddScreen() {
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
   const { id } = params;
   const closing = useRef(false);
+  const continuing = useRef(false);
   const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, reorderAccounts, showSavedTransaction } = useFinance();
   const accountsById = useMemo(() => new Map(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
@@ -66,6 +67,12 @@ export default function AddScreen() {
 
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
   const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
+  useLayoutEffect(() => {
+    if (!continuing.current || amount !== '') return;
+    continuing.current = false;
+    closing.current = false;
+  }, [amount]);
+
   const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
@@ -193,7 +200,7 @@ export default function AddScreen() {
       Alert.alert('デビットカードの引落口座を設定してください');
       return;
     }
-    if (!keepOpen || editing) closing.current = true;
+    closing.current = true;
     const payload: Omit<Transaction, 'id'> = {
       type,
       amount: value,
@@ -223,11 +230,18 @@ export default function AddScreen() {
           ? { ...(editing?.advance ?? {}), for: advanceFor.trim() || '未設定' }
           : undefined,
     };
-    if (editing) updateTransaction(editing.id, payload);
-    else addTransaction(payload);
+    try {
+      if (editing) updateTransaction(editing.id, payload, true);
+      else addTransaction(payload, true);
+    } catch {
+      closing.current = false;
+      Alert.alert('取引を保存できませんでした', '入力内容を残しました。空き容量を確認し、再試行してください。');
+      return;
+    }
     showSavedTransaction(date, type, ledger.id);
     success();
     if (keepOpen && !editing) {
+      continuing.current = true;
       setAmount('');
       setPointUsed('');
       setTitle('');
@@ -545,7 +559,13 @@ export default function AddScreen() {
           if (!editing || closing.current) return;
           closing.current = true;
           setDeleteOpen(false);
-          deleteTransaction(editing.id);
+          try {
+            deleteTransaction(editing.id, true);
+          } catch {
+            closing.current = false;
+            Alert.alert('取引を削除できませんでした', '取引は保存されています。再試行してください。');
+            return;
+          }
           success();
           closeEditor();
         }} />
