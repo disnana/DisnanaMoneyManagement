@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Download, Upload, FileSpreadsheet, RotateCcw, Trash2, CheckCircle2 } from 'lucide-react';
+import { parseFinanceBackup } from '@dmm/core/store/financeBackup';
 import { FinanceState } from '../types/finance';
 import { exportTransactionsToCSV } from '../utils/format';
 import { saveFile } from '../utils/saveFile';
@@ -51,21 +52,7 @@ export const DataModal: React.FC<DataModalProps> = ({
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(String(reader.result)) as Partial<FinanceState>;
-        if (
-          !Array.isArray(parsed.accounts) ||
-          !Array.isArray(parsed.transactions) ||
-          !Array.isArray(parsed.budgets) ||
-          !Array.isArray(parsed.recurringItems) ||
-          !Array.isArray(parsed.savingsGoals)
-        ) {
-          setFeedback({
-            type: 'error',
-            message: 'バックアップファイルの形式が正しくありません。',
-          });
-          return;
-        }
-        onImportState(parsed as FinanceState);
+        onImportState(parseFinanceBackup(String(reader.result)));
         setFeedback({ type: 'success', message: 'バックアップからデータを復元しました。' });
       } catch {
         setFeedback({

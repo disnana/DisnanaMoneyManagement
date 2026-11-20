@@ -4,6 +4,7 @@ import { requireOptionalNativeModule } from 'expo';
 import { Stack } from 'expo-router';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import { success } from '@/lib/haptics';
+import { clearLegacyFinanceCopies } from '@/lib/financeStorage';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { DeleteDialog } from '@/ui/DeleteDialog';
@@ -11,6 +12,7 @@ import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { Group, Row, Screen } from '@/ui/kit';
 
 import { MonemyImport } from '@/ui/MonemyImport';
+import { LocalFinanceBackup } from '@/ui/LocalFinanceBackup';
 
 type Mode = 'clear' | 'sample';
 
@@ -31,6 +33,7 @@ export default function DataSettings() {
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
         <MonemyImport />
+        {Platform.OS !== 'web' ? <LocalFinanceBackup /> : null}
         {Platform.OS === 'android' ? (
           <Group>
             {financeBackup ? (
@@ -64,12 +67,24 @@ export default function DataSettings() {
         confirmLabel={isSample ? '置き換える' : '初期化する'} visible={Boolean(pending)}
         onCancel={() => setPending(undefined)} onDelete={() => {
           if (!pending) return;
-          if (isSample) resetToSampleData();
-          else clearAllData();
+          try {
+            if (isSample) resetToSampleData();
+            else clearAllData();
+          } catch {
+            setPending(undefined);
+            setMessage(isSample ? 'サンプルデータに置き換えられませんでした。' : '家計データを初期化できませんでした。');
+            return;
+          }
           setActiveLedgerId(null);
           setMonth(getCurrentMonthKey());
           setTransactionFilter('all');
           setPending(undefined);
+          try {
+            clearLegacyFinanceCopies();
+          } catch {
+            setMessage('データは置き換わりましたが、移行前のコピーを削除できませんでした。');
+            return;
+          }
           setMessage(isSample ? 'サンプルデータに置き換えました。' : '家計データを初期化しました。');
           success();
         }} />

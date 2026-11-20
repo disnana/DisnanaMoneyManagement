@@ -142,6 +142,11 @@ export interface StorageAdapter {
   setItem(key: string, value: string): void;
 }
 
+export interface FinanceStorage {
+  loadState(): FinanceState | null;
+  saveState(state: FinanceState): void;
+}
+
 export function createEmptyFinanceState(): FinanceState {
   return {
     accounts: [
@@ -229,11 +234,19 @@ export interface ReactHooks {
   useCallback<T extends (...args: any[]) => any>(callback: T, deps: readonly unknown[]): T;
 }
 
-export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter, initialState?: () => FinanceState) {
+export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter | FinanceStorage, initialState?: () => FinanceState) {
   const { useState, useEffect, useMemo, useCallback, useRef } = react;
 
+  const read = () => 'loadState' in storage
+    ? storage.loadState() ?? (initialState ?? createEmptyFinanceState)()
+    : loadInitialState(storage, initialState);
+  const save = (state: FinanceState) => {
+    if ('saveState' in storage) storage.saveState(state);
+    else storage.setItem(STORAGE_KEY, JSON.stringify(state));
+  };
+
   return function useFinanceStore() {
-  const [state, setRenderedState] = useState<FinanceState>(() => loadInitialState(storage, initialState));
+  const [state, setRenderedState] = useState<FinanceState>(read);
   const latestState = useRef(state);
   const persistedState = useRef<FinanceState | undefined>(undefined);
   const setState = useCallback((update: FinanceState | ((previous: FinanceState) => FinanceState)) => {
@@ -245,7 +258,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
   useEffect(() => {
     if (state !== latestState.current || state === persistedState.current) return;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(state));
+      save(state);
       persistedState.current = state;
     } catch {
       // Ignore storage quota errors
@@ -553,7 +566,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     const next = appendMonemyRows(plan);
     if (next === plan.source) return;
     try {
-      storage.setItem(STORAGE_KEY, JSON.stringify(next));
+      save(next);
     } catch {
       throw new Error('データを保存できませんでした。空き容量などを確認して再試行してください。');
     }
@@ -563,15 +576,25 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
 
   const importState = useCallback((newState: FinanceState) => {
     setState(newState);
-  }, []);
+  }, [setState]);
+
+  const restoreBackup = useCallback((newState: FinanceState) => {
+    save(newState);
+    persistedState.current = newState;
+    setState(newState);
+  }, [setState]);
 
   const resetToSampleData = useCallback(() => {
-    setState(createInitialSeedData(getCurrentMonthKey()));
-  }, []);
+    const sample = createInitialSeedData(getCurrentMonthKey());
+    if ('saveState' in storage) restoreBackup(sample);
+    else setState(sample);
+  }, [restoreBackup, setState]);
 
   const clearAllData = useCallback(() => {
-    setState((initialState ?? createEmptyFinanceState)());
-  }, []);
+    const empty = (initialState ?? createEmptyFinanceState)();
+    if ('saveState' in storage) restoreBackup(empty);
+    else setState(empty);
+  }, [restoreBackup, setState]);
 
   return {
     state,
@@ -608,6 +631,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     savePurchaseCandidate,
     removePurchaseCandidate,
     importState,
+    restoreBackup,
     importMonemyRows,
     resetToSampleData,
     clearAllData,
