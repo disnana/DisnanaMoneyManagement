@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
 import { Pressable, Text } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -13,6 +13,7 @@ import { usePalette } from '@/lib/theme';
 import { AddButton } from '@/ui/AddButton';
 
 type Tab = 'home' | 'transactions' | 'analytics' | 'accounts';
+type MonthReset = { tab: Tab; month: string };
 
 function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: ComponentProps<typeof Pressable> & Pick<TabTriggerSlotProps, 'href' | 'isFocused'> & {
   label: string;
@@ -49,29 +50,37 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
   );
 }
 
-function FocusedTab({ children, requestedMonth, onMonthReset }: {
+function FocusedTab({ children, reset, onMonthReset }: {
   children: ReactNode;
-  requestedMonth?: string;
-  onMonthReset: () => void;
+  reset?: MonthReset;
+  onMonthReset: (reset: MonthReset) => void;
 }) {
   const { month, setMonth } = useFinance();
+  const applied = useRef<MonthReset | undefined>(undefined);
+  const requestedMonth = reset && reset !== applied.current ? reset.month : undefined;
 
   useLayoutEffect(() => {
-    if (!requestedMonth) return;
-    setMonth(requestedMonth);
-    onMonthReset();
-  }, [requestedMonth, onMonthReset, setMonth]);
+    if (!reset || !requestedMonth) return;
+    applied.current = reset;
+    if (requestedMonth !== month) setMonth(requestedMonth);
+    onMonthReset(reset);
+  }, [month, reset, requestedMonth, onMonthReset, setMonth]);
 
-  // A tab button resets the destination month only, after the old tab is removed.
+  // Reset the destination before its first render when the old tab was in another month.
   return requestedMonth && month !== requestedMonth ? null : children;
 }
 
 export default function TabsLayout() {
   const p = usePalette();
-  const [pendingReset, setPendingReset] = useState<{ tab: Tab; month: string }>();
+  // TabSlot already renders the destination after navigation, so recording the
+  // pending month does not need to schedule a second render of the tab bar.
+  const pendingReset = useRef<MonthReset | undefined>(undefined);
+  const clearMonthReset = useCallback((reset: MonthReset) => {
+    if (pendingReset.current === reset) pendingReset.current = undefined;
+  }, []);
   const tab = (name: Tab, label: string, icon: SymbolViewProps['name']) => (
     <TabTrigger name={name} href={`/${name}`} resetOnFocus asChild>
-      <TabButton label={label} icon={icon} onSwitch={() => setPendingReset({ tab: name, month: getCurrentMonthKey() })} />
+      <TabButton label={label} icon={icon} onSwitch={() => { pendingReset.current = { tab: name, month: getCurrentMonthKey() }; }} />
     </TabTrigger>
   );
 
@@ -79,8 +88,8 @@ export default function TabsLayout() {
     <Tabs style={{ flex: 1, backgroundColor: p.bg }} options={{ backBehavior: 'history' }}>
       <TabSlot renderFn={(descriptor, { isFocused, detachInactiveScreens }) => isFocused ? (
         <NativeScreen enabled={detachInactiveScreens} activityState={2} style={{ flex: 1, backgroundColor: p.bg }}>
-          <FocusedTab requestedMonth={pendingReset?.tab === descriptor.route.name ? pendingReset.month : undefined}
-            onMonthReset={() => setPendingReset(undefined)}>
+          <FocusedTab reset={pendingReset.current?.tab === descriptor.route.name ? pendingReset.current : undefined}
+            onMonthReset={clearMonthReset}>
             {descriptor.render()}
           </FocusedTab>
         </NativeScreen>
