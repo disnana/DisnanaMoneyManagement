@@ -19,6 +19,8 @@ import {
 import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
 import { estimatePurchaseJPY } from '../utils/planning';
 
+import { appendMonemyRows, type MonemyRow } from '../utils/monemyImport';
+
 export const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
 const VALID_ACCOUNT_TYPES = new Set([
@@ -536,6 +538,10 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const importMonemyRows = useCallback((rows: MonemyRow[], accountId: string) => {
+    setState((prev) => appendMonemyRows(prev, rows, accountId).state);
+  }, []);
+
   const importState = useCallback((newState: FinanceState) => {
     setState(newState);
   }, []);
@@ -583,6 +589,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     savePurchaseCandidate,
     removePurchaseCandidate,
     importState,
+    importMonemyRows,
     resetToSampleData,
     clearAllData,
   };

@@ -10,6 +10,8 @@ import { DeleteDialog } from '@/ui/DeleteDialog';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { Group, Row, Screen } from '@/ui/kit';
 
+import { MonemyImport } from '@/ui/MonemyImport';
+
 type Mode = 'clear' | 'sample';
 
 const financeBackup = Platform.OS === 'android'
@@ -28,6 +30,7 @@ export default function DataSettings() {
     <>
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
+        <MonemyImport />
         {Platform.OS === 'android' ? (
           <Group>
             {financeBackup ? (
