@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import { Text, TextInput } from 'react-native';
 import { Stack } from 'expo-router';
-import { getCategoryById } from '@dmm/core/data/categories';
-import type { TransactionType } from '@dmm/core/types/finance';
+import { getMonthTransactions } from '@dmm/core/utils/metrics';
+import { createTransactionSearch, normalizeTransactionSearch } from '@dmm/core/utils/transactionSearch';
+import type { Transaction, TransactionType } from '@dmm/core/types/finance';
 import { formatFullDate, formatMonthLabel, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
@@ -23,6 +24,7 @@ const PERIODS = [
 ] as const;
 type Period = (typeof PERIODS)[number]['id'];
 type RangeEnd = 'start' | 'end';
+const noResults: readonly Transaction[] = [];
 
 export default function SearchTransactions() {
   const p = usePalette();
@@ -42,20 +44,23 @@ export default function SearchTransactions() {
   const monthFilter = period === 'current' ? month : period === 'previous' ? shiftMonth(month, -1) : '';
   const validRange = period !== 'custom' || start <= end;
   const periodLabel = PERIODS.find(({ id }) => id === period)?.label;
-  const normalized = query.trim().normalize('NFKC').toLocaleLowerCase();
+  const normalized = normalizeTransactionSearch(query);
+  const deferred = useDeferredValue(normalized);
+  const searchTerm = normalized ? deferred : '';
+  const search = useMemo(() => createTransactionSearch(visibleState.customCategories, accountNameMap),
+    [visibleState.customCategories, accountNameMap]);
   const hasFilters = Boolean(normalized) || type !== 'all' || period !== 'all';
-  const results = useMemo(() => {
-    if (!hasFilters || !validRange) return [];
-    return visibleState.transactions.filter((tx) =>
+  const candidates = useMemo(() => {
+    if (!validRange) return noResults;
+    const transactions = monthFilter ? getMonthTransactions(visibleState.transactions, monthFilter) : visibleState.transactions;
+    if (type === 'all' && !from && !through) return transactions;
+    return transactions.filter((tx) =>
       (type === 'all' || tx.type === type) &&
-      (!monthFilter || tx.date.startsWith(monthFilter)) &&
-      (!from || tx.date >= from) && (!through || tx.date <= through) &&
-      (!normalized || [
-        tx.title, tx.memo, tx.counterparty, tx.accountingSubject, getCategoryById(tx.categoryId, visibleState.customCategories).name,
-        accountNameMap[tx.accountId], tx.toAccountId ? accountNameMap[tx.toAccountId] : undefined,
-      ].some((value) => value?.normalize('NFKC').toLocaleLowerCase().includes(normalized)))
+      (!from || tx.date >= from) && (!through || tx.date <= through)
     );
-  }, [visibleState.transactions, visibleState.customCategories, hasFilters, validRange, type, monthFilter, from, through, normalized, accountNameMap]);
+  }, [visibleState.transactions, type, monthFilter, from, through, validRange]);
+  const results = validRange && (searchTerm || type !== 'all' || period !== 'all')
+    ? search(candidates, searchTerm) : noResults;
 
   return (
     <>

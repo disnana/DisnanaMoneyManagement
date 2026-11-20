@@ -62,6 +62,22 @@ describe('computeCreditCardSummary', () => {
     expect(s.thisMonthUsage).toBe(0);
   });
 
+  it('reuses history across months and updates after transaction or closing-day changes', () => {
+    const transactions = [spend('first', '2026-11-20', 3000), spend('second', '2026-11-20', 5000)];
+    const initial = computeCreditCardSummary(card, transactions, -8000, '2027-01');
+    expect(initial.thisMonthTransactions.map(({ id }) => id)).toEqual(['first', 'second']);
+    initial.thisMonthTransactions.reverse();
+    expect(computeCreditCardSummary(card, transactions, -8000, '2027-01').thisMonthTransactions)
+      .toEqual(transactions);
+    expect(computeCreditCardSummary({ ...card, closingDay: 31 }, transactions, -8000, '2026-12').thisMonthGross).toBe(8000);
+    const edited = [{ ...transactions[0], amount: 1000 }, transactions[1]];
+    expect(computeCreditCardSummary(card, edited, -6000, '2027-01').thisMonthGross).toBe(6000);
+    const unallocated = { ...spend('unallocated', '2027-01-09', 1500), type: 'transfer' as const,
+      accountId: 'bank', toAccountId: card.id, isPrepayment: true };
+    const paid = computeCreditCardSummary(card, [...edited, unallocated], -4500, '2027-01');
+    expect(paid).toMatchObject({ thisMonthSettled: 1500, thisMonthRemaining: 4500, totalPrepaidCredit: 1500 });
+  });
+
   it('computes available credit from the unpaid balance', () => {
     const s = computeCreditCardSummary(card, [spend('a', '2026-11-10', 30000)], -30000, '2026-12');
     expect(s.availableCredit).toBe(70000);

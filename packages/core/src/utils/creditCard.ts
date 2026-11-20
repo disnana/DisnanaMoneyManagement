@@ -74,62 +74,101 @@ export function getPaymentWarning(summary: CreditCardStatementSummary, today: st
   return null;
 }
 
+type BillingCycle = { total: number; purchases: Transaction[]; sorted: boolean };
+type CardActivity = {
+  cycles: Map<string, BillingCycle>;
+  usage: Map<string, number>;
+  payments: Map<string, number>;
+  unallocated: Map<string, number>;
+  prepaidTotal: number;
+};
+
+const cardHistory = new WeakMap<readonly Transaction[], {
+  byAccount: Map<string, Transaction[]>;
+  activity: Map<string, { closingDay: number; offset: number; value: CardActivity }>;
+}>();
+
+function activityForCard(card: Account, transactions: readonly Transaction[]): CardActivity {
+  let history = cardHistory.get(transactions);
+  if (!history) {
+    history = { byAccount: new Map(), activity: new Map() };
+    for (const tx of transactions) {
+      const id = tx.type === 'expense' ? tx.accountId : tx.type === 'transfer' ? tx.toAccountId : undefined;
+      if (id === undefined) continue;
+      const bucket = history.byAccount.get(id);
+      if (bucket) bucket.push(tx);
+      else history.byAccount.set(id, [tx]);
+    }
+    cardHistory.set(transactions, history);
+  }
+
+  const closingDay = card.closingDay ?? 31;
+  const offset = card.paymentMonthOffset ?? 1;
+  const cached = history.activity.get(card.id);
+  if (cached?.closingDay === closingDay && cached.offset === offset) return cached.value;
+
+  const result: CardActivity = { cycles: new Map(), usage: new Map(), payments: new Map(), unallocated: new Map(), prepaidTotal: 0 };
+  const monthsByDate = new Map<string, string>();
+  const add = (map: Map<string, number>, key: string, amount: number) => {
+    map.set(key, (map.get(key) ?? 0) + amount);
+  };
+  for (const tx of history.byAccount.get(card.id) ?? []) {
+    const month = tx.date.slice(0, 7);
+    if (tx.type === 'expense') {
+      const charge = getEffectiveOutflow(tx);
+      add(result.usage, month, charge);
+      let billingMonth = monthsByDate.get(tx.date);
+      if (billingMonth === undefined) {
+        billingMonth = getBillingMonthForDate(tx.date, closingDay, offset);
+        monthsByDate.set(tx.date, billingMonth);
+      }
+      const cycle = result.cycles.get(billingMonth);
+      if (cycle) {
+        cycle.total += charge;
+        cycle.purchases.push(tx);
+      } else {
+        result.cycles.set(billingMonth, { total: charge, purchases: [tx], sorted: false });
+      }
+    } else {
+      if (tx.isPrepayment) result.prepaidTotal += tx.amount;
+      if (tx.targetBillingMonth) add(result.payments, tx.targetBillingMonth, tx.amount);
+      else add(result.unallocated, month, tx.amount);
+    }
+  }
+  history.activity.set(card.id, { closingDay, offset, value: result });
+  return result;
+}
+
+function purchasesForCycle(cycle?: BillingCycle): Transaction[] {
+  if (!cycle) return [];
+  if (!cycle.sorted) {
+    cycle.purchases.sort((a, b) => b.date.localeCompare(a.date));
+    cycle.sorted = true;
+  }
+  return cycle.purchases.slice();
+}
+
+function settledInMonth(activity: CardActivity, month: string): number {
+  return (activity.payments.get(month) ?? 0) + (activity.unallocated.get(month) ?? 0);
+}
+
 export function computeCreditCardSummary(
   card: Account,
-  transactions: Transaction[],
+  transactions: readonly Transaction[],
   accountBalance: number,
   referenceMonthKey: string
 ): CreditCardStatementSummary {
-  const closingDay = card.closingDay ?? 31;
-  const offset = card.paymentMonthOffset ?? 1;
+  const activity = activityForCard(card, transactions);
   const nextMonthKey = shiftMonth(referenceMonthKey, 1);
-
-  const thisMonthTransactions: Transaction[] = [];
-  const nextMonthTransactions: Transaction[] = [];
-
-  let thisMonthGross = 0;
-  let thisMonthUsage = 0;
-  let nextMonthGross = 0;
-
-  let settledThisMonth = 0;
-  let prepaidNextMonth = 0;
-  let unallocatedPayments = 0;
-  let totalPrepaidCredit = 0;
-
-  for (const tx of transactions) {
-    if (tx.type === 'expense' && tx.accountId === card.id) {
-      const charge = getEffectiveOutflow(tx);
-      if (tx.date.slice(0, 7) === referenceMonthKey) thisMonthUsage += charge;
-      const billingMonth = getBillingMonthForDate(tx.date, closingDay, offset);
-      if (billingMonth === referenceMonthKey) {
-        thisMonthGross += charge;
-        thisMonthTransactions.push(tx);
-      } else if (billingMonth === nextMonthKey) {
-        nextMonthGross += charge;
-        nextMonthTransactions.push(tx);
-      }
-    } else if (tx.type === 'transfer' && tx.toAccountId === card.id) {
-      if (tx.isPrepayment) {
-        totalPrepaidCredit += tx.amount;
-      }
-      if (tx.targetBillingMonth === referenceMonthKey) {
-        settledThisMonth += tx.amount;
-      } else if (tx.targetBillingMonth === nextMonthKey) {
-        prepaidNextMonth += tx.amount;
-      } else if (!tx.targetBillingMonth) {
-        // Transfers without a target month still count against current/earliest billing if in that month
-        if (tx.date.slice(0, 7) === referenceMonthKey) {
-          unallocatedPayments += tx.amount;
-        }
-      }
-    }
-  }
+  const currentCycle = activity.cycles.get(referenceMonthKey);
+  const nextCycle = activity.cycles.get(nextMonthKey);
+  const prepaidNextMonth = activity.payments.get(nextMonthKey) ?? 0;
 
   const currentConfirmed = confirmedAmount(card.confirmedBillings?.[referenceMonthKey]);
   const nextConfirmed = confirmedAmount(card.confirmedBillings?.[nextMonthKey]);
-  thisMonthGross = currentConfirmed ?? thisMonthGross;
-  nextMonthGross = nextConfirmed ?? nextMonthGross;
-  const totalSettledThisMonth = settledThisMonth + unallocatedPayments;
+  const thisMonthGross = currentConfirmed ?? currentCycle?.total ?? 0;
+  const nextMonthGross = nextConfirmed ?? nextCycle?.total ?? 0;
+  const totalSettledThisMonth = settledInMonth(activity, referenceMonthKey);
   const thisMonthRemaining = Math.max(0, thisMonthGross - totalSettledThisMonth);
   const nextMonthRemaining = Math.max(0, nextMonthGross - prepaidNextMonth);
 
@@ -149,22 +188,18 @@ export function computeCreditCardSummary(
     thisMonthSettled: totalSettledThisMonth,
     thisMonthRemaining,
     thisMonthConfirmed: currentConfirmed !== undefined,
-    thisMonthUsage,
+    thisMonthUsage: activity.usage.get(referenceMonthKey) ?? 0,
     nextMonthGross,
     nextMonthPrepaid: prepaidNextMonth,
     nextMonthRemaining,
     nextMonthConfirmed: nextConfirmed !== undefined,
     totalUnpaidBalance,
-    totalPrepaidCredit,
+    totalPrepaidCredit: activity.prepaidTotal,
     creditLimit,
     availableCredit,
     utilizationRatio,
-    thisMonthTransactions: thisMonthTransactions.sort((a, b) =>
-      b.date.localeCompare(a.date)
-    ),
-    nextMonthTransactions: nextMonthTransactions.sort((a, b) =>
-      b.date.localeCompare(a.date)
-    ),
+    thisMonthTransactions: purchasesForCycle(currentCycle),
+    nextMonthTransactions: purchasesForCycle(nextCycle),
   };
 }
 
@@ -188,15 +223,16 @@ export function getBankCardWithdrawals(cards: Account[], posted: Transaction[], 
     if (card.type !== 'credit' || card.linkedBankAccountId !== bankId) continue;
     const months = new Set(Object.keys(card.confirmedBillings ?? {}).filter((month) =>
       /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month <= throughMonth));
-    for (const tx of posted) {
-      if (tx.type !== 'expense' || tx.accountId !== card.id) continue;
-      const month = getBillingMonthForDate(tx.date, card.closingDay, card.paymentMonthOffset);
+    const activity = activityForCard(card, posted);
+    for (const month of activity.cycles.keys()) {
       if (month >= currentMonth && month <= throughMonth) months.add(month);
     }
     for (const month of months) {
-      const withdrawal = getCardWithdrawal(card, posted, month);
-      if (withdrawal.confirmed) confirmed += withdrawal.remaining;
-      else if (month >= currentMonth) estimated += withdrawal.remaining;
+      const actual = confirmedAmount(card.confirmedBillings?.[month]);
+      const gross = actual ?? activity.cycles.get(month)?.total ?? 0;
+      const remaining = Math.max(0, gross - settledInMonth(activity, month));
+      if (actual !== undefined) confirmed += remaining;
+      else if (month >= currentMonth) estimated += remaining;
     }
   }
   return { confirmed, estimated };

@@ -32,13 +32,21 @@ export function getMonthTransactions(transactions: readonly Transaction[], month
   return index.get(monthKey) ?? emptyMonth;
 }
 
-/** Income / expense (transfer fees count as expense) and category breakdowns for one month. */
-export function computeMonthMetrics(state: FinanceState, monthKey: string): MonthMetrics {
+const monthAggregates = new WeakMap<readonly Transaction[], {
+  totals: Pick<MonthMetrics, 'income' | 'expense' | 'net'>;
+  expenses: Map<string, number>;
+  incomes: Map<string, number>;
+}>();
+
+function getMonthAggregate(transactions: readonly Transaction[], monthKey: string) {
+  const rows = getMonthTransactions(transactions, monthKey);
+  const saved = monthAggregates.get(rows);
+  if (saved) return saved;
   let income = 0;
   let expense = 0;
   const expenses = new Map<string, number>();
   const incomes = new Map<string, number>();
-  for (const tx of getMonthTransactions(state.transactions, monthKey)) {
+  for (const tx of rows) {
     if (!isOwnFlow(tx)) continue; // 立替とその回収は自分の収支ではない
     if (tx.type === 'income') {
       income += tx.amount;
@@ -54,6 +62,18 @@ export function computeMonthMetrics(state: FinanceState, monthKey: string): Mont
       }
     }
   }
+  const aggregate = { totals: { income, expense, net: income - expense }, expenses, incomes };
+  monthAggregates.set(rows, aggregate);
+  return aggregate;
+}
+
+export function computeMonthCashFlow(state: FinanceState, monthKey: string): Readonly<Pick<MonthMetrics, 'income' | 'expense' | 'net'>> {
+  return getMonthAggregate(state.transactions, monthKey).totals;
+}
+
+/** Income / expense (transfer fees count as expense) and category breakdowns for one month. */
+export function computeMonthMetrics(state: FinanceState, monthKey: string): MonthMetrics {
+  const { totals, expenses, incomes } = getMonthAggregate(state.transactions, monthKey);
   const breakdown = (amounts: Map<string, number>, total: number): CategoryBreakdown => [...amounts]
     .map(([categoryId, amount]) => {
       const cat =
@@ -64,9 +84,9 @@ export function computeMonthMetrics(state: FinanceState, monthKey: string): Mont
     })
     .sort((a, b) => b.amount - a.amount);
   return {
-    income, expense, net: income - expense,
-    categoryBreakdown: breakdown(expenses, expense),
-    incomeCategoryBreakdown: breakdown(incomes, income),
+    ...totals,
+    categoryBreakdown: breakdown(expenses, totals.expense),
+    incomeCategoryBreakdown: breakdown(incomes, totals.income),
   };
 }
 

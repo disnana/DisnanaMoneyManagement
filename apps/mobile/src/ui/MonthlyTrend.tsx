@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { computeMonthMetrics } from '@dmm/core/utils/metrics';
+import { computeMonthCashFlow } from '@dmm/core/utils/metrics';
 import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
@@ -13,7 +13,7 @@ export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 
   const values = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => shiftMonth(month, i - 11));
     return months.map((key) => {
-      const metrics = computeMonthMetrics(visibleState, key);
+      const metrics = computeMonthCashFlow(visibleState, key);
       return { key, amount: metrics[kind] };
     });
   }, [month, kind, visibleState]);

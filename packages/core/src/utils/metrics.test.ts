@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMonthMetrics, getMonthTransactions, groupTransactionsByDate } from './metrics';
+import { computeMonthCashFlow, computeMonthMetrics, getMonthTransactions, groupTransactionsByDate } from './metrics';
 import type { FinanceState, Transaction } from '../types/finance';
 
 const t = (over: Partial<Transaction>): Transaction => ({
@@ -53,6 +53,15 @@ describe('computeMonthMetrics', () => {
       { categoryId: 'salary', amount: 7500, share: 0.75 },
       { categoryId: 'other', amount: 2500, share: 0.25 },
     ]);
+  });
+
+  it('shares totals while using current category names for the breakdown', () => {
+    const data = state([t({ amount: 3000 }), t({ type: 'transfer', transferFee: 200 })]);
+    const totals = computeMonthCashFlow(data, '2026-11');
+    expect(totals).toEqual({ income: 0, expense: 3200, net: -3200 });
+    const renamed = { ...data, customCategories: [{ id: 'food', name: '食事', type: 'expense' as const, color: '#ffffff' }] };
+    expect(computeMonthCashFlow(renamed, '2026-11')).toBe(totals);
+    expect(computeMonthMetrics(renamed, '2026-11').categoryBreakdown[0].name).toBe('食事');
   });
 
   it('counts transfer fees as expense under a dedicated category', () => {
