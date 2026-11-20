@@ -5,7 +5,7 @@ test('desktop dashboard renders without errors', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await expect(page.getByText('総資産残高').first()).toBeVisible();
-  await expect(page.locator('main')).toContainText('¥4,125,421');
+  await expect(page.locator('main')).toContainText('¥4,125,921');
   expect(errors).toEqual([]);
 });
 

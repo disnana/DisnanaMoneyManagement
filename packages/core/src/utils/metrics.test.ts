@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMonthMetrics, groupTransactionsByDate } from './metrics';
+import { computeMonthMetrics, getMonthTransactions, groupTransactionsByDate } from './metrics';
 import type { FinanceState, Transaction } from '../types/finance';
 
 const t = (over: Partial<Transaction>): Transaction => ({
@@ -19,6 +19,21 @@ const state = (transactions: Transaction[]): FinanceState => ({
   budgets: [],
   recurringItems: [],
   savingsGoals: [],
+});
+
+describe('getMonthTransactions', () => {
+  it('preserves source order and reindexes when the transaction array is replaced', () => {
+    const first = t({ date: '2026-11-04' });
+    const second = t({ date: '2026-11-10' });
+    const other = t({ date: '2026-12-01' });
+    const transactions = [first, other, second];
+
+    const november = getMonthTransactions(transactions, '2026-11');
+    expect(november).toEqual([first, second]);
+    expect(getMonthTransactions(transactions, '2026-11')).toBe(november);
+    expect(getMonthTransactions(transactions, '2026-12')).toEqual([other]);
+    expect(getMonthTransactions([first, other], '2026-11')).toEqual([first]);
+  });
 });
 
 describe('computeMonthMetrics', () => {
@@ -60,11 +75,11 @@ describe('groupTransactionsByDate', () => {
   it('groups newest first and totals each day', () => {
     const g = groupTransactionsByDate([
       t({ date: '2026-11-01', amount: 500 }),
-      t({ date: '2026-11-03', type: 'income', amount: 2000 }),
-      t({ date: '2026-11-03', amount: 300 }),
+      t({ id: 'first', date: '2026-11-03', type: 'income', amount: 2000 }),
+      t({ id: 'second', date: '2026-11-03', amount: 300 }),
     ]);
     expect(g.map((x) => x.date)).toEqual(['2026-11-03', '2026-11-01']);
-    expect(g[0].items).toHaveLength(2);
+    expect(g[0].items.map((tx) => tx.id)).toEqual(['first', 'second']);
     expect(g[0].net).toBe(1700);
     expect(g[1].net).toBe(-500);
   });

@@ -87,6 +87,8 @@ export interface Transaction {
   title: string;
   memo?: string;
   recurringId?: string;
+  /** Monemy重複判定用。編集で口座を変えても、最初の取り込み先に紐づける。 */
+  monemySource?: { accountId: string; fingerprint: string };
   transferFee?: number;
   pointUsed?: number; // 円換算のポイント充当額。カード支払いでは振替元からの出金だけを減らす。
   scope?: TransactionScope;

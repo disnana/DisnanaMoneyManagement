@@ -12,7 +12,7 @@ const WEEK = ['月', '火', '水', '木', '金', '土', '日'];
 const COLUMN_WIDTH = '14.285714%';
 const yen = new Intl.NumberFormat('ja-JP');
 
-export function TransactionCalendar({ month, transactions, isPreview }: { month: string; transactions: Transaction[]; isPreview: boolean }) {
+export function TransactionCalendar({ month, transactions, isPreview }: { month: string; transactions: readonly Transaction[]; isPreview: boolean }) {
   const p = usePalette();
   const today = getTodayString();
   const [picked, setPicked] = useState(today);

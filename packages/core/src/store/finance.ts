@@ -19,6 +19,8 @@ import {
 import { getLedgers, getTransactionLedger, removeLedger } from '../utils/ledgers';
 import { estimatePurchaseJPY } from '../utils/planning';
 
+import { appendMonemyRows, type planMonemyImport } from '../utils/monemyImport';
+
 export const STORAGE_KEY = 'kakeibo_finance_state_v3';
 
 const VALID_ACCOUNT_TYPES = new Set([
@@ -173,7 +175,7 @@ export function loadInitialState(storage: StorageAdapter, fallback = () => creat
 
 
 /** Per-account balance. Debit-card spending is deducted from the linked bank account. */
-export function computeAccountBalances(state: FinanceState): Record<string, number> {
+export function computeAccountBalances(state: Pick<FinanceState, 'accounts' | 'transactions'>): Record<string, number> {
 
     const map: Record<string, number> = {};
     const accountById: Record<string, Account> = {};
@@ -220,6 +222,7 @@ export function computeAccountBalances(state: FinanceState): Record<string, numb
 /** React is injected so this package never bundles its own copy (web and RN each pass theirs). */
 export interface ReactHooks {
   useState<S>(initial: S | (() => S)): [S, (value: S | ((prev: S) => S)) => void];
+  useRef<T>(initial: T): { current: T };
   useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
   useMemo<T>(factory: () => T, deps: readonly unknown[]): T;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,14 +230,23 @@ export interface ReactHooks {
 }
 
 export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapter, initialState?: () => FinanceState) {
-  const { useState, useEffect, useMemo, useCallback } = react;
+  const { useState, useEffect, useMemo, useCallback, useRef } = react;
 
   return function useFinanceStore() {
-  const [state, setState] = useState<FinanceState>(() => loadInitialState(storage, initialState));
+  const [state, setRenderedState] = useState<FinanceState>(() => loadInitialState(storage, initialState));
+  const latestState = useRef(state);
+  const persistedState = useRef<FinanceState | undefined>(undefined);
+  const setState = useCallback((update: FinanceState | ((previous: FinanceState) => FinanceState)) => {
+    const next = typeof update === 'function' ? update(latestState.current) : update;
+    latestState.current = next;
+    setRenderedState(next);
+  }, []);
 
   useEffect(() => {
+    if (state !== latestState.current || state === persistedState.current) return;
     try {
       storage.setItem(STORAGE_KEY, JSON.stringify(state));
+      persistedState.current = state;
     } catch {
       // Ignore storage quota errors
     }
@@ -536,6 +548,19 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     }));
   }, []);
 
+  const importMonemyRows = useCallback((plan: ReturnType<typeof planMonemyImport>) => {
+    if (plan.source !== latestState.current) throw new Error('家計データが変わりました。プレビューを確認し直してください。');
+    const next = appendMonemyRows(plan);
+    if (next === plan.source) return;
+    try {
+      storage.setItem(STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      throw new Error('データを保存できませんでした。空き容量などを確認して再試行してください。');
+    }
+    persistedState.current = next;
+    setState(next);
+  }, [setState]);
+
   const importState = useCallback((newState: FinanceState) => {
     setState(newState);
   }, []);
@@ -583,6 +608,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: StorageAdapte
     savePurchaseCandidate,
     removePurchaseCandidate,
     importState,
+    importMonemyRows,
     resetToSampleData,
     clearAllData,
   };

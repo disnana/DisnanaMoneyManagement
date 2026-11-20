@@ -13,14 +13,32 @@ export interface MonthMetrics {
   incomeCategoryBreakdown: CategoryBreakdown;
 }
 
+// Finance updates replace the transaction array. Share its month index across screens and previews.
+const monthIndexes = new WeakMap<readonly Transaction[], Map<string, Transaction[]>>();
+const emptyMonth: readonly Transaction[] = [];
+
+export function getMonthTransactions(transactions: readonly Transaction[], monthKey: string): readonly Transaction[] {
+  let index = monthIndexes.get(transactions);
+  if (!index) {
+    index = new Map();
+    for (const transaction of transactions) {
+      const month = transaction.date.slice(0, 7);
+      const bucket = index.get(month);
+      if (bucket) bucket.push(transaction);
+      else index.set(month, [transaction]);
+    }
+    monthIndexes.set(transactions, index);
+  }
+  return index.get(monthKey) ?? emptyMonth;
+}
+
 /** Income / expense (transfer fees count as expense) and category breakdowns for one month. */
 export function computeMonthMetrics(state: FinanceState, monthKey: string): MonthMetrics {
   let income = 0;
   let expense = 0;
   const expenses = new Map<string, number>();
   const incomes = new Map<string, number>();
-  for (const tx of state.transactions) {
-    if (tx.date.slice(0, 7) !== monthKey) continue;
+  for (const tx of getMonthTransactions(state.transactions, monthKey)) {
     if (!isOwnFlow(tx)) continue; // 立替とその回収は自分の収支ではない
     if (tx.type === 'income') {
       income += tx.amount;
@@ -59,18 +77,17 @@ export interface DayGroup {
 }
 
 /** Newest first, grouped by date, with each day's net (income - expense). */
-export function groupTransactionsByDate(txs: Transaction[]): DayGroup[] {
-  const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date));
-  const groups: DayGroup[] = [];
-  for (const tx of sorted) {
-    let g = groups[groups.length - 1];
-    if (!g || g.date !== tx.date) {
-      g = { date: tx.date, items: [], net: 0 };
-      groups.push(g);
+export function groupTransactionsByDate(txs: readonly Transaction[]): DayGroup[] {
+  const groups = new Map<string, DayGroup>();
+  for (const tx of txs) {
+    let group = groups.get(tx.date);
+    if (!group) {
+      group = { date: tx.date, items: [], net: 0 };
+      groups.set(tx.date, group);
     }
-    g.items.push(tx);
-    if (tx.type === 'income') g.net += tx.amount;
-    else if (tx.type === 'expense') g.net -= tx.amount;
+    group.items.push(tx);
+    if (tx.type === 'income') group.net += tx.amount;
+    else if (tx.type === 'expense') group.net -= tx.amount;
   }
-  return groups;
+  return [...groups.values()].sort((a, b) => b.date.localeCompare(a.date));
 }

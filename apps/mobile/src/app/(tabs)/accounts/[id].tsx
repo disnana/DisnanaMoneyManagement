@@ -4,6 +4,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { ACCOUNT_TYPE_LABELS } from '@dmm/core/data/categories';
 import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
 import { formatJPY, getEffectiveOutflow } from '@dmm/core/utils/format';
+import { getMonthTransactions } from '@dmm/core/utils/metrics';
 import { getAccountLedger } from '@dmm/core/utils/ledgers';
 import { ACCOUNT_ICONS } from '@/lib/accountIcons';
 import { useCurrentBalances } from '@/lib/currentBalances';
@@ -38,7 +39,7 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
   const { state, ledgers, updateAccount, setMonth } = useFinance();
   const account = state.accounts.find((item) => item.id === id);
   const list = useMemo(
-    () => state.transactions.filter((tx) => (tx.accountId === id || tx.toAccountId === id) && tx.date.startsWith(month)),
+    () => getMonthTransactions(state.transactions, month).filter((tx) => tx.accountId === id || tx.toAccountId === id),
     [state.transactions, id, month]
   );
   if (!account) return <Text style={{ color: p.textSecondary }}>口座が見つかりません</Text>;

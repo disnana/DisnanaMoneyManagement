@@ -5,7 +5,7 @@ import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import type { Ledger, TransactionType } from '@dmm/core/types/finance';
 import { filterLedger, getLedgers } from '@dmm/core/utils/ledgers';
 
-const adapter: StorageAdapter = kv;
+const adapter: StorageAdapter = { getItem: kv.getItem, setItem: kv.setItemStrict };
 
 const useFinanceStore = createFinanceStoreHook(React, adapter, () => {
   const empty = createEmptyFinanceState();

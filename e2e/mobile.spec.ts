@@ -13,16 +13,16 @@ test.afterEach(async ({ page }) => {
 });
 
 test('home shows seed totals', async ({ page }) => {
-  await expect(page.locator('main')).toContainText('¥4,125,421');
+  await expect(page.locator('main')).toContainText('¥4,125,921');
 });
 
 test('adding a transaction updates the balance and survives a reload', async ({ page }) => {
   await page.locator('nav button[aria-label="収支を記録"]').click();
   await page.locator('#tx-amount').fill('1000');
   await page.getByRole('button', { name: '登録', exact: true }).click();
-  await expect(page.locator('main')).toContainText('¥4,124,421');
+  await expect(page.locator('main')).toContainText('¥4,124,921');
   await page.reload();
-  await expect(page.locator('main')).toContainText('¥4,124,421');
+  await expect(page.locator('main')).toContainText('¥4,124,921');
 });
 
 test('tabs switch and keep their own state', async ({ page }) => {

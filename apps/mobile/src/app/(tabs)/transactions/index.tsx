@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import type { TransactionType } from '@dmm/core/types/finance';
+import { getMonthTransactions } from '@dmm/core/utils/metrics';
 import { formatMonthLabel } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
 import { Segmented } from '@/ui/kit';
@@ -34,11 +35,11 @@ export default function Transactions() {
 
 function TransactionsMonth({ month, calendar, isPreview }: { month: string; calendar: boolean; isPreview: boolean }) {
   const { visibleState, transactionFilter, setTransactionFilter } = useFinance();
-  const monthTransactions = useMemo(
-    () => visibleState.transactions.filter((tx) => tx.date.startsWith(month)),
-    [visibleState.transactions, month]
+  const monthTransactions = getMonthTransactions(visibleState.transactions, month);
+  const transactions = useMemo(
+    () => transactionFilter === 'all' ? monthTransactions : monthTransactions.filter((tx) => tx.type === transactionFilter),
+    [monthTransactions, transactionFilter]
   );
-  const transactions = transactionFilter === 'all' ? monthTransactions : monthTransactions.filter((tx) => tx.type === transactionFilter);
 
   return (
     <>
