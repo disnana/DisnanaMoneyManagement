@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type NativeStackNavigationOptions } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, type NativeStackNavigationOptions } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
 import { Platform, useColorScheme } from 'react-native';
@@ -19,12 +19,18 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const p = usePalette();
   const reduceMotion = useAppReducedMotion();
+  const root = useRootNavigationState();
+  const firstScreenKey = root.routes[root.index]?.state?.routes[0]?.key;
   const settingsTransition = androidSettingsTransition(reduceMotion);
-  // Keep the native navigator underneath attached while a settings entry covers it.
-  // Reattaching its nested fragments on Back can leave Android with an empty frame.
-  const settingsEntryOptions: NativeStackNavigationOptions | undefined = Platform.OS === 'android'
-    ? { ...settingsTransition, presentation: 'transparentModal', contentStyle: { backgroundColor: p.bg } }
-    : undefined;
+  function settingsEntryOptions(key?: string): NativeStackNavigationOptions {
+    if (Platform.OS !== 'android') return {};
+    // Keep the covered navigator attached on Back. A direct link has nothing underneath.
+    return {
+      ...settingsTransition,
+      presentation: key && firstScreenKey && key !== firstScreenKey ? 'transparentModal' : 'card',
+      contentStyle: { backgroundColor: p.bg },
+    };
+  }
   const detailOptions: NativeStackNavigationOptions = {
     headerShown: true, headerBackButtonDisplayMode: 'minimal', headerShadowVisible: false,
     headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, contentStyle: { backgroundColor: p.bg },
@@ -59,8 +65,8 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
           {/* Back from a direct settings link replaces the route with /accounts. */}
           <Stack.Screen name="(tabs)" options={Platform.OS === 'android' ? { animationTypeForReplace: 'pop' } : undefined} />
-          <Stack.Screen name="settings" options={settingsEntryOptions} />
-          <Stack.Screen name="categories" options={{ ...detailOptions, ...settingsEntryOptions }} />
+          <Stack.Screen name="settings" options={({ route }) => settingsEntryOptions(route.key)} />
+          <Stack.Screen name="categories" options={({ route }) => ({ ...detailOptions, ...settingsEntryOptions(route.key) })} />
           {(['category-editor', 'category-detail'] as const).map((name) => (
             <Stack.Screen key={name} name={name} options={{ ...detailOptions, ...settingsTransition }} />
           ))}

@@ -37,5 +37,5 @@ export function useAppReducedMotion() {
 export function androidSettingsTransition(reduceMotion: boolean): NativeStackNavigationOptions | undefined {
   if (Platform.OS !== 'android') return undefined;
   // The default Android pop fades both screens. A slide keeps them opaque throughout.
-  return { animation: reduceMotion ? 'none' : 'slide_from_right' };
+  return { animation: reduceMotion ? 'none' : 'slide_from_right', presentation: 'card' };
 }
