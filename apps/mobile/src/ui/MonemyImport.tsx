@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, Platform, Text } from 'react-native';
+import { Platform, Text } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { MAX_MONEMY_CHARS, parseMonemyCsv, planMonemyImport, type MonemyRow } from '@dmm/core/utils/monemyImport';
 import { useFinance } from '@/lib/store';
+import { usePalette } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
 import { Group, Row } from '@/ui/kit';
 
@@ -40,19 +41,25 @@ async function readCsv(asset: DocumentPicker.DocumentPickerAsset): Promise<strin
 
 export function MonemyImport() {
   const { state, importMonemyRows } = useFinance();
+  const p = usePalette();
   const latest = useRef(state);
   latest.current = state;
   const busy = useRef(false);
   const confirming = useRef(false);
   const [pending, setPending] = useState<{ rows: MonemyRow[]; accountId: string }>();
   const [message, setMessage] = useState('');
-  const reset = () => { setPending(undefined); busy.current = false; };
+  const [importError, setImportError] = useState('');
+  const reset = () => { setPending(undefined); setImportError(''); busy.current = false; };
   const choose = async () => {
     if (busy.current) return;
     busy.current = true;
     setMessage('');
+    setImportError('');
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/csv'], copyToCacheDirectory: true, multiple: false });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/csv'],
+        copyToCacheDirectory: true, multiple: false, base64: false,
+      });
       const asset = result.canceled ? undefined : result.assets[0];
       if (!asset) { reset(); return; }
       const rows = parseMonemyCsv(await readCsv(asset), digest);
@@ -63,7 +70,10 @@ export function MonemyImport() {
       });
       if (!accountId) { reset(); return; }
       setPending({ rows, accountId });
-    } catch (e) { reset(); Alert.alert('取り込みできません', e instanceof Error ? e.message : 'ファイルを読み込めませんでした。'); }
+    } catch (error) {
+      reset();
+      setImportError(error instanceof Error ? error.message : 'ファイルを読み込めませんでした。');
+    }
   };
   const { preview, previewError } = useMemo(() => {
     if (!pending) return {};
@@ -82,7 +92,7 @@ export function MonemyImport() {
       reset();
       setMessage(`${preview.added}件を追加しました。重複${preview.duplicates}件は追加していません。`);
     } catch (error) {
-      Alert.alert('取り込みできません', error instanceof Error ? error.message : '再確認してください。');
+      setImportError(error instanceof Error ? error.message : '取り込みできません。再確認してください。');
     } finally {
       confirming.current = false;
     }
@@ -101,6 +111,8 @@ export function MonemyImport() {
       </> : <Text>{previewError}</Text>}
       <Row title="キャンセル" onPress={reset} />
     </> : null}
+    {importError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive"
+      style={{ color: p.danger, padding: 12 }}>{importError}</Text> : null}
     {message ? <Text accessibilityLiveRegion="polite">{message}</Text> : null}
   </Group>;
 }
