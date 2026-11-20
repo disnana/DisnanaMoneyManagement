@@ -66,8 +66,8 @@ export interface Account {
   institution?: string;
   note?: string;
   // Credit card billing & limit settings (type === 'credit')
-  closingDay?: number; // 1..28 or 31 (月末)
-  paymentDay?: number; // 1..28 or 31 (月末)
+  closingDay?: number; // 1..31（短い月は月末）
+  paymentDay?: number; // 1..31（短い月は月末）
   paymentMonthOffset?: 1 | 2; // 1: 翌月払い, 2: 翌々月払い
   paymentWarningDays?: number;
   confirmedBillings?: Partial<Record<string, number>>;

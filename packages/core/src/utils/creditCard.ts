@@ -23,6 +23,11 @@ export interface CreditCardStatementSummary {
   nextMonthTransactions: Transaction[];
 }
 
+function normalizeClosingDay(day: number) {
+  const value = Number(day);
+  return Number.isFinite(value) ? Math.max(1, Math.min(31, Math.floor(value))) : 31;
+}
+
 export function getBillingMonthForDate(
   dateStr: string,
   closingDay = 31,
@@ -30,9 +35,8 @@ export function getBillingMonthForDate(
 ): string {
   const monthKey = dateStr.slice(0, 7);
   const day = Number(dateStr.slice(8, 10)) || 1;
-  const effectiveClosing = closingDay >= 31 ? 31 : Math.max(1, closingDay);
   const closingMonth =
-    day <= effectiveClosing ? monthKey : shiftMonth(monthKey, 1);
+    day <= normalizeClosingDay(closingDay) ? monthKey : shiftMonth(monthKey, 1);
   return shiftMonth(closingMonth, paymentMonthOffset);
 }
 
@@ -42,16 +46,12 @@ export function getCycleRangeLabel(
   paymentMonthOffset: 1 | 2 = 1
 ): string {
   const closingMonth = shiftMonth(billingMonthKey, -paymentMonthOffset);
-  const [cy, cm] = closingMonth.split('-').map(Number);
-
-  if (closingDay >= 31) {
-    const lastDay = new Date(cy, cm, 0).getDate();
-    return `${cm}/1 〜 ${cm}/${lastDay} 利用分`;
-  }
-
-  const prevMonth = shiftMonth(closingMonth, -1);
-  const [, pm] = prevMonth.split('-').map(Number);
-  return `${pm}/${closingDay + 1} 〜 ${cm}/${closingDay} 利用分`;
+  const [year, month] = closingMonth.split('-').map(Number);
+  const day = normalizeClosingDay(closingDay);
+  const previousClose = Math.min(day, new Date(year, month - 1, 0).getDate());
+  const start = new Date(year, month - 2, previousClose + 1);
+  const end = Math.min(day, new Date(year, month, 0).getDate());
+  return `${start.getMonth() + 1}/${start.getDate()} 〜 ${month}/${end} 利用分`;
 }
 
 /** Days to the calendar due date, when an unpaid statement is within its configured warning window. */

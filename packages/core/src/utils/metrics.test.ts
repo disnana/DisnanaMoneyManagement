@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeMonthCashFlow, computeMonthMetrics, getMonthTransactions, groupTransactionsByDate } from './metrics';
+import { computeCashFlow, computeMonthCashFlow, computeMonthMetrics, getMonthTransactions, groupTransactionsByDate, indexTransactionsByDate } from './metrics';
 import type { FinanceState, Transaction } from '../types/finance';
 
 const t = (over: Partial<Transaction>): Transaction => ({
@@ -81,6 +81,36 @@ describe('computeMonthMetrics', () => {
 });
 
 describe('groupTransactionsByDate', () => {
+  it('keeps advances and transfers visible while daily, filtered and monthly own-flow totals agree', () => {
+    const advance = t({ id: 'advance', amount: 3000, advance: { for: '同僚' } });
+    const transfer = t({ type: 'transfer', amount: 10000, transferFee: 220 });
+    const tomorrow = '2026-11-11';
+    const transactions = [advance, transfer,
+      t({ date: tomorrow, type: 'income', amount: 3000, reimbursementOf: advance.id }),
+      t({ date: tomorrow, type: 'income', amount: 1200, withholdingTax: 80 }),
+      t({ date: tomorrow, amount: 650, pointUsed: 100 }),
+      t({ date: tomorrow, type: 'transfer', amount: 5000, platformTransferFee: 60, fxConversionFee: 40 }),
+      t({ date: tomorrow, type: 'transfer', amount: 40000 }),
+    ];
+    const calendar = indexTransactionsByDate(transactions);
+    expect(calendar.get(advance.date)).toMatchObject({
+      items: [advance, transfer], income: 0, expense: 220, net: -220, transfer: 10000,
+    });
+    expect(calendar.get(tomorrow)).toMatchObject({ income: 1200, expense: 750, net: 450, transfer: 45000 });
+    expect(calendar.get(tomorrow)!.items).toHaveLength(5);
+    const days = groupTransactionsByDate(transactions);
+    const month = computeMonthCashFlow(state(transactions), '2026-11');
+    expect(month).toEqual({ income: 1200, expense: 970, net: 230 });
+    expect(days.reduce((sum, day) => sum + day.net, 0)).toBe(month.net);
+    expect(computeCashFlow(transactions)).toEqual(month);
+    expect(computeCashFlow(transactions.filter((tx) => tx.type === 'transfer'))).toEqual({
+      income: 0, expense: 320, net: -320,
+    });
+    expect(computeMonthMetrics(state(transactions), '2026-11').categoryBreakdown).toMatchObject([
+      { categoryId: 'food', amount: 650 }, { categoryId: 'transfer_fee', amount: 320 },
+    ]);
+  });
+
   it('groups newest first and totals each day', () => {
     const g = groupTransactionsByDate([
       t({ date: '2026-11-01', amount: 500 }),
