@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Transaction } from '@dmm/core/types/finance';
 import { formatFullDate, getTodayString } from '@dmm/core/utils/format';
-import { isOwnFlow } from '@dmm/core/utils/advances';
+import { indexTransactionsByDate } from '@dmm/core/utils/metrics';
 import { tick } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 import { SectionTitle } from './kit';
@@ -20,16 +20,7 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
   const [year, m] = month.split('-').map(Number);
   const start = (new Date(year, m - 1, 1).getDay() + 6) % 7;
   const days = new Date(year, m, 0).getDate();
-  const byDate = useMemo(() => {
-    const map = new Map<string, { items: Transaction[]; income: number; expense: number; transfer: number }>();
-    for (const tx of transactions) {
-      const entry = map.get(tx.date) ?? { items: [], income: 0, expense: 0, transfer: 0 };
-      entry.items.push(tx);
-      if (isOwnFlow(tx)) entry[tx.type] += tx.amount;
-      map.set(tx.date, entry);
-    }
-    return map;
-  }, [transactions]);
+  const byDate = useMemo(() => indexTransactionsByDate(transactions), [transactions]);
   const numWeeks = Math.ceil((start + days) / 7);
   const line = p.separator === 'transparent' ? p.fill : p.separator;
   const weekdayColor = (index: number) => index === 6 ? p.danger : index === 5 ? p.tint : p.textSecondary;

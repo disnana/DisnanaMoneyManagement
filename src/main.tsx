@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { Capacitor } from '@capacitor/core';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
+import { FinanceGate } from './components/FinanceGate';
 import './index.css';
 import { initTheme } from './utils/theme';
 
@@ -58,4 +59,4 @@ if (import.meta.env.PROD && !Capacitor.isNativePlatform()) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<FinanceGate><App /></FinanceGate>);

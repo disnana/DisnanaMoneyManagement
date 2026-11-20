@@ -1,18 +1,20 @@
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
 import { Stack } from 'expo-router';
-import { getPendingAdvances, pendingAdvanceTotals, buildReimbursementTx } from '@dmm/core/utils/advances';
+import { getPendingAdvances, pendingAdvanceTotals } from '@dmm/core/utils/advances';
 import { formatJPY, getTodayString } from '@dmm/core/utils/format';
-import { getTransactionLedger } from '@dmm/core/utils/ledgers';
 import { useFinance } from '@/lib/store';
+import { useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
+import { confirmAction } from '@/lib/confirmAction';
 import { success } from '@/lib/haptics';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 
 /** 立て替え（あとで回収）: what is still owed to the user, and one tap to record the payback. */
 export default function Advances() {
+  const submit = useFinanceSubmit('stay');
   const p = usePalette();
-  const { state, ledgers, accountNameMap, addTransaction, updateTransaction } = useFinance();
+  const { state, accountNameMap, reimburseAdvance } = useFinance();
   const pending = getPendingAdvances(state.transactions);
   const totals = pendingAdvanceTotals(state.transactions);
 
@@ -24,14 +26,7 @@ export default function Advances() {
       state.accounts.map((a) => ({ id: a.id, label: a.name }))
     );
     if (!accountId) return;
-    const date = getTodayString();
-    const accounts = new Map(state.accounts.map((account) => [account.id, account]));
-    const ledgerId = getTransactionLedger(adv, accounts, ledgers).id;
-    const incomeTx = buildReimbursementTx({ ...adv, ledgerId }, accountId, date);
-    // Mark the advance as collected, then record the incoming money
-    updateTransaction(adv.id, { advance: { ...adv.advance!, reimbursedAt: date } });
-    addTransaction(incomeTx);
-    success();
+    if (await submit(() => reimburseAdvance(adv.id, accountId, getTodayString()))) success();
   };
 
   return (
@@ -57,10 +52,8 @@ export default function Advances() {
                   subtitle={`${t.date} · ${t.advance?.for ?? ''} · ${accountNameMap[t.accountId] ?? ''}`}
                   right={formatJPY(t.amount)}
                   onPress={() =>
-                    Alert.alert('回収済みにしますか？', `${t.advance?.for ?? ''}から ${formatJPY(t.amount)} を回収しました。`, [
-                      { text: 'キャンセル', style: 'cancel' },
-                      { text: '口座を選ぶ', onPress: () => void collect(t.id) },
-                    ])
+                    confirmAction('回収済みにしますか？', `${t.advance?.for ?? ''}から ${formatJPY(t.amount)} を回収しました。`,
+                      { text: '口座を選ぶ', onPress: () => void collect(t.id) })
                   }
                 />
               ))}

@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Plus, RotateCcw, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Account, Transaction, TransactionScope, TransactionType } from '../../types/finance';
+import { indexTransactionsByDate } from '@dmm/core/utils/metrics';
 import { ALL_CATEGORIES, getCategoryById } from '../../data/categories';
 import { exportTransactionsToCSV, formatJPY } from '../../utils/format';
 import { MonthSwitcherBar } from '../MonthSwitcherBar';
 import { ResponsiveSheet } from '../ResponsiveSheet';
+import { TransactionPages } from '../TransactionPages';
 import { haptic } from '../../utils/haptics';
 import { InsetGroup, Segmented, SwipeRow, TxRowBody, getDayHeading } from './MobileKit';
 
@@ -12,6 +14,7 @@ export type SortKey = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
 
 interface MobileLedgerProps {
   filtered: Transaction[];
+  pageKey: string;
   accounts: Account[];
   accountNameMap: Record<string, string>;
   summary: { income: number; expense: number };
@@ -93,24 +96,17 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
     (p.accountFilter !== 'all' ? 1 : 0) +
     (p.sortBy !== 'date_desc' ? 1 : 0);
 
-  const groups = useMemo(() => {
-    if (p.sortBy !== 'date_desc' && p.sortBy !== 'date_asc') {
-      return [{ key: 'flat', heading: '金額順', items: p.filtered, income: 0, expense: 0 }];
-    }
-    const map = new Map<string, Transaction[]>();
-    for (const tx of p.filtered) {
-      const arr = map.get(tx.date) ?? [];
-      arr.push(tx);
-      map.set(tx.date, arr);
-    }
-    return Array.from(map.entries()).map(([date, items]) => ({
-      key: date,
-      heading: getDayHeading(date),
-      items,
-      income: items.reduce((s, t) => s + (t.type === 'income' ? t.amount : 0), 0),
-      expense: items.reduce((s, t) => s + (t.type === 'expense' ? t.amount : 0), 0),
-    }));
-  }, [p.filtered, p.sortBy]);
+  const days = useMemo(() => p.sortBy === 'date_desc' || p.sortBy === 'date_asc'
+    ? indexTransactionsByDate(p.filtered) : undefined, [p.filtered, p.sortBy]);
+
+  const groupsForPage = (rows: Transaction[]) => {
+    if (!days) return [{ key: 'flat', heading: '金額順', items: rows, income: 0, expense: 0 }];
+    const visibleDays = rows === p.filtered ? days : indexTransactionsByDate(rows);
+    return Array.from(visibleDays.values(), ({ date, items }) => {
+      const { income, expense } = days.get(date)!;
+      return { key: date, heading: getDayHeading(date), items, income, expense };
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -216,37 +212,38 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
           </div>
         </div>
       ) : (
-        groups.map((g) => (
-          <section key={g.key}>
-            <InsetGroup className="divide-y divide-slate-100">
-              <DayHeader groupKey={g.key} heading={g.heading} income={g.income} expense={g.expense} />
-              {g.items.map((tx) => {
-                const cat = getCategoryById(tx.categoryId);
-                const acc = p.accountNameMap[tx.accountId] ?? '不明な口座';
-                const to = tx.toAccountId ? p.accountNameMap[tx.toAccountId] ?? '不明な口座' : '';
-                return (
-                  <SwipeRow
-                    key={tx.id}
-                    open={openRowId === tx.id}
-                    onOpenChange={(o) => setOpenRowId(o ? tx.id : openRowId === tx.id ? null : openRowId)}
-                    onTap={() => p.onEdit(tx)}
-                    onEdit={() => p.onEdit(tx)}
-                    onDelete={() => p.onAskDelete(tx)}
-                  >
-                    <TxRowBody
-                      tx={tx}
-                      category={cat}
-                      accountLabel={tx.type === 'transfer' ? `${acc} → ${to}` : `${cat.name} · ${acc}`}
-                      subLine={tx.counterparty || tx.memo || undefined}
-                    />
-                  </SwipeRow>
-                );
-              })}
-            </InsetGroup>
-          </section>
-        ))
+        <TransactionPages key={p.pageKey} rows={p.filtered}>
+          {(visible) => groupsForPage(visible).map((g) => (
+            <section key={g.key}>
+              <InsetGroup className="divide-y divide-slate-100">
+                <DayHeader groupKey={g.key} heading={g.heading} income={g.income} expense={g.expense} />
+                {g.items.map((tx) => {
+                  const cat = getCategoryById(tx.categoryId);
+                  const acc = p.accountNameMap[tx.accountId] ?? '不明な口座';
+                  const to = tx.toAccountId ? p.accountNameMap[tx.toAccountId] ?? '不明な口座' : '';
+                  return (
+                    <SwipeRow
+                      key={tx.id}
+                      open={openRowId === tx.id}
+                      onOpenChange={(o) => setOpenRowId(o ? tx.id : openRowId === tx.id ? null : openRowId)}
+                      onTap={() => p.onEdit(tx)}
+                      onEdit={() => p.onEdit(tx)}
+                      onDelete={() => p.onAskDelete(tx)}
+                    >
+                      <TxRowBody
+                        tx={tx}
+                        category={cat}
+                        accountLabel={tx.type === 'transfer' ? `${acc} → ${to}` : `${cat.name} · ${acc}`}
+                        subLine={tx.counterparty || tx.memo || undefined}
+                      />
+                    </SwipeRow>
+                  );
+                })}
+              </InsetGroup>
+            </section>
+          ))}
+        </TransactionPages>
       )}
-
 
       <ResponsiveSheet
         open={filterOpen}
@@ -351,7 +348,7 @@ export const MobileLedger: React.FC<MobileLedgerProps> = (p) => {
             className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 active:bg-slate-50 disabled:opacity-40"
           >
             <Download className="h-4 w-4" />
-            表示中をCSV出力
+            検索結果をCSV出力
           </button>
         </div>
       </ResponsiveSheet>

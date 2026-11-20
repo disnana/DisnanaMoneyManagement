@@ -1,15 +1,16 @@
-import { useMemo, useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { useDeferredValue, useMemo, useState } from 'react';
+import { Text, TextInput, View } from 'react-native';
 import { Stack } from 'expo-router';
-import { getCategoryById } from '@dmm/core/data/categories';
-import type { TransactionType } from '@dmm/core/types/finance';
+import { getMonthTransactions } from '@dmm/core/utils/metrics';
+import { createTransactionSearch, normalizeTransactionSearch } from '@dmm/core/utils/transactionSearch';
+import type { Transaction, TransactionType } from '@dmm/core/types/finance';
 import { formatFullDate, formatMonthLabel, getTodayString, shiftMonth } from '@dmm/core/utils/format';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
-import { Group, Row, Screen, Segmented } from '@/ui/kit';
+import { Group, Row, Segmented } from '@/ui/kit';
 import { LedgerPicker } from '@/ui/LedgerPicker';
-import { TxGroups } from '@/ui/TxGroups';
+import { TransactionSearchList } from '@/ui/TransactionSearchList';
 import { CardSurface } from '@/ui/CardSurface';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
 
@@ -23,6 +24,7 @@ const PERIODS = [
 ] as const;
 type Period = (typeof PERIODS)[number]['id'];
 type RangeEnd = 'start' | 'end';
+const noResults: readonly Transaction[] = [];
 
 export default function SearchTransactions() {
   const p = usePalette();
@@ -42,56 +44,59 @@ export default function SearchTransactions() {
   const monthFilter = period === 'current' ? month : period === 'previous' ? shiftMonth(month, -1) : '';
   const validRange = period !== 'custom' || start <= end;
   const periodLabel = PERIODS.find(({ id }) => id === period)?.label;
-  const normalized = query.trim().normalize('NFKC').toLocaleLowerCase();
+  const normalized = normalizeTransactionSearch(query);
+  const deferred = useDeferredValue(normalized);
+  const searchTerm = normalized ? deferred : '';
+  const search = useMemo(() => createTransactionSearch(visibleState.customCategories, accountNameMap),
+    [visibleState.customCategories, accountNameMap]);
   const hasFilters = Boolean(normalized) || type !== 'all' || period !== 'all';
-  const results = useMemo(() => {
-    if (!hasFilters || !validRange) return [];
-    return visibleState.transactions.filter((tx) =>
+  const candidates = useMemo(() => {
+    if (!validRange) return noResults;
+    const transactions = monthFilter ? getMonthTransactions(visibleState.transactions, monthFilter) : visibleState.transactions;
+    if (type === 'all' && !from && !through) return transactions;
+    return transactions.filter((tx) =>
       (type === 'all' || tx.type === type) &&
-      (!monthFilter || tx.date.startsWith(monthFilter)) &&
-      (!from || tx.date >= from) && (!through || tx.date <= through) &&
-      (!normalized || [
-        tx.title, tx.memo, tx.counterparty, tx.accountingSubject, getCategoryById(tx.categoryId, visibleState.customCategories).name,
-        accountNameMap[tx.accountId], tx.toAccountId ? accountNameMap[tx.toAccountId] : undefined,
-      ].some((value) => value?.normalize('NFKC').toLocaleLowerCase().includes(normalized)))
+      (!from || tx.date >= from) && (!through || tx.date <= through)
     );
-  }, [visibleState.transactions, visibleState.customCategories, hasFilters, validRange, type, monthFilter, from, through, normalized, accountNameMap]);
+  }, [visibleState.transactions, type, monthFilter, from, through, validRange]);
+  const results = validRange && (searchTerm || type !== 'all' || period !== 'all')
+    ? search(candidates, searchTerm) : noResults;
 
   return (
     <>
       <Stack.Screen options={{ title: '取引を検索' }} />
-      <Screen keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-        <CardSurface><Group>
-          <TextInput
-            accessibilityLabel="検索キーワード"
-            placeholder="内容・メモ・カテゴリ・口座"
-            placeholderTextColor={p.textSecondary}
-            value={query}
-            onChangeText={setQuery}
-            clearButtonMode="while-editing"
-            returnKeyType="search"
-            style={{ minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
-          />
-          <Row title="期間" right={periodLabel} chevron
-            subtitle={monthFilter ? formatMonthLabel(monthFilter) : undefined}
-            onPress={async () => {
-              const choice = await pickOne('検索する期間', PERIODS.map((option) => ({ ...option, selected: option.id === period })),
-                { layout: 'divided' });
-              const selected = PERIODS.find(({ id }) => id === choice);
-              if (selected) setPeriod(selected.id);
-            }} />
-          {period === 'custom' ? <Row title="開始日" right={formatFullDate(start)} chevron onPress={() => setEditingDate('start')} /> : null}
-          {period === 'custom' ? <Row title="終了日" right={formatFullDate(end)} chevron onPress={() => setEditingDate('end')} /> : null}
-        </Group></CardSurface>
-        {!validRange ? <Text accessibilityLiveRegion="polite" style={{ color: p.danger }}>終了日は開始日以降を選んでください</Text> : null}
-        <LedgerPicker />
-        <Segmented value={type} onChange={setType} options={[
-          { id: 'all', label: 'すべて' }, { id: 'expense', label: '支出' },
-          { id: 'income', label: '収入' }, { id: 'transfer', label: '振替' },
-        ]} />
-        {validRange ? <TxGroups transactions={results}
-          empty={hasFilters ? '条件に一致する取引はありません' : '検索キーワードや絞り込み条件を指定してください'} /> : null}
-      </Screen>
+      <TransactionSearchList transactions={results}
+        empty={validRange ? (hasFilters ? '条件に一致する取引はありません' : '検索キーワードや絞り込み条件を指定してください') : undefined}
+        header={<View style={{ gap: 16 }}>
+          <CardSurface><Group>
+            <TextInput
+              accessibilityLabel="検索キーワード"
+              placeholder="内容・メモ・カテゴリ・口座"
+              placeholderTextColor={p.textSecondary}
+              value={query}
+              onChangeText={setQuery}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+              style={{ minHeight: 52, paddingHorizontal: 16, color: p.text, fontSize: 16 }}
+            />
+            <Row title="期間" right={periodLabel} chevron
+              subtitle={monthFilter ? formatMonthLabel(monthFilter) : undefined}
+              onPress={async () => {
+                const choice = await pickOne('検索する期間', PERIODS.map((option) => ({ ...option, selected: option.id === period })),
+                  { layout: 'divided' });
+                const selected = PERIODS.find(({ id }) => id === choice);
+                if (selected) setPeriod(selected.id);
+              }} />
+            {period === 'custom' ? <Row title="開始日" right={formatFullDate(start)} chevron onPress={() => setEditingDate('start')} /> : null}
+            {period === 'custom' ? <Row title="終了日" right={formatFullDate(end)} chevron onPress={() => setEditingDate('end')} /> : null}
+          </Group></CardSurface>
+          {!validRange ? <Text accessibilityLiveRegion="polite" style={{ color: p.danger }}>終了日は開始日以降を選んでください</Text> : null}
+          <LedgerPicker />
+          <Segmented value={type} onChange={setType} options={[
+            { id: 'all', label: 'すべて' }, { id: 'expense', label: '支出' },
+            { id: 'income', label: '収入' }, { id: 'transfer', label: '振替' },
+          ]} />
+        </View>} />
       {editingDate ? (
         <TransactionDatePicker title={editingDate === 'start' ? '開始日を選ぶ' : '終了日を選ぶ'} date={range[editingDate]} allowMonthJump
           onCancel={() => setEditingDate(undefined)} onPick={(date) => {

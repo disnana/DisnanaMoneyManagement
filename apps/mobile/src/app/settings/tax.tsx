@@ -10,6 +10,7 @@ import { computeTaxSummary } from '@dmm/core/utils/tax';
 import { getLedgerTaxExemption } from '@dmm/core/utils/ledgers';
 import { buildTransactionsCsv, formatJPY, getTodayString } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
+import { useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { success, tick } from '@/lib/haptics';
 import { TransactionInput } from '@/ui/TransactionForm';
@@ -18,6 +19,7 @@ import { LedgerPicker } from '@/ui/LedgerPicker';
 
 /** 確定申告の準備: yearly business figures and a CSV for the accountant / e-Tax. */
 export default function Tax() {
+  const submit = useFinanceSubmit('stay');
   const p = usePalette();
   const { visibleState, activeLedger, accountNameMap, setLedgerTaxExemption } = useFinance();
   const [year, setYear] = useState(() => Number(getTodayString().slice(0, 4)));
@@ -92,15 +94,16 @@ export default function Tax() {
                 <TransactionInput label="控除・免除額" icon={{ ios: 'yensign', android: 'currency_yen' }} unit="円"
                   value={amount} keyboardType="number-pad"
                   onChangeText={(text) => setAmount(text.normalize('NFKC').replace(/[^0-9]/g, '').slice(0, 15))} />
-                <Row title="この年の設定を保存" onPress={() => {
-                  if (amount === '') return;
-                  setLedgerTaxExemption(activeLedger.id, year, Number(amount));
-                  setEditor(undefined);
+                <Row title="この年の設定を保存" onPress={async () => {
+                  if (amount && await submit(() => setLedgerTaxExemption(activeLedger.id, year, Number(amount)))) {
+                    setEditor((current) => current === editor ? undefined : current);
+                  }
                 }} />
                 {exemption.sourceYear === year ? (
-                  <Row title="この年の設定を解除" subtitle="以前の設定を引き継ぐ" onPress={() => {
-                    setLedgerTaxExemption(activeLedger.id, year);
-                    setEditor(undefined);
+                  <Row title="この年の設定を解除" subtitle="以前の設定を引き継ぐ" onPress={async () => {
+                    if (await submit(() => setLedgerTaxExemption(activeLedger.id, year))) {
+                      setEditor((current) => current === editor ? undefined : current);
+                    }
                   }} />
                 ) : null}
               </>

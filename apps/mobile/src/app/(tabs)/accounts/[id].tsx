@@ -87,7 +87,7 @@ function AccountMonth({ id, month, isPreview, balance }: { id: string; month: st
         <Row compact title="家計グループ" right={ledger.name} chevron icon={ledgerIcon(ledger)} iconColor={ledgerColor(ledger)}
           onPress={async () => {
             const choice = await pickLedger(ledger.id);
-            if (choice) updateAccount(account.id, { ledgerId: choice });
+            if (choice) await updateAccount(account.id, { ledgerId: choice });
           }} />
         {card ? <Row compact title="引落口座" right={bank?.name ?? '未設定'} /> : null}
         {card ? <Row compact title="このカードで支出を記録" chevron

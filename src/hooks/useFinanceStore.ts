@@ -1,21 +1,18 @@
 import * as React from 'react';
-import { createFinanceStoreHook, type StorageAdapter } from '@dmm/core/store/finance';
+import type { FinanceState } from '@dmm/core/types/finance';
+import { createInitialSeedData } from '@dmm/core/data/seedData';
+import { getCurrentMonthKey } from '@dmm/core/utils/format';
+import { createFinanceStoreHook } from '@dmm/core/store/finance';
+import { createFinanceLoader } from '@dmm/core/store/financeLoader';
+import { createBrowserFinanceStorage } from '@dmm/core/store/browserFinanceStorage';
 
-const localStorageAdapter: StorageAdapter = {
-  getItem: (key) => {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem: (key, value) => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // ignore storage quota errors
-    }
-  },
-};
+const storage = createBrowserFinanceStorage();
+const useLoadedStore = createFinanceStoreHook(React, storage);
+export const useFinanceLoader = createFinanceLoader(React, storage, () => createInitialSeedData(getCurrentMonthKey()));
+export const InitialFinanceState = React.createContext<FinanceState | null>(null);
 
-export const useFinanceStore = createFinanceStoreHook(React, localStorageAdapter);
+export function useFinanceStore() {
+  const initial = React.useContext(InitialFinanceState);
+  if (initial === null) throw new Error('家計データの読み込みが必要です。');
+  return useLoadedStore(initial);
+}

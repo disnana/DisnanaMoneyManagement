@@ -8,6 +8,7 @@ import { ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { pickOne } from '@/lib/pick';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { DeleteDialog } from '@/ui/DeleteDialog';
 import { HeaderAction } from '@/ui/HeaderAction';
@@ -20,6 +21,7 @@ const TYPES: AccountType[] = ['bank', 'cash', 'emoney', 'investment', 'psp', 'fo
 export default function AccountEditor() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { state, ledgers, activeLedger, addAccount, updateAccount, deleteAccount } = useFinance();
+  const submit = useFinanceSubmit();
   const p = usePalette();
   const pickLedger = useLedgerPicker();
   const existing = state.accounts.find((a) => a.id === id);
@@ -32,7 +34,7 @@ export default function AccountEditor() {
   const ledger = ledgers.find((l) => l.id === ledgerId);
   const used = editing ? state.transactions.some((tx) => tx.accountId === editing.id || tx.toAccountId === editing.id) : false;
 
-  const save = () => {
+  const save = async () => {
     if (!name.trim()) {
       Alert.alert('口座名を入力してください');
       return;
@@ -43,9 +45,8 @@ export default function AccountEditor() {
       return;
     }
     const details = { name: name.trim(), institution: institution.trim() || undefined, initialBalance, ledgerId } satisfies Partial<Account>;
-    if (editing) updateAccount(editing.id, details);
-    else addAccount({ ...details, type });
-    router.back();
+    const saved = await submit(() => editing ? updateAccount(editing.id, details) : addAccount({ ...details, type }));
+    if (saved) closeEditor('/accounts');
   };
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -95,10 +96,9 @@ export default function AccountEditor() {
         )}
       </Screen>
       <DeleteDialog visible={deleteOpen && Boolean(editing) && !used} heading="口座を削除しますか？" title={editing?.name}
-        onCancel={() => setDeleteOpen(false)} onDelete={() => {
-          if (!editing) return;
+        onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+          if (!editing || !await submit(() => deleteAccount(editing.id))) return;
           setDeleteOpen(false);
-          deleteAccount(editing.id);
           router.dismissTo('/accounts');
         }} />
     </>

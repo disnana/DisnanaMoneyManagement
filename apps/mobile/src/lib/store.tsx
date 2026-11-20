@@ -1,17 +1,20 @@
 import * as React from 'react';
-import { kv } from '@/lib/kv';
-import { createEmptyFinanceState, createFinanceStoreHook, type StorageAdapter } from '@dmm/core/store/finance';
+import { Alert, Platform } from 'react-native';
+import { financeStorage } from './financeStorage';
+import { FinanceRecovery } from '@/ui/FinanceRecovery';
+import { createFinanceLoader } from '@dmm/core/store/financeLoader';
+import { createEmptyFinanceState, createFinanceStoreHook } from '@dmm/core/store/finance';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
-import type { Ledger, TransactionType } from '@dmm/core/types/finance';
+import type { FinanceState, Ledger, TransactionType } from '@dmm/core/types/finance';
 import { filterLedger, getLedgers } from '@dmm/core/utils/ledgers';
 
-const adapter: StorageAdapter = { getItem: kv.getItem, setItem: kv.setItemStrict };
-
-const useFinanceStore = createFinanceStoreHook(React, adapter, () => {
+function newLedger() {
   const empty = createEmptyFinanceState();
   empty.accounts.push({ id: 'acc_default_bank', name: '銀行口座', type: 'bank', usageScope: 'personal', initialBalance: 0 });
   return empty;
-});
+}
+const useLoadFinance = createFinanceLoader(React, financeStorage, newLedger);
+const useFinanceStore = createFinanceStoreHook(React, financeStorage, newLedger);
 type Store = ReturnType<typeof useFinanceStore> & {
   month: string;
   setMonth: React.Dispatch<React.SetStateAction<string>>;
@@ -27,7 +30,23 @@ type Store = ReturnType<typeof useFinanceStore> & {
 const Ctx = React.createContext<Store | null>(null);
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
-  const store = useFinanceStore();
+  const { result, retry, restore } = useLoadFinance();
+  if (result.status !== 'ready') return <FinanceRecovery loading={result.status === 'loading'} retry={retry} restore={restore} />;
+  return <LoadedFinanceProvider initial={result.state}>{children}</LoadedFinanceProvider>;
+}
+
+function LoadedFinanceProvider({ initial, children }: { initial: FinanceState; children: React.ReactNode }) {
+  const store = useFinanceStore(initial);
+  const { writeError, dismissWriteError } = store;
+  React.useEffect(() => {
+    if (!writeError) return;
+    if (Platform.OS === 'web') {
+      window.alert(writeError);
+      dismissWriteError();
+    } else {
+      Alert.alert('家計データの保存', writeError, [{ text: '閉じる', onPress: dismissWriteError }]);
+    }
+  }, [writeError, dismissWriteError]);
   const [month, setMonth] = React.useState(getCurrentMonthKey);
   const [transactionFilter, setTransactionFilter] = React.useState<'all' | TransactionType>('all');
   const [activeLedgerId, setActiveLedgerId] = React.useState<string | null>(null);

@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
 import { ACCOUNTING_SUBJECTS, ACCOUNT_TYPE_LABELS, INCOME_TAX_CATEGORY_LABELS, getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
@@ -14,6 +14,7 @@ import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { useCategoryPicker } from '@/lib/categoryPicker';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
 import { success, tick } from '@/lib/haptics';
@@ -53,7 +54,8 @@ export default function AddScreen() {
   const pickCategory = useCategoryPicker();
   const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
   const { id } = params;
-  const closing = useRef(false);
+  const submit = useFinanceSubmit();
+  const lastContinuedAmount = useRef('');
   const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, reorderAccounts, showSavedTransaction } = useFinance();
   const accountsById = useMemo(() => new Map(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
@@ -157,16 +159,14 @@ export default function AddScreen() {
       onReorder: (ids) => {
         const included = new Set(ids);
         let next = 0;
-        reorderAccounts(state.accounts.map((account) => included.has(account.id) ? ids[next++] : account.id));
+        return reorderAccounts(state.accounts.map((account) => included.has(account.id) ? ids[next++] : account.id));
       },
     });
     if (choice) setter(choice);
   };
 
-  const closeEditor = () => router.canGoBack() ? router.back() : router.replace('/transactions');
-
-  const save = (keepOpen: boolean) => {
-    if (closing.current) return;
+  const save = async (keepOpen: boolean) => {
+    if (amount && lastContinuedAmount.current === amount) return;
     if (id && !editing) {
       Alert.alert('取引が見つかりません');
       return;
@@ -193,7 +193,6 @@ export default function AddScreen() {
       Alert.alert('デビットカードの引落口座を設定してください');
       return;
     }
-    if (!keepOpen || editing) closing.current = true;
     const payload: Omit<Transaction, 'id'> = {
       type,
       amount: value,
@@ -223,18 +222,23 @@ export default function AddScreen() {
           ? { ...(editing?.advance ?? {}), for: advanceFor.trim() || '未設定' }
           : undefined,
     };
-    if (editing) updateTransaction(editing.id, payload);
-    else addTransaction(payload);
+    const continuing = keepOpen && !editing;
+    const saved = await submit(
+      () => editing ? updateTransaction(editing.id, payload) : addTransaction(payload),
+      continuing ? 'stay' : 'leave',
+    );
+    if (!saved) return;
     showSavedTransaction(date, type, ledger.id);
     success();
-    if (keepOpen && !editing) {
-      setAmount('');
-      setPointUsed('');
-      setTitle('');
-      setMemo('');
+    if (continuing) {
+      lastContinuedAmount.current = amount;
+      setAmount((current) => current === amount ? '' : current);
+      setPointUsed((current) => current === pointUsed ? '' : current);
+      setTitle((current) => current === title ? '' : current);
+      setMemo((current) => current === memo ? '' : current);
       return;
     }
-    closeEditor();
+    closeEditor('/transactions');
   };
 
   const fieldRow = (
@@ -363,7 +367,10 @@ export default function AddScreen() {
         <Group>
           <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
             accessibilityHint="円単位で入力" value={amount}
-            onChangeText={(value) => setAmount(value.replace(/[^0-9]/g, ''))}
+            onChangeText={(value) => {
+              lastContinuedAmount.current = '';
+              setAmount(value.replace(/[^0-9]/g, ''));
+            }}
             keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
             style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
               fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
@@ -541,13 +548,11 @@ export default function AddScreen() {
         setDateOpen(false);
       }} /> : null}
       <DeleteDialog heading="取引を削除しますか？" title={editing?.title} visible={deleteOpen}
-        onCancel={() => setDeleteOpen(false)} onDelete={() => {
-          if (!editing || closing.current) return;
-          closing.current = true;
+        onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+          if (!editing || !await submit(() => deleteTransaction(editing.id))) return;
           setDeleteOpen(false);
-          deleteTransaction(editing.id);
           success();
-          closeEditor();
+          closeEditor('/transactions');
         }} />
     </View>
   );

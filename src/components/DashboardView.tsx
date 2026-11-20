@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronRight, Plus, CreditCard } from 'lucide-react';
 import { FinanceState, NavSection, Transaction } from '../types/finance';
+import { computeMonthCashFlow, computeMonthMetrics, getMonthTransactions } from '@dmm/core/utils/metrics';
 import { getCategoryById } from '../data/categories';
 import {
   formatDayLabel,
@@ -54,91 +55,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartPreviewMonth, setChartPreviewMonth] = useState<string>(currentRealMonth);
 
   const metrics = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    let prevIncome = 0;
-    let prevExpense = 0;
-    const categoryExpenseMap: Record<string, number> = {};
-
-    for (const tx of state.transactions) {
-      const m = tx.date.slice(0, 7);
-      if (m === selectedMonth) {
-        if (tx.type === 'income') {
-          income += tx.amount;
-        } else if (tx.type === 'expense') {
-          expense += tx.amount;
-          categoryExpenseMap[tx.categoryId] =
-            (categoryExpenseMap[tx.categoryId] ?? 0) + tx.amount;
-        } else if (tx.type === 'transfer') {
-          const fee = getTransferTotalFees(tx);
-          if (fee > 0) {
-            expense += fee;
-            categoryExpenseMap['transfer_fee'] =
-              (categoryExpenseMap['transfer_fee'] ?? 0) + fee;
-          }
-        }
-      } else if (m === prevMonth) {
-        if (tx.type === 'income') prevIncome += tx.amount;
-        else if (tx.type === 'expense') prevExpense += tx.amount;
-        else if (tx.type === 'transfer') {
-          prevExpense += getTransferTotalFees(tx);
-        }
-      }
-    }
-
-    const net = income - expense;
-    const savingsRate = income > 0 ? Math.round((net / income) * 100) : 0;
-    const expenseDiff = expense - prevExpense;
-    const incomeDiff = income - prevIncome;
-
-    const categoryBreakdown = Object.entries(categoryExpenseMap)
-      .map(([catId, amount]) => ({
-        category:
-          catId === 'transfer_fee'
-            ? { id: 'transfer_fee', name: '振替・振込手数料', color: '#64748B' }
-            : getCategoryById(catId),
-        amount,
-        share: expense > 0 ? (amount / expense) * 100 : 0,
-      }))
-      .sort((a, b) => b.amount - a.amount);
-
+    const { income, expense, net, categoryBreakdown } = computeMonthMetrics(state, selectedMonth);
+    const previous = computeMonthCashFlow(state, prevMonth);
     return {
-      income,
-      expense,
-      net,
-      savingsRate,
-      prevIncome,
-      prevExpense,
-      expenseDiff,
-      incomeDiff,
-      categoryBreakdown,
+      income, expense, net, categoryBreakdown,
+      savingsRate: income > 0 ? Math.round(net / income * 100) : 0,
+      expenseDiff: expense - previous.expense,
+      incomeDiff: income - previous.income,
     };
-  }, [state.transactions, selectedMonth, prevMonth]);
+  }, [state.transactions, state.customCategories, selectedMonth, prevMonth]);
 
   const trendData = useMemo(() => {
-    const months = getRecentMonths(currentRealMonth, 6);
-    const map: Record<string, { income: number; expense: number }> = {};
-    for (const m of months) {
-      map[m] = { income: 0, expense: 0 };
-    }
-    for (const tx of state.transactions) {
-      const m = tx.date.slice(0, 7);
-      if (map[m]) {
-        if (tx.type === 'income') map[m].income += tx.amount;
-        else if (tx.type === 'expense') map[m].expense += tx.amount;
-        else if (tx.type === 'transfer') {
-          const fee = getTransferTotalFees(tx);
-          if (fee > 0) map[m].expense += fee;
-        }
-      }
-    }
-    const items = months.map((m) => ({
+    const items = getRecentMonths(currentRealMonth, 6).map((m) => ({
       monthKey: m,
       shortLabel: `${Number(m.slice(5, 7))}月`,
       fullLabel: formatMonthLabel(m),
-      income: map[m].income,
-      expense: map[m].expense,
-      net: map[m].income - map[m].expense,
+      ...computeMonthCashFlow(state, m),
     }));
     const maxVal = Math.max(
       100000,
@@ -161,16 +93,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }, [state.accounts, state.transactions, accountBalances, selectedMonth]);
 
   const budgetStatuses = useMemo(() => {
-    const spentByCategory: Record<string, number> = {};
-    for (const tx of state.transactions) {
-      if (tx.type === 'expense' && tx.date.slice(0, 7) === selectedMonth) {
-        spentByCategory[tx.categoryId] =
-          (spentByCategory[tx.categoryId] ?? 0) + tx.amount;
-      }
-    }
+    const spentByCategory = new Map(metrics.categoryBreakdown.map((item) => [item.categoryId, item.amount]));
     return state.budgets
       .map((b) => {
-        const spent = spentByCategory[b.categoryId] ?? 0;
+        const spent = spentByCategory.get(b.categoryId) ?? 0;
         const ratio = b.monthlyLimit > 0 ? spent / b.monthlyLimit : 0;
         return {
           category: getCategoryById(b.categoryId),
@@ -181,11 +107,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         };
       })
       .sort((a, b) => b.ratio - a.ratio);
-  }, [state.budgets, state.transactions, selectedMonth]);
+  }, [state.budgets, metrics.categoryBreakdown]);
 
   const recentTransactions = useMemo(() => {
-    return state.transactions
-      .filter((tx) => tx.date.slice(0, 7) === selectedMonth)
+    return [...getMonthTransactions(state.transactions, selectedMonth)]
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 7);
   }, [state.transactions, selectedMonth]);
@@ -418,11 +343,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           ) : (
             <div className="mt-5 space-y-4">
               {metrics.categoryBreakdown.slice(0, 6).map((item) => (
-                <div key={item.category.id}>
+                <div key={item.categoryId}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-xs">
-                    <span className="font-medium text-slate-800">{item.category.name}</span>
+                    <span className="font-medium text-slate-800">{item.name}</span>
                     <div className="flex items-center gap-2 font-mono tabular-nums">
-                      <span className="text-slate-400">{Math.round(item.share)}%</span>
+                      <span className="text-slate-400">{Math.round(item.share * 100)}%</span>
                       <span className="font-semibold text-slate-900">
                         {formatJPY(item.amount)}
                       </span>
@@ -432,8 +357,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       className="h-full rounded-full transition-all"
                       style={{
-                        width: `${Math.min(100, Math.max(3, item.share))}%`,
-                        backgroundColor: item.category.color,
+                        width: `${Math.min(100, Math.max(3, item.share * 100))}%`,
+                        backgroundColor: item.color,
                       }}
                     />
                   </div>

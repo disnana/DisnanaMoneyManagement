@@ -32,28 +32,52 @@ export function getMonthTransactions(transactions: readonly Transaction[], month
   return index.get(monthKey) ?? emptyMonth;
 }
 
-/** Income / expense (transfer fees count as expense) and category breakdowns for one month. */
-export function computeMonthMetrics(state: FinanceState, monthKey: string): MonthMetrics {
-  let income = 0;
-  let expense = 0;
-  const expenses = new Map<string, number>();
-  const incomes = new Map<string, number>();
-  for (const tx of getMonthTransactions(state.transactions, monthKey)) {
-    if (!isOwnFlow(tx)) continue; // 立替とその回収は自分の収支ではない
-    if (tx.type === 'income') {
-      income += tx.amount;
-      incomes.set(tx.categoryId, (incomes.get(tx.categoryId) ?? 0) + tx.amount);
-    } else if (tx.type === 'expense') {
-      expense += tx.amount;
-      expenses.set(tx.categoryId, (expenses.get(tx.categoryId) ?? 0) + tx.amount);
-    } else {
-      const fee = getTransferTotalFees(tx);
-      if (fee > 0) {
-        expense += fee;
-        expenses.set('transfer_fee', (expenses.get('transfer_fee') ?? 0) + fee);
-      }
-    }
+type CashFlow = Pick<MonthMetrics, 'income' | 'expense' | 'net'>;
+type CategoryAmounts = { income: Map<string, number>; expense: Map<string, number> };
+
+function addCashFlow(totals: CashFlow, tx: Transaction, categories?: CategoryAmounts) {
+  if (!isOwnFlow(tx)) return;
+  const transfer = tx.type === 'transfer';
+  const amount = transfer ? getTransferTotalFees(tx) : tx.amount;
+  if (transfer && amount <= 0) return;
+  const side = tx.type === 'income' ? 'income' : 'expense';
+  totals[side] += amount;
+  totals.net = totals.income - totals.expense;
+  if (categories) {
+    const category = transfer ? 'transfer_fee' : tx.categoryId;
+    const amounts = categories[side];
+    amounts.set(category, (amounts.get(category) ?? 0) + amount);
   }
+}
+
+/** Household income and expense for any selection of transactions. */
+export function computeCashFlow(transactions: readonly Transaction[]): CashFlow {
+  const totals = { income: 0, expense: 0, net: 0 };
+  for (const tx of transactions) addCashFlow(totals, tx);
+  return totals;
+}
+
+const monthAggregates = new WeakMap<readonly Transaction[], { totals: CashFlow; categories: CategoryAmounts }>();
+
+function getMonthAggregate(transactions: readonly Transaction[], monthKey: string) {
+  const rows = getMonthTransactions(transactions, monthKey);
+  const saved = monthAggregates.get(rows);
+  if (saved) return saved;
+  const totals = { income: 0, expense: 0, net: 0 };
+  const categories = { income: new Map<string, number>(), expense: new Map<string, number>() };
+  for (const tx of rows) addCashFlow(totals, tx, categories);
+  const aggregate = { totals, categories };
+  monthAggregates.set(rows, aggregate);
+  return aggregate;
+}
+
+export function computeMonthCashFlow(state: Pick<FinanceState, 'transactions'>, monthKey: string): Readonly<CashFlow> {
+  return getMonthAggregate(state.transactions, monthKey).totals;
+}
+
+/** Income / expense (transfer fees count as expense) and category breakdowns for one month. */
+export function computeMonthMetrics(state: Pick<FinanceState, 'transactions' | 'customCategories'>, monthKey: string): MonthMetrics {
+  const { totals, categories } = getMonthAggregate(state.transactions, monthKey);
   const breakdown = (amounts: Map<string, number>, total: number): CategoryBreakdown => [...amounts]
     .map(([categoryId, amount]) => {
       const cat =
@@ -64,30 +88,34 @@ export function computeMonthMetrics(state: FinanceState, monthKey: string): Mont
     })
     .sort((a, b) => b.amount - a.amount);
   return {
-    income, expense, net: income - expense,
-    categoryBreakdown: breakdown(expenses, expense),
-    incomeCategoryBreakdown: breakdown(incomes, income),
+    ...totals,
+    categoryBreakdown: breakdown(categories.expense, totals.expense),
+    incomeCategoryBreakdown: breakdown(categories.income, totals.income),
   };
 }
 
-export interface DayGroup {
+export interface DayGroup extends CashFlow {
   date: string;
   items: Transaction[];
-  net: number;
+  transfer: number;
 }
 
-/** Newest first, grouped by date, with each day's net (income - expense). */
-export function groupTransactionsByDate(txs: readonly Transaction[]): DayGroup[] {
+export function indexTransactionsByDate(txs: readonly Transaction[]): Map<string, DayGroup> {
   const groups = new Map<string, DayGroup>();
   for (const tx of txs) {
     let group = groups.get(tx.date);
     if (!group) {
-      group = { date: tx.date, items: [], net: 0 };
+      group = { date: tx.date, items: [], income: 0, expense: 0, net: 0, transfer: 0 };
       groups.set(tx.date, group);
     }
     group.items.push(tx);
-    if (tx.type === 'income') group.net += tx.amount;
-    else if (tx.type === 'expense') group.net -= tx.amount;
+    addCashFlow(group, tx);
+    if (tx.type === 'transfer') group.transfer += tx.amount;
   }
-  return [...groups.values()].sort((a, b) => b.date.localeCompare(a.date));
+  return groups;
+}
+
+/** Newest first; keep all entries visible, including pass-through payments. */
+export function groupTransactionsByDate(txs: readonly Transaction[]): DayGroup[] {
+  return [...indexTransactionsByDate(txs).values()].sort((a, b) => b.date.localeCompare(a.date));
 }

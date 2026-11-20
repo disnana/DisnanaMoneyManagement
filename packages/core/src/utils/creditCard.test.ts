@@ -19,6 +19,27 @@ describe('getBillingMonthForDate', () => {
 });
 
 describe('getCycleRangeLabel', () => {
+  it.each([
+    { month: '2026-03', day: 30, offset: 1, first: '2026-01-31', last: '2026-02-28' },
+    { month: '2026-04', day: 30, offset: 1, first: '2026-03-01', last: '2026-03-30' },
+    { month: '2028-04', day: 29, offset: 2, first: '2028-01-30', last: '2028-02-29' },
+    { month: '2028-05', day: 28, offset: 2, first: '2028-02-29', last: '2028-03-28' },
+    { month: '2027-03', day: 15, offset: 2, first: '2026-12-16', last: '2027-01-15' },
+    { month: '2027-01', day: 31, offset: 1, first: '2026-12-01', last: '2026-12-31' },
+  ] as const)('labels the exact range billed in $month on day $day with offset $offset', ({ month, day, offset, first, last }) => {
+    const monthDay = (date: string) => `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
+    const adjacentDate = (date: string, days: number) => {
+      const result = new Date(`${date}T00:00:00Z`);
+      result.setUTCDate(result.getUTCDate() + days);
+      return result.toISOString().slice(0, 10);
+    };
+    expect(getCycleRangeLabel(month, day, offset)).toBe(`${monthDay(first)} 〜 ${monthDay(last)} 利用分`);
+    expect(getBillingMonthForDate(first, day, offset)).toBe(month);
+    expect(getBillingMonthForDate(last, day, offset)).toBe(month);
+    expect(getBillingMonthForDate(adjacentDate(first, -1), day, offset)).not.toBe(month);
+    expect(getBillingMonthForDate(adjacentDate(last, 1), day, offset)).not.toBe(month);
+  });
+
   it('labels mid-month cycles', () => {
     expect(getCycleRangeLabel('2026-12', 15, 1)).toBe('10/16 〜 11/15 利用分');
   });
@@ -60,6 +81,22 @@ describe('computeCreditCardSummary', () => {
     expect(s.nextMonthGross).toBe(5000);
     expect(s.thisMonthRemaining).toBe(3000);
     expect(s.thisMonthUsage).toBe(0);
+  });
+
+  it('reuses history across months and updates after transaction or closing-day changes', () => {
+    const transactions = [spend('first', '2026-11-20', 3000), spend('second', '2026-11-20', 5000)];
+    const initial = computeCreditCardSummary(card, transactions, -8000, '2027-01');
+    expect(initial.thisMonthTransactions.map(({ id }) => id)).toEqual(['first', 'second']);
+    initial.thisMonthTransactions.reverse();
+    expect(computeCreditCardSummary(card, transactions, -8000, '2027-01').thisMonthTransactions)
+      .toEqual(transactions);
+    expect(computeCreditCardSummary({ ...card, closingDay: 31 }, transactions, -8000, '2026-12').thisMonthGross).toBe(8000);
+    const edited = [{ ...transactions[0], amount: 1000 }, transactions[1]];
+    expect(computeCreditCardSummary(card, edited, -6000, '2027-01').thisMonthGross).toBe(6000);
+    const unallocated = { ...spend('unallocated', '2027-01-09', 1500), type: 'transfer' as const,
+      accountId: 'bank', toAccountId: card.id, isPrepayment: true };
+    const paid = computeCreditCardSummary(card, [...edited, unallocated], -4500, '2027-01');
+    expect(paid).toMatchObject({ thisMonthSettled: 1500, thisMonthRemaining: 4500, totalPrepaidCredit: 1500 });
   });
 
   it('computes available credit from the unpaid balance', () => {

@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { Text } from 'react-native';
 import { formatJPY } from '@dmm/core/utils/format';
 import { isPlanningDate } from '@dmm/core/utils/planning';
 import { success } from '@/lib/haptics';
 import { DeleteDialog } from '@/ui/DeleteDialog';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { Group, Row, Screen } from '@/ui/kit';
 import { PlanningActions, PlanningInput } from '@/ui/PlanningForm';
@@ -25,22 +26,21 @@ export default function SavingsGoalEditor() {
   const [monthly, setMonthly] = useState(goal?.monthlyContribution ? String(goal.monthlyContribution) : '');
   const [amount, setAmount] = useState(monthly);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const closing = useRef(false);
+  const submit = useFinanceSubmit();
   const validDate = !date || isPlanningDate(date);
   const valid = depositing
     ? Boolean(goal && Number(amount) > 0 && Number.isSafeInteger(goal.currentAmount + Number(amount)))
     : Boolean(title.trim()) && Number(target) > 0 && validDate;
-  const close = () => router.canGoBack() ? router.back() : router.replace({ pathname: '/planning', params: { section: 'savings' } });
-  const save = () => {
-    if (!valid || closing.current) return;
-    closing.current = true;
-    if (depositing && goal) contributeToGoal(goal.id, Number(amount));
-    else {
+  const close = () => closeEditor({ pathname: '/planning', params: { section: 'savings' } });
+  const save = async () => {
+    if (!valid || (!isNew && !goal)) return;
+    const saved = await submit(() => {
+      if (depositing && goal) return contributeToGoal(goal.id, Number(amount));
       const details = { title: title.trim(), targetAmount: Number(target), targetDate: date || undefined,
         monthlyContribution: Number(monthly) || undefined };
-      if (isNew) addSavingsGoal({ ...details, currentAmount: 0, ledgerId: activeLedger?.id });
-      else if (goal) updateSavingsGoal(goal.id, details);
-    }
+      return goal ? updateSavingsGoal(goal.id, details) : addSavingsGoal({ ...details, currentAmount: 0, ledgerId: activeLedger?.id });
+    });
+    if (!saved) return;
     success();
     close();
   };
@@ -74,10 +74,8 @@ export default function SavingsGoalEditor() {
         )}
       </Screen>
       <DeleteDialog visible={deleteOpen && Boolean(goal) && !depositing} heading="貯金目標を削除しますか？" title={goal?.title}
-        onCancel={() => setDeleteOpen(false)} onDelete={() => {
-          if (!goal || closing.current) return;
-          closing.current = true;
-          deleteSavingsGoal(goal.id);
+        onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+          if (!goal || !await submit(() => deleteSavingsGoal(goal.id))) return;
           setDeleteOpen(false);
           close();
         }} />

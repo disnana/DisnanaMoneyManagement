@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { useReducedMotion } from 'react-native-reanimated';
-import { kv } from '@/lib/kv';
+import { readPreference, savePreference } from './preferences';
 
 const key = 'dmm_reduce_motion';
-let enabled = kv.getItem(key) === 'on';
+let enabled = readPreference(key) === 'on';
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void) {
@@ -17,8 +17,8 @@ function getSnapshot() {
 
 function setEnabled(value: boolean) {
   if (enabled === value) return;
+  if (!savePreference(key, value ? 'on' : 'off')) return;
   enabled = value;
-  kv.setItem(key, enabled ? 'on' : 'off');
   listeners.forEach((listener) => listener());
 }
 

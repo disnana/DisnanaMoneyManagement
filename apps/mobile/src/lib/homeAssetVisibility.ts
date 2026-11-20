@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
-import { kv } from '@/lib/kv';
+import { readPreference, savePreference } from './preferences';
 
 const key = 'dmm_home_hide_assets';
-let hidden = kv.getItem(key) === 'on';
+const saved = readPreference(key);
+let hidden = saved !== null && saved !== 'off';
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void) {
@@ -15,8 +16,11 @@ function getSnapshot() {
 }
 
 function toggle() {
-  hidden = !hidden;
-  kv.setItem(key, hidden ? 'on' : 'off');
+  const next = !hidden;
+  const saved = savePreference(key, next ? 'on' : 'off');
+  // A failed write can still mask the current screen, but must never reveal its balance.
+  if (!saved && !next) return;
+  hidden = next;
   listeners.forEach((listener) => listener());
 }
 

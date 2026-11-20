@@ -47,8 +47,7 @@ export default function Settings() {
           <SettingsSwitchRow title="モーションを抑える" subtitle={Platform.OS === 'android' ? 'タップや画面切り替えの動きを減らす' : 'タップや画面切り替え、月送りの動きを減らす'}
             checked={reduceMotion} onChange={setReduceMotion} />
           <SettingsSwitchRow title="操作時の振動" checked={haptics} onChange={(enabled) => {
-            setHapticsEnabled(enabled);
-            setHaptics(enabled);
+            if (setHapticsEnabled(enabled)) setHaptics(enabled);
           }} />
           {Platform.OS !== 'web' ? (
             <SettingsSwitchRow title="アプリのロック" subtitle="起動時に顔認証・パスコードで開く"

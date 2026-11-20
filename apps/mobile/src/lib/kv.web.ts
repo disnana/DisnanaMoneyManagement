@@ -1,18 +1,5 @@
-/** Web preview only: localStorage. */
+/** Expo's browser preview keeps its device preferences in local storage. */
 export const kv = {
-  getItem: (key: string): string | null => {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItemStrict: (key: string, value: string): void => localStorage.setItem(key, value),
-  setItem: (key: string, value: string): void => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // ignore
-    }
-  },
+  getItem: (key: string): string | null => localStorage.getItem(key),
+  setItem: (key: string, value: string): void => localStorage.setItem(key, value),
 };

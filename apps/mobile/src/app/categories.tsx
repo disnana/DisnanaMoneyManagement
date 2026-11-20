@@ -119,12 +119,16 @@ export default function Categories() {
     offset.value = 0;
   }, [categories, from, target, offset]);
 
-  const move = (start: number, end: number) => {
+  const move = async (start: number, end: number) => {
     const ids = categories.map((category) => category.id);
     if (start === end || !ids[start] || !ids[end]) return;
     const [id] = ids.splice(start, 1);
     ids.splice(end, 0, id);
-    setCategoryOrder(type, ids);
+    if (!await setCategoryOrder(type, ids)) {
+      from.value = -1;
+      target.value = -1;
+      offset.value = 0;
+    }
   };
 
   return (
@@ -163,9 +167,8 @@ export default function Categories() {
           {menu.confirming ? (
             <DeleteConfirmation heading="カテゴリを削除しますか？" title={menu.category.name}
               description="過去の取引にはカテゴリ名が残ります。"
-              onCancel={() => setMenu(undefined)} onDelete={() => {
-                setCategoryHidden(menu.category.id, true);
-                setMenu(undefined);
+              onCancel={() => setMenu(undefined)} onDelete={async () => {
+                if (await setCategoryHidden(menu.category.id, true)) setMenu((current) => current === menu ? undefined : current);
               }} />
           ) : (
             <>

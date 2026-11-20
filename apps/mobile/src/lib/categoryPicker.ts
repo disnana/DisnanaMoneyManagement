@@ -24,7 +24,7 @@ export function useCategoryPicker() {
       reorderTitle: 'カテゴリの並べ替え',
       onReorder: (ids) => {
         let index = 0;
-        setCategoryOrder(type, categories.map(({ id }) => hidden.has(id) ? id : ids[index++]));
+        return setCategoryOrder(type, categories.map(({ id }) => hidden.has(id) ? id : ids[index++]));
       },
     });
     if (choice === 'add') router.push({ pathname: '/category-editor', params: { type } });

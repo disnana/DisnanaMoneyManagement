@@ -1,18 +1,22 @@
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { kv } from '@/lib/kv';
+import { readPreference, savePreference } from './preferences';
 
 const HAPTIC_KEY = 'dmm_haptics';
 let enabled: boolean | undefined;
 
 export function getHapticsEnabled(): boolean {
-  if (enabled === undefined) enabled = kv.getItem(HAPTIC_KEY) !== 'off';
+  if (enabled === undefined) {
+    const value = readPreference(HAPTIC_KEY);
+    enabled = value === null || value === 'on';
+  }
   return enabled;
 }
 
-export function setHapticsEnabled(value: boolean): void {
+export function setHapticsEnabled(value: boolean): boolean {
+  if (!savePreference(HAPTIC_KEY, value ? 'on' : 'off')) return false;
   enabled = value;
-  kv.setItem(HAPTIC_KEY, value ? 'on' : 'off');
+  return true;
 }
 
 function androidTick() {

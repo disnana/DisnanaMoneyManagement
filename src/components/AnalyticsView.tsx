@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FinanceState, TransactionScope } from '../types/finance';
+import { isOwnFlow } from '@dmm/core/utils/advances';
+import { computeCashFlow, computeMonthCashFlow, getMonthTransactions } from '@dmm/core/utils/metrics';
 import {
   INCOME_TAX_CATEGORY_LABELS,
   RECEIPT_METHOD_LABELS,
@@ -198,6 +200,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const scopedTransactions = useMemo(() => {
     const recent6 = new Set(getRecentMonths(selectedMonth, 6));
     return state.transactions.filter((tx) => {
+      if (!isOwnFlow(tx)) return false;
       if (scopeFilter !== 'all' && (tx.scope ?? 'personal') !== scopeFilter) {
         return false;
       }
@@ -236,6 +239,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         const fee = getTransferTotalFees(tx);
         if (fee > 0) {
           transferFees += fee;
+          expByAccount[tx.accountId] = (expByAccount[tx.accountId] ?? 0) + fee;
           if (tx.scope === 'business') {
             businessDeductible += fee;
           } else {
@@ -333,29 +337,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // 6-Month savings / net flow curve (locked to latest 6 months including current real month)
   const monthlyTrend = useMemo(() => {
     const months = getRecentMonths(currentRealMonth, 6);
-    const map: Record<string, { income: number; expense: number }> = {};
-    for (const m of months) map[m] = { income: 0, expense: 0 };
-
-    for (const tx of state.transactions) {
-      if (scopeFilter !== 'all' && (tx.scope ?? 'personal') !== scopeFilter) continue;
-      const m = tx.date.slice(0, 7);
-      if (!map[m]) continue;
-      if (tx.type === 'income') map[m].income += tx.amount;
-      else if (tx.type === 'expense') map[m].expense += tx.amount;
-      else if (tx.type === 'transfer') {
-        const fee = getTransferTotalFees(tx);
-        if (fee > 0) map[m].expense += fee;
-      }
-    }
-
-    return months.map((m) => ({
-      monthKey: m,
-      label: `${Number(m.slice(5, 7))}月`,
-      fullLabel: formatMonthLabel(m),
-      income: map[m].income,
-      expense: map[m].expense,
-      net: map[m].income - map[m].expense,
-    }));
+    return months.map((m) => {
+      const flow = scopeFilter === 'all' ? computeMonthCashFlow(state, m) : computeCashFlow(
+        getMonthTransactions(state.transactions, m).filter((tx) => (tx.scope ?? 'personal') === scopeFilter)
+      );
+      return { monthKey: m, label: `${Number(m.slice(5, 7))}月`, fullLabel: formatMonthLabel(m), ...flow };
+    });
   }, [state.transactions, currentRealMonth, scopeFilter]);
 
   const maxTrendValue = Math.max(

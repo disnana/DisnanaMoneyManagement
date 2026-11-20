@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { appendMonemyRows, parseMonemyCsv, planMonemyImport, type MonemyRow } from './monemyImport';
-import { createFinanceStoreHook, loadInitialState, type ReactHooks } from '../store/finance';
+import { createFinanceStoreHook, type ReactHooks } from '../store/finance';
 import type { FinanceState } from '../types/finance';
 const header = '日付,区分,項目,収入金額,支出金額,内容,メモ';
 const expense = '2026-11-20,支出,食費,,1234.0,昼食,メモ';
@@ -98,40 +98,37 @@ const immediateHooks: ReactHooks = {
 };
 
 describe('Monemy import persistence', () => {
-  it('keeps the original state on a failed write and persists once on retry', () => {
+  it('keeps the original state on a failed write and persists once on retry', async () => {
     let fail = true;
-    let saved: string | null = null;
+    let saved: FinanceState | null = null;
     let writes = 0;
-    const useStore = createFinanceStoreHook(immediateHooks, {
-      getItem: () => saved,
-      setItem: (_key, value) => {
+    const store = createFinanceStoreHook(immediateHooks, {
+      loadState: () => saved,
+      saveState: (next) => {
         if (fail) throw new Error('Disk full');
         writes++;
-        saved = value;
+        saved = next;
       },
-    }, state);
-
-    const store = useStore();
+      replaceState: vi.fn(),
+    })(state());
     const preview = planMonemyImport(store.state, parse(expense), 'cash');
-    expect(() => store.importMonemyRows(preview)).toThrow('保存できませんでした');
+    await expect(store.importMonemyRows(preview)).rejects.toThrow('保存できませんでした');
     expect(saved).toBeNull();
     fail = false;
-    store.importMonemyRows(preview);
+    await store.importMonemyRows(preview);
     expect(writes).toBe(1);
-    expect(loadInitialState({ getItem: () => saved, setItem: () => undefined }).transactions)
-      .toMatchObject([{ title: '昼食', amount: 1234 }]);
-    expect(() => store.importMonemyRows(preview)).toThrow('家計データが変わりました');
+    expect(saved).toMatchObject({ transactions: [{ title: '昼食', amount: 1234 }] });
+    await expect(store.importMonemyRows(preview)).rejects.toThrow('家計データが変わりました');
     expect(writes).toBe(1);
   });
 
-  it('rejects a stale preview after another update in the same render', () => {
+  it('rejects a stale preview queued behind another write in the same render', async () => {
     const save = vi.fn();
-    const useStore = createFinanceStoreHook(immediateHooks, { getItem: () => null, setItem: save }, state);
-
-    const store = useStore();
+    const store = createFinanceStoreHook(immediateHooks, { loadState: () => null, saveState: save, replaceState: vi.fn() })(state());
     const preview = planMonemyImport(store.state, parse(expense), 'cash');
-    store.clearAllData();
-    expect(() => store.importMonemyRows(preview)).toThrow('家計データが変わりました');
-    expect(save).not.toHaveBeenCalled();
+    const clearing = store.clearAllData();
+    await expect(store.importMonemyRows(preview)).rejects.toThrow('家計データが変わりました');
+    expect(await clearing).toBe(true);
+    expect(save).toHaveBeenCalledTimes(1);
   });
 });

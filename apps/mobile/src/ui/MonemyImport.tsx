@@ -84,11 +84,11 @@ export function MonemyImport() {
     }
   }, [pending, state]);
 
-  const confirm = () => {
+  const confirm = async () => {
     if (!pending || !busy.current || confirming.current || !preview?.added) return;
     confirming.current = true;
     try {
-      importMonemyRows(preview);
+      await importMonemyRows(preview);
       reset();
       setMessage(`${preview.added}件を追加しました。重複${preview.duplicates}件は追加していません。`);
     } catch (error) {
@@ -109,7 +109,7 @@ export function MonemyImport() {
         <Row title="口座・残高の確認" subtitle="初期残高は変更しません。現在残高を初期残高に設定済みの場合は、履歴追加で二重計上になります。同じ内容でも別口座に取り込むと重複します。CSVにない振替・返金などの意味は推定しません。" />
         {preview.added > 0 ? <Row title={`${preview.added}件をこの口座に追加する`} onPress={confirm} /> : null}
       </> : <Text>{previewError}</Text>}
-      <Row title="キャンセル" onPress={reset} />
+      <Row title="キャンセル" onPress={() => { if (!confirming.current) reset(); }} />
     </> : null}
     {importError ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive"
       style={{ color: p.danger, padding: 12 }}>{importError}</Text> : null}

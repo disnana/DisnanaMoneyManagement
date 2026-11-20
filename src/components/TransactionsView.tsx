@@ -7,9 +7,9 @@ import {
   ArrowUpDown,
   Plus,
   RotateCcw,
-  ChevronRight,
 } from 'lucide-react';
 import { Account, Transaction, TransactionScope, TransactionType } from '../types/finance';
+import { computeCashFlow } from '@dmm/core/utils/metrics';
 import {
   ALL_CATEGORIES,
   INCOME_TAX_CATEGORY_LABELS,
@@ -28,6 +28,7 @@ import {
 import { ConfirmDialog } from './ConfirmDialog';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
 import { MobileLedger } from './mobile/MobileLedger';
+import { TransactionPages } from './TransactionPages';
 import { useIsDesktop } from '../hooks/useMediaQuery';
 
 interface TransactionsViewProps {
@@ -36,8 +37,8 @@ interface TransactionsViewProps {
   accountNameMap: Record<string, string>;
   selectedMonth: string;
   onEditTransaction: (tx: Transaction) => void;
-  onDeleteTransaction: (id: string) => void;
-  onDeleteSettlementGroup?: (groupId: string) => void;
+  onDeleteTransaction: (id: string) => Promise<boolean>;
+  onDeleteSettlementGroup?: (groupId: string) => Promise<boolean>;
   onOpenAddTransaction: () => void;
 }
 
@@ -143,18 +144,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     accountNameMap,
   ]);
 
-  const summary = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    for (const tx of filtered) {
-      if (tx.type === 'income') income += tx.amount;
-      else if (tx.type === 'expense') expense += tx.amount;
-      else if (tx.type === 'transfer') {
-        expense += getTransferTotalFees(tx);
-      }
-    }
-    return { income, expense, net: income - expense };
-  }, [filtered]);
+  const summary = useMemo(() => computeCashFlow(filtered), [filtered]);
 
   const hasActiveFilters = Boolean(
     searchQuery ||
@@ -173,6 +163,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     setSortBy((prev) => (prev === 'amount_desc' ? 'amount_asc' : 'amount_desc'));
   };
 
+  const pageKey = JSON.stringify([searchQuery, typeFilter, scopeFilter, monthFilter, categoryFilter, accountFilter, sortBy]);
+
   const resetFilters = () => {
     setSearchQuery('');
     setTypeFilter('all');
@@ -188,6 +180,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       <div className="mx-auto w-full max-w-2xl">
         <MobileLedger
           filtered={filtered}
+          pageKey={pageKey}
           accounts={accounts}
           accountNameMap={accountNameMap}
           summary={summary}
@@ -237,20 +230,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
         onSecondaryConfirm={
           deletingTx?.settlementGroupId && onDeleteSettlementGroup
-            ? () => {
-                onDeleteSettlementGroup(deletingTx.settlementGroupId!);
-                setDeletingTx(null);
-              }
+            ? () => onDeleteSettlementGroup(deletingTx.settlementGroupId!)
             : undefined
         }
         danger={true}
-        onConfirm={() => {
-          if (deletingTx) {
-            onDeleteTransaction(deletingTx.id);
-            setDeletingTx(null);
-          }
-        }}
-        onCancel={() => setDeletingTx(null)}
+        onConfirm={() => onDeleteTransaction(deletingTx!.id)}
+        onClose={() => setDeletingTx(null)}
       />
       </div>
     );
@@ -281,7 +266,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto whitespace-nowrap"
         >
           <Download className="h-4 w-4" />
-          <span>表示中をCSV出力</span>
+          <span>検索結果をCSV出力</span>
         </button>
       </div>
 
@@ -425,133 +410,28 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </section>
 
-      {/* Ledger Table / Mobile Cards */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {filtered.length === 0 ? (
-          <div className="px-6 py-16 text-center">
-            <p className="text-sm font-medium text-slate-700">
-              条件に一致する取引が見つかりませんでした
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              絞り込み条件を変更するか、新しい収支を記録してください。
-            </p>
-            <button
-              type="button"
-              onClick={onOpenAddTransaction}
-              className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98]"
-            >
-              <Plus className="h-4 w-4" />
-              <span>収支を記録する</span>
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Mobile Card List (tappable rows + >=44px action buttons) */}
-            <div className="divide-y divide-slate-100 md:hidden">
-              {filtered.map((tx) => {
-                const cat = getCategoryById(tx.categoryId);
-                const accName = accountNameMap[tx.accountId] ?? '不明な口座';
-                const toAccName = tx.toAccountId
-                  ? accountNameMap[tx.toAccountId] ?? '不明な口座'
-                  : '';
-
-                const detailParts = buildDetailParts(tx);
-                const totalTransferFees = getTransferTotalFees(tx);
-
-                return (
-                  <div key={tx.id} className="px-4 py-3.5">
-                    <button
-                      type="button"
-                      onClick={() => onEditTransaction(tx)}
-                      className="flex w-full items-start justify-between gap-3 rounded-lg text-left transition-colors active:bg-slate-50"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold leading-snug text-slate-900 break-words">
-                          {tx.title}
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
-                          <span className="font-mono tabular-nums">
-                            {formatFullDate(tx.date)}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span>{cat.name}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>
-                            {tx.type === 'transfer' ? `${accName} → ${toAccName}` : accName}
-                          </span>
-                          {tx.scope === 'business' && (
-                            <>
-                              <span aria-hidden="true">·</span>
-                              <span className="font-medium text-teal-800">事業</span>
-                            </>
-                          )}
-                        </div>
-                        {detailParts.length > 0 && (
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500 break-words">
-                            {detailParts.join(' · ')}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <div className="text-right font-mono tabular-nums">
-                          <div
-                            className={`text-sm font-semibold ${
-                              tx.type === 'income'
-                                ? 'text-emerald-700'
-                                : tx.type === 'expense'
-                                ? 'text-slate-900'
-                                : 'text-slate-500'
-                            }`}
-                          >
-                            {formatSignedJPY(tx.amount, tx.type)}
-                          </div>
-                          {tx.type === 'income' &&
-                            tx.netJpyAmount !== undefined &&
-                            tx.netJpyAmount !== tx.amount && (
-                              <div className="text-[11px] text-teal-700">
-                                純入金 {formatJPY(tx.netJpyAmount)}
-                              </div>
-                            )}
-                          {totalTransferFees > 0 && (
-                            <div className="text-[11px] text-slate-500">
-                              手数料 {formatJPY(totalTransferFees)}
-                            </div>
-                          )}
-                          {tx.type === 'expense' && (tx.pointUsed ?? 0) > 0 && (
-                            <div className="text-[11px] text-teal-700">
-                              P充当 {formatJPY(tx.pointUsed ?? 0)}
-                            </div>
-                          )}
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />
-                      </div>
-                    </button>
-
-                    <div className="mt-2.5 grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEditTransaction(tx)}
-                        className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-[0.98]"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        <span>編集</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeletingTx(tx)}
-                        className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-red-600 transition-all hover:bg-red-50 active:scale-[0.98]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        <span>削除</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Ledger table */}
+      <TransactionPages key={pageKey} rows={filtered}>
+        {(visible) => <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          {visible.length === 0 ? (
+            <div className="px-6 py-16 text-center">
+              <p className="text-sm font-medium text-slate-700">
+                条件に一致する取引が見つかりませんでした
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                絞り込み条件を変更するか、新しい収支を記録してください。
+              </p>
+              <button
+                type="button"
+                onClick={onOpenAddTransaction}
+                className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-teal-700 px-5 text-xs font-semibold text-white transition-all hover:bg-teal-800 active:scale-[0.98]"
+              >
+                <Plus className="h-4 w-4" />
+                <span>収支を記録する</span>
+              </button>
             </div>
-
-            {/* Desktop Table */}
-            <div className="hidden overflow-x-auto md:block">
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-500">
@@ -582,7 +462,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.map((tx) => {
+                  {visible.map((tx) => {
                     const cat = getCategoryById(tx.categoryId);
                     const accName = accountNameMap[tx.accountId] ?? '不明な口座';
                     const toAccName = tx.toAccountId
@@ -676,9 +556,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 </tbody>
               </table>
             </div>
-          </>
-        )}
-      </section>
+          )}
+        </section>}
+      </TransactionPages>
 
       <ConfirmDialog
         open={Boolean(deletingTx)}
@@ -706,20 +586,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         }
         onSecondaryConfirm={
           deletingTx?.settlementGroupId && onDeleteSettlementGroup
-            ? () => {
-                onDeleteSettlementGroup(deletingTx.settlementGroupId!);
-                setDeletingTx(null);
-              }
+            ? () => onDeleteSettlementGroup(deletingTx.settlementGroupId!)
             : undefined
         }
         danger={true}
-        onConfirm={() => {
-          if (deletingTx) {
-            onDeleteTransaction(deletingTx.id);
-            setDeletingTx(null);
-          }
-        }}
-        onCancel={() => setDeletingTx(null)}
+        onConfirm={() => onDeleteTransaction(deletingTx!.id)}
+        onClose={() => setDeletingTx(null)}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
-import { computeMonthMetrics } from '@dmm/core/utils/metrics';
+import { computeMonthCashFlow } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { tick } from '@/lib/haptics';
 import { useHomeAssetVisibility } from '@/lib/homeAssetVisibility';
@@ -43,7 +43,7 @@ export function HeroCard({ assets }: { assets: number }) {
 export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; showNetSign?: boolean }) {
   const p = usePalette();
   const { visibleState, setMonth } = useFinance();
-  const { income, expense, net } = useMemo(() => computeMonthMetrics(visibleState, month), [visibleState, month]);
+  const { income, expense, net } = useMemo(() => computeMonthCashFlow(visibleState, month), [visibleState, month]);
   const stats = [
     { label: '収入', amount: income, color: income < 0 ? p.danger : p.income },
     { label: '支出', amount: expense, color: expense > 0 ? p.danger : p.income },

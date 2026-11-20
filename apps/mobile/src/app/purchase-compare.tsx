@@ -4,13 +4,14 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { getCategoryById } from '@dmm/core/data/categories';
 import { formatForeignCurrency, formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { assessPurchaseForMonth } from '@dmm/core/utils/planning';
-import { buildPurchaseTransaction, markPurchased, PRIORITY_LABELS } from '@dmm/core/utils/purchasePlan';
+import { PRIORITY_LABELS } from '@dmm/core/utils/purchasePlan';
 import { getTodayString } from '@dmm/core/utils/format';
 import { pickOne } from '@/lib/pick';
 import { success } from '@/lib/haptics';
 import { BudgetPie, PurchaseInsights } from '@/ui/PurchaseInsights';
 import { Disclosure } from '@/ui/Disclosure';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { PurchaseBankPicker, PurchaseCashPreview, usePurchaseBank } from '@/ui/PurchaseCashPreview';
@@ -19,7 +20,8 @@ import { Group, Screen } from '@/ui/kit';
 
 export default function PurchaseCompare() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { state, removePurchaseCandidate, addTransaction, savePurchaseCandidate } = useFinance();
+  const { state, removePurchaseCandidate, recordPurchase } = useFinance();
+  const submit = useFinanceSubmit();
   const p = usePalette();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const candidate = state.purchaseCandidates?.find((item) => item.id === id);
@@ -69,21 +71,19 @@ export default function PurchaseCompare() {
               const choice = await pickOne('支払った口座', state.accounts.map((a) => ({ id: a.id, label: a.name, selected: a.id === payment.bank?.id })));
               if (!choice) return;
               const today = getTodayString();
-              addTransaction(buildPurchaseTransaction(candidate, choice, today));
-              savePurchaseCandidate(markPurchased(candidate, today), candidate.id);
+              if (!await submit(() => recordPurchase(candidate.id, choice, today))) return;
               success();
-              router.back();
+              closeEditor('/planning');
             }} style={({ pressed }) => ({ minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: p.tint, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1 })}>
               <Text style={{ color: p.tint, fontSize: 16, fontWeight: '700' }}>確定せず購入した（取引に記録）</Text>
             </Pressable>
           </>
         ) : <Text style={{ color: p.textSecondary }}>購入候補が見つかりません</Text>}
       </Screen>
-      <DeleteDialog heading="購入候補を削除しますか？" title={candidate?.title} visible={deleteOpen} onCancel={() => setDeleteOpen(false)} onDelete={() => {
-        if (!candidate) return;
+      <DeleteDialog heading="購入候補を削除しますか？" title={candidate?.title} visible={deleteOpen} onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+        if (!candidate || !await submit(() => removePurchaseCandidate(candidate.id))) return;
         setDeleteOpen(false);
-        removePurchaseCandidate(candidate.id);
-        router.back();
+        closeEditor('/planning');
       }} />
     </>
   );

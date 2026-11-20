@@ -4,6 +4,7 @@ import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { getOrderedCategories } from '@dmm/core/data/categories';
 import { categoryIcon } from '@/lib/categoryIcons';
 import { useFinance } from '@/lib/store';
+import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette } from '@/lib/theme';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { DeleteDialog } from '@/ui/DeleteDialog';
@@ -12,6 +13,7 @@ import { Group, IconBadge, Row, Screen } from '@/ui/kit';
 export default function CategoryDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { state, setCategoryHidden } = useFinance();
+  const submit = useFinanceSubmit();
   const p = usePalette();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const category = getOrderedCategories('expense', state.customCategories).concat(getOrderedCategories('income', state.customCategories))
@@ -51,10 +53,10 @@ export default function CategoryDetail() {
       </Screen>
       <DeleteDialog heading="カテゴリを削除しますか？" title={category?.name} visible={deleteOpen}
         description="過去の取引にはカテゴリ名が残ります。"
-        onCancel={() => setDeleteOpen(false)} onDelete={() => {
-          setCategoryHidden(id, true);
+        onCancel={() => setDeleteOpen(false)} onDelete={async () => {
+          if (!await submit(() => setCategoryHidden(id, true))) return;
           setDeleteOpen(false);
-          router.back();
+          closeEditor('/categories');
         }} />
     </>
   );

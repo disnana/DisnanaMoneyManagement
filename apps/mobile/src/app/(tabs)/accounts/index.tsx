@@ -27,7 +27,7 @@ export default function Accounts() {
   const reorder = (section: Account[], ids: string[]) => {
     const inSection = new Set(section.map((account) => account.id));
     let next = 0;
-    reorderAccounts(state.accounts.map((account) => (inSection.has(account.id) ? ids[next++] : account.id)));
+    return reorderAccounts(state.accounts.map((account) => (inSection.has(account.id) ? ids[next++] : account.id)));
   };
 
   const rowFor = (account: Account) => {
@@ -53,7 +53,7 @@ export default function Accounts() {
   return (
     <Screen>
       {sorting && snapshot ? (
-        <SortActions title="並べ替え" onCancel={() => { reorderAccounts(snapshot); setSnapshot(undefined); }}
+        <SortActions title="並べ替え" onCancel={async () => { if (await reorderAccounts(snapshot)) setSnapshot(undefined); }}
           onDone={() => setSnapshot(undefined)} />
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 36 }}>

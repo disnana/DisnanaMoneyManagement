@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Budget, Transaction } from '../types/finance';
+import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { EXPENSE_CATEGORIES, getCategoryById } from '../data/categories';
 import { formatJPY } from '../utils/format';
 import { ConfirmDialog } from './ConfirmDialog';
+import { usePendingSave } from '../hooks/usePendingSave';
 import { ResponsiveSheet } from './ResponsiveSheet';
 import { MonthSwitcherBar } from './MonthSwitcherBar';
 
@@ -12,8 +14,8 @@ interface BudgetsViewProps {
   transactions: Transaction[];
   selectedMonth: string;
   onChangeMonth: (monthKey: string) => void;
-  onUpsertBudget: (budget: Budget) => void;
-  onRemoveBudget: (categoryId: string) => void;
+  onUpsertBudget: (budget: Budget) => Promise<boolean>;
+  onRemoveBudget: (categoryId: string) => Promise<boolean>;
 }
 
 export const BudgetsView: React.FC<BudgetsViewProps> = ({
@@ -31,13 +33,8 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
   const [deletingCategoryId, setDeletingCategoryId] = useState<string | null>(null);
 
   const spentByCategory = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const tx of transactions) {
-      if (tx.type === 'expense' && tx.date.slice(0, 7) === selectedMonth) {
-        map[tx.categoryId] = (map[tx.categoryId] ?? 0) + tx.amount;
-      }
-    }
-    return map;
+    const { categoryBreakdown } = computeMonthMetrics({ transactions }, selectedMonth);
+    return Object.fromEntries(categoryBreakdown.map(({ categoryId, amount }) => [categoryId, amount]));
   }, [transactions, selectedMonth]);
 
   const totals = useMemo(() => {
@@ -88,15 +85,17 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
     setModalOpen(true);
   };
 
-  const handleSaveBudget = (e: React.FormEvent) => {
+  const { pending, submit } = usePendingSave(modalOpen ? editingCategory ?? 'new' : null);
+
+  const handleSaveBudget = async (e: React.FormEvent) => {
     e.preventDefault();
     const val = Number(formLimit);
     if (!Number.isFinite(val) || val <= 0) return;
-    onUpsertBudget({
+    const saved = await submit(() => onUpsertBudget({
       categoryId: formCategoryId,
       monthlyLimit: Math.round(val),
-    });
-    setModalOpen(false);
+    }));
+    if (saved) setModalOpen(false);
   };
 
   return (
@@ -308,6 +307,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
             <button
               type="submit"
               form="budget-modal-form"
+              disabled={pending}
               className="min-h-[44px] rounded-xl bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 active:scale-[0.98]"
             >
               保存する
@@ -315,7 +315,7 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
           </div>
         }
       >
-        <form id="budget-modal-form" onSubmit={handleSaveBudget} className="space-y-4">
+        <form inert={pending} aria-busy={pending} id="budget-modal-form" onSubmit={handleSaveBudget} className="space-y-4">
           <div>
             <label htmlFor="budget-category" className="block text-xs font-medium text-slate-600">
               カテゴリ
@@ -363,13 +363,8 @@ export const BudgetsView: React.FC<BudgetsViewProps> = ({
         }
         confirmLabel="削除する"
         danger={true}
-        onConfirm={() => {
-          if (deletingCategoryId) {
-            onRemoveBudget(deletingCategoryId);
-            setDeletingCategoryId(null);
-          }
-        }}
-        onCancel={() => setDeletingCategoryId(null)}
+        onConfirm={() => onRemoveBudget(deletingCategoryId!)}
+        onClose={() => setDeletingCategoryId(null)}
       />
     </div>
   );
