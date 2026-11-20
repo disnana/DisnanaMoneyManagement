@@ -1,4 +1,6 @@
 import { useSyncExternalStore } from 'react';
+import type { NativeStackNavigationOptions } from 'expo-router';
+import { Platform } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { readPreference, savePreference } from './preferences';
 
@@ -30,4 +32,10 @@ export function useAppReducedMotion() {
   const system = useReducedMotion();
   const [preference] = useMotionPreference();
   return preference || system;
+}
+
+export function androidSettingsTransition(reduceMotion: boolean): NativeStackNavigationOptions | undefined {
+  if (Platform.OS !== 'android') return undefined;
+  // The default Android pop fades both screens. A slide keeps them opaque throughout.
+  return { animation: reduceMotion ? 'none' : 'slide_from_right', presentation: 'card' };
 }
