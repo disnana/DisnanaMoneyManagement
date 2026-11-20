@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { computeMonthMetrics } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
@@ -57,7 +57,7 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
 }) {
   const p = usePalette();
   const { visibleState, state, setCategoryOrder } = useFinance();
-  const m = computeMonthMetrics(visibleState, month);
+  const m = useMemo(() => computeMonthMetrics(visibleState, month), [visibleState, month]);
   const breakdown = kind === 'income' ? m.incomeCategoryBreakdown : m.categoryBreakdown;
   const label = kind === 'income' ? '収入' : '支出';
   const [before, setBefore] = useState<string[]>(); // category order before the first drag in this session

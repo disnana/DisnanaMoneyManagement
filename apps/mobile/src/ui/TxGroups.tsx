@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { Transaction } from '@dmm/core/types/finance';
 import { groupTransactionsByDate } from '@dmm/core/utils/metrics';
@@ -7,9 +8,9 @@ import { Group } from '@/ui/kit';
 import { TxRow } from '@/ui/TxRow';
 
 /** Transactions grouped by day, each day an inset group. */
-export function TxGroups({ transactions, empty, dayCards }: { transactions: Transaction[]; empty: string; dayCards?: boolean }) {
+export function TxGroups({ transactions, empty, dayCards }: { transactions: readonly Transaction[]; empty: string; dayCards?: boolean }) {
   const p = usePalette();
-  const groups = groupTransactionsByDate(transactions);
+  const groups = useMemo(() => groupTransactionsByDate(transactions), [transactions]);
   const divider = p.outline;
   if (groups.length === 0) {
     return (

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
+import { getMonthTransactions } from '@dmm/core/utils/metrics';
 import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { useCurrentBalances } from '@/lib/currentBalances';
 import { useFinance } from '@/lib/store';
@@ -69,23 +70,26 @@ export default function Home() {
 
 function HomeActivity({ month, balances }: { month: string; balances: Record<string, number> }) {
   const { state, visibleState } = useFinance();
-  const recent = visibleState.transactions
-    .filter((tx) => tx.date.startsWith(month))
+  const transactions = getMonthTransactions(visibleState.transactions, month);
+  const recent = useMemo(() => [...transactions]
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 6);
-  const cards = visibleState.accounts.filter((account) => account.type === 'credit');
+    .slice(0, 6), [transactions]);
+  const statements = useMemo(() => visibleState.accounts
+    .filter((account) => account.type === 'credit')
+    .map((card) => computeCreditCardSummary(card, state.transactions, balances[card.id] ?? 0, month)),
+  [visibleState.accounts, state.transactions, balances, month]);
+  const today = getTodayString();
 
   return (
     <>
-      {cards.length > 0 ? (
+      {statements.length > 0 ? (
         <>
           <SectionTitle>カードの支払い</SectionTitle>
           <AccountSummaryGroup>
-            {cards.map((card) => {
-              const balance = balances[card.id] ?? 0;
-              const statement = computeCreditCardSummary(card, state.transactions, balance, month);
-              const warning = getPaymentWarning(statement, getTodayString());
-              return <AccountSummaryRow key={card.id} account={card} balance={balance}
+            {statements.map((statement) => {
+              const { card } = statement;
+              const warning = getPaymentWarning(statement, today);
+              return <AccountSummaryRow key={card.id} account={card} balance={balances[card.id] ?? 0}
                 bill={{ label: `${formatMonthLabel(month)}分の残額`, remaining: statement.thisMonthRemaining,
                   warning: warning === null ? undefined : warning === 0 ? '今日が支払日' : `支払日まであと${warning}日` }} onPress={() => openAccount(card.id)} />;
             })}

@@ -7,8 +7,10 @@ export function useCurrentBalances() {
   const { state, accountBalances } = useFinance();
   const today = getTodayString();
   return useMemo(() => {
-    const transactions = state.transactions.filter((item) => item.date <= today);
-    return transactions.length === state.transactions.length
-      ? accountBalances : computeAccountBalances({ ...state, transactions });
-  }, [state, accountBalances, today]);
+    if (!state.transactions.some((item) => item.date > today)) return accountBalances;
+    return computeAccountBalances({
+      accounts: state.accounts,
+      transactions: state.transactions.filter((item) => item.date <= today),
+    });
+  }, [state.accounts, state.transactions, accountBalances, today]);
 }

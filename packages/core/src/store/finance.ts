@@ -175,7 +175,7 @@ export function loadInitialState(storage: StorageAdapter, fallback = () => creat
 
 
 /** Per-account balance. Debit-card spending is deducted from the linked bank account. */
-export function computeAccountBalances(state: FinanceState): Record<string, number> {
+export function computeAccountBalances(state: Pick<FinanceState, 'accounts' | 'transactions'>): Record<string, number> {
 
     const map: Record<string, number> = {};
     const accountById: Record<string, Account> = {};
