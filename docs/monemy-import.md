@@ -1,6 +1,6 @@
 # Monemy CSV import (mobile)
 
-Settings → データ管理 → Monemy CSVから取り込む. Choose a UTF-8 CSV, then its destination JPY account. Review the count, income/expense totals, date range and sample rows; press the explicit add button to confirm. Cancel makes no changes. Existing transactions, opening balances, budgets and goals are retained. Categories and notes are preserved.
+Settings → データ管理 → Monemy CSVから取り込む. Choose a UTF-8 CSV, then its destination JPY account. Review the count, income/expense totals, date range and sample rows; press the explicit add button to confirm. Cancel makes no changes. Confirmation succeeds after local storage accepts the write. A write failure keeps the preview open for retry. Existing transactions, opening balances, budgets and goals are retained. Categories and notes are preserved.
 
 Expected exact header (optional UTF-8 BOM):
 
@@ -13,7 +13,7 @@ Only income/expense, YYYY-MM-DD, nonnegative safe integer yen (including `.0`) a
 
 CSV has no account metadata: split mixed-account files before import. Linked debit and foreign-currency accounts are excluded. Opening balances are not recalculated: using a current balance as an opening balance and then adding historical transactions double-counts them. Transfers, refunds, taxes, credit billing and foreign currencies cannot be inferred from this CSV and need separate review.
 
-Duplicate protection uses canonical row content, occurrence ordinal and target account. Two identical rows in one file are retained. Re-importing that file to the same account adds zero. Reordered rows remain idempotent. Changed content, another destination account, or manually entered equivalent transactions are not detected as duplicates. With partially overlapping exports containing indistinguishable transactions, occurrence counts cannot prove identity; review them rather than assuming perfect deduplication. IDs intentionally retain a reversible canonical identity; treat exports as private financial data.
+Duplicate protection uses canonical row content, occurrence ordinal and target account. Two identical rows in one file are retained. Re-importing that file to the same account adds zero. Reordered rows remain idempotent. Changed content, another destination account, or manually entered equivalent transactions are not detected as duplicates. With partially overlapping exports containing indistinguishable transactions, occurrence counts cannot prove identity; review them rather than assuming perfect deduplication. Transaction IDs are independent of the imported content. The app keeps a SHA-256 fingerprint (computed from UTF-16LE canonical text) and the original destination account for duplicate detection. IDs from earlier draft builds are recognized when reimporting.
 
 ## Setup and checks
 

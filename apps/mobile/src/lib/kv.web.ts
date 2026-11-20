@@ -7,6 +7,7 @@ export const kv = {
       return null;
     }
   },
+  setItemStrict: (key: string, value: string): void => localStorage.setItem(key, value),
   setItem: (key: string, value: string): void => {
     try {
       localStorage.setItem(key, value);
