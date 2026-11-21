@@ -1,34 +1,8 @@
 import type { FinanceState, Transaction, CategoryDef } from '../types/finance';
+import { csvHeaderMatches, readCsvRows } from './csv';
+export { MAX_CSV_SIZE as MAX_MONEMY_CHARS } from './csv';
 
 const HEADER = ['日付', '区分', '項目', '収入金額', '支出金額', '内容', 'メモ'];
-export const MAX_MONEMY_CHARS = 2_000_000;
-
-/** Strict RFC-style CSV: quoted commas/newlines and doubled quotes are supported. */
-function csv(text: string): string[][] {
-  if (text.length > MAX_MONEMY_CHARS) throw new Error('CSVは2MB以下にしてください。');
-  if (text.includes('\uFFFD') || text.includes('\0')) throw new Error('UTF-8のCSVを選択してください。');
-  text = text.replace(/^\uFEFF/, '');
-  const rows: string[][] = [];
-  let row: string[] = [], field = '', quoted = false, closed = false;
-  const endField = () => { row.push(field); field = ''; closed = false; };
-  const endRow = () => { endField(); if (row.some(v => v !== '')) rows.push(row); row = []; };
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (quoted) {
-      if (c === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else { quoted = false; closed = true; }
-      } else field += c;
-    } else if (c === ',') endField();
-    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; endRow(); }
-    else if (c === '"' && field === '' && !closed) quoted = true;
-    else { if (closed || c === '"') throw new Error('CSVの引用符が不正です。'); field += c; }
-  }
-  if (quoted) throw new Error('CSVの引用符が閉じられていません。');
-  if (field !== '' || row.length || closed) endRow();
-  return rows;
-}
-
 function yen(value: string): number {
   // Do not round fractions, accept only exact integer yen (including 123.0).
   if (!/^\d+(?:\.0+)?$/.test(value)) throw new Error('金額は0以上の整数円のみ対応しています。');
@@ -57,8 +31,15 @@ function canonicalRow(row: Pick<MonemyRow, 'date' | 'type' | 'category' | 'amoun
 }
 
 export function parseMonemyCsv(text: string, sha256: (text: string) => string): MonemyRow[] {
-  const [header, ...rows] = csv(text);
-  if (!header || header.length !== HEADER.length || header.some((v, i) => v.trim() !== HEADER[i])) {
+  return parseMonemyRows(readCsvRows(text), sha256);
+}
+
+export function isMonemyCsvHeader(header?: string[]): boolean {
+  return csvHeaderMatches(header, HEADER);
+}
+
+export function parseMonemyRows([header, ...rows]: string[][], sha256: (text: string) => string): MonemyRow[] {
+  if (!isMonemyCsvHeader(header)) {
     throw new Error('Monemy CSVの列が一致しません。UTF-8のCSVを選択してください。');
   }
   if (!rows.length) throw new Error('取引がありません。');

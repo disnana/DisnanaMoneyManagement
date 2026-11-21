@@ -12,7 +12,7 @@ import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { Group, Row, Screen } from '@/ui/kit';
 
 import { LocalFinanceBackup } from '@/ui/LocalFinanceBackup';
-import { MonemyImport } from '@/ui/MonemyImport';
+import { CsvImport } from '@/ui/CsvImport';
 
 type Mode = 'clear' | 'sample';
 
@@ -33,7 +33,7 @@ export default function DataSettings() {
     <>
       <Stack.Screen options={{ title: 'データ管理' }} />
       <Screen>
-        <MonemyImport />
+        <CsvImport />
         <LocalFinanceBackup state={state} restore={async (next) => {
           await restoreBackup(next);
           setActiveLedgerId(null);
