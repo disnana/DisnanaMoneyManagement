@@ -21,7 +21,7 @@ import { buildPurchaseTransaction, markPurchased } from '../utils/purchasePlan';
 import { buildReimbursementTx } from '../utils/advances';
 import { createEmptyFinanceState } from './financeState';
 import { appendMonemyRows, type planMonemyImport } from '../utils/monemyImport';
-import { appendBankCsvRows, type planBankCsvImport } from '../utils/bankCsvImport';
+import { appendStatementCsvRows, type planStatementCsvImport } from '../utils/bankCsvImport';
 
 export { STORAGE_KEY, sanitizeState, requireFinanceState, legacyFinanceKeys, readLegacyFinanceState, loadInitialState, createEmptyFinanceState } from './financeState';
 
@@ -462,8 +462,8 @@ export function createFinanceStoreHook(react: ReactHooks, storage: FinanceStorag
   }), [persist]);
   const importMonemyRows = useCallback((plan: ReturnType<typeof planMonemyImport>) =>
     commitCsvImport(plan.source, () => appendMonemyRows(plan)), [commitCsvImport]);
-  const importBankCsvRows = useCallback((plan: ReturnType<typeof planBankCsvImport>) =>
-    commitCsvImport(plan.source, () => appendBankCsvRows(plan)), [commitCsvImport]);
+  const importStatementCsvRows = useCallback((plan: ReturnType<typeof planStatementCsvImport>) =>
+    commitCsvImport(plan.source, () => appendStatementCsvRows(plan)), [commitCsvImport]);
 
   const importState = useCallback((next: FinanceState) => setState(next), [setState]);
   const restoreBackup = useCallback((next: FinanceState) => persist(next), [persist]);
@@ -517,7 +517,7 @@ export function createFinanceStoreHook(react: ReactHooks, storage: FinanceStorag
     removePurchaseCandidate,
     reimburseAdvance, recordPurchase, restoreBackup,
     importState,
-    importMonemyRows, importBankCsvRows,
+    importMonemyRows, importStatementCsvRows,
     resetToSampleData,
     clearAllData,
   };

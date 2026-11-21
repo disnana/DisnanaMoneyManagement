@@ -1,5 +1,5 @@
 import type { Account, FinanceState, Transaction } from '../types/finance';
-import { csvHeaderMatches } from './csv';
+import { csvDate, csvHeaderMatches, csvIntegerYen } from './csv';
 
 const HEADERS = {
   smbc: ['年月日', 'お引出し', 'お預入れ', 'お取り扱い内容', '残高', 'メモ', 'ラベル'],
@@ -7,30 +7,20 @@ const HEADERS = {
     '取引順番号', '摘要', 'お支払金額', 'お預り金額', '残高', 'メモ'],
 };
 
-export const BANK_CSV_NAMES = { smbc: '三井住友銀行', paypay: 'PayPay銀行' } as const;
-export type BankCsvFormat = keyof typeof BANK_CSV_NAMES;
-export type BankCsvRow = Pick<Transaction, 'type' | 'date' | 'amount' | 'title'> & {
+export type BankCsvFormat = keyof typeof HEADERS;
+export const STATEMENT_CSV_NAMES = { smbc: '三井住友銀行', paypay: 'PayPay銀行', rakuten: '楽天カード' } as const;
+export type StatementCsvFormat = keyof typeof STATEMENT_CSV_NAMES;
+export type StatementCsvRow = Pick<Transaction, 'date' | 'amount' | 'title'> & {
   type: 'income' | 'expense';
   fingerprint: string;
-  balance: number;
+  balance?: number;
   memo: string;
 };
+export type BankCsvRow = StatementCsvRow & { balance: number };
 
 export function detectBankCsvFormat(header?: string[]): BankCsvFormat | undefined {
   if (csvHeaderMatches(header, HEADERS.smbc)) return 'smbc';
   if (csvHeaderMatches(header, HEADERS.paypay)) return 'paypay';
-}
-
-function datePart(year: string, month: string, day: string) {
-  if (!/^\d{4}$/.test(year) || !/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day)) {
-    throw new Error('日付が不正です。');
-  }
-  const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  const parsed = new Date(`${date}T00:00:00Z`);
-  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
-    throw new Error('日付が不正です。');
-  }
-  return date;
 }
 
 function timePart(value: string, max: number) {
@@ -38,18 +28,10 @@ function timePart(value: string, max: number) {
   return value.padStart(2, '0');
 }
 
-function readYen(raw: string) {
-  const value = raw.trim();
-  if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(value)) throw new Error('金額・残高は整数円で指定してください。');
-  const amount = Number(value.replace(/,/g, ''));
-  if (!Number.isSafeInteger(amount)) throw new Error('金額が安全に扱える範囲を超えています。');
-  return amount;
-}
-
 function amounts(out: string, incoming: string, runningBalance: string) {
-  const expense = out.trim() === '' ? 0 : readYen(out);
-  const income = incoming.trim() === '' ? 0 : readYen(incoming);
-  const balance = readYen(runningBalance);
+  const expense = out.trim() === '' ? 0 : csvIntegerYen(out);
+  const income = incoming.trim() === '' ? 0 : csvIntegerYen(incoming);
+  const balance = csvIntegerYen(runningBalance);
   if (expense < 0 || income < 0 || (expense > 0 && income > 0)) {
     throw new Error('入金・出金のいずれか一方に正の金額が必要です。');
   }
@@ -69,7 +51,7 @@ export function parseBankCsvRows(format: BankCsvFormat, rows: string[][], digest
         const [rawDate, out, incoming, title, runningBalance, note, label] = row;
         const [year, month, day, extra] = rawDate.trim().split('/');
         if (!day || extra !== undefined) throw new Error('日付が不正です。');
-        const date = datePart(year, month, day);
+        const date = csvDate(year, month, day);
         const money = amounts(out, incoming, runningBalance);
         if (!money) return [];
         const key = digest(JSON.stringify([date, money.type, money.amount, money.balance, title.trim()]));
@@ -80,7 +62,7 @@ export function parseBankCsvRows(format: BankCsvFormat, rows: string[][], digest
       }
 
       const [year, month, day, hour, minute, second, sequence, title, out, incoming, runningBalance, memo] = row;
-      const date = datePart(year, month, day);
+      const date = csvDate(year, month, day);
       const time = [timePart(hour, 23), timePart(minute, 59), timePart(second, 59)].join(':');
       if (!/^\d+$/.test(sequence)) throw new Error('取引順番号が不正です。');
       const money = amounts(out, incoming, runningBalance);
@@ -99,16 +81,19 @@ export function parseBankCsvRows(format: BankCsvFormat, rows: string[][], digest
   return { rows: transactions, zeroAmountRows: rows.length - transactions.length };
 }
 
-export function isBankCsvAccount(account: Account): boolean {
-  return account.type === 'bank' && (!account.currency || account.currency === 'JPY');
+export function isStatementCsvAccount(account: Account, format: StatementCsvFormat): boolean {
+  return account.type === (format === 'rakuten' ? 'credit' : 'bank') && (!account.currency || account.currency === 'JPY');
 }
 
-export function planBankCsvImport(state: FinanceState, format: BankCsvFormat, rows: readonly BankCsvRow[],
+export function planStatementCsvImport(state: FinanceState, format: StatementCsvFormat, rows: readonly StatementCsvRow[],
   accountId: string, excluded: ReadonlySet<number>) {
   const account = state.accounts.find((item) => item.id === accountId);
-  if (!account || !isBankCsvAccount(account)) throw new Error('取り込み先に円建ての銀行口座を選んでください。');
+  if (!account || !isStatementCsvAccount(account, format)) {
+    const destination = format === 'rakuten' ? 'クレジットカード口座' : '銀行口座';
+    throw new Error(`取り込み先に円建ての${destination}を選んでください。`);
+  }
 
-  const prefix = `tx_bank_csv_${format}_${encodeURIComponent(accountId)}_`;
+  const prefix = `tx_${format === 'rakuten' ? 'card' : 'bank'}_csv_${format}_${encodeURIComponent(accountId)}_`;
   const ids = new Set(state.transactions.filter((tx) => tx.id.startsWith(prefix)).map((tx) => tx.id));
   const duplicateIndexes = new Set<number>();
   const transactions: Transaction[] = [];
@@ -130,7 +115,7 @@ export function planBankCsvImport(state: FinanceState, format: BankCsvFormat, ro
     transactions.push({
       id, type: row.type, amount: row.amount, date: row.date,
       categoryId: row.type === 'income' ? 'other_income' : 'other_expense',
-      title: row.title || BANK_CSV_NAMES[format] + '明細', memo: row.memo,
+      title: row.title || STATEMENT_CSV_NAMES[format] + '明細', memo: row.memo,
       accountId, ledgerId: account.ledgerId, scope: account.usageScope === 'business' ? 'business' : 'personal',
     });
     if (row.type === 'income') income += row.amount;
@@ -143,6 +128,6 @@ export function planBankCsvImport(state: FinanceState, format: BankCsvFormat, ro
     duplicateIndexes, income, expense, startDate, endDate };
 }
 
-export function appendBankCsvRows(plan: ReturnType<typeof planBankCsvImport>): FinanceState {
+export function appendStatementCsvRows(plan: ReturnType<typeof planStatementCsvImport>): FinanceState {
   return plan.added ? { ...plan.source, transactions: [...plan.transactions, ...plan.source.transactions] } : plan.source;
 }

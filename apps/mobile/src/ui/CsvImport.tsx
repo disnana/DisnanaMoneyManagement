@@ -4,7 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { MAX_CSV_SIZE } from '@dmm/core/utils/csv';
 import { planMonemyImport } from '@dmm/core/utils/monemyImport';
-import { BANK_CSV_NAMES, isBankCsvAccount, planBankCsvImport } from '@dmm/core/utils/bankCsvImport';
+import { STATEMENT_CSV_NAMES, isStatementCsvAccount, planStatementCsvImport } from '@dmm/core/utils/bankCsvImport';
 import { parseImportCsv, type CsvStatement } from '@/lib/csvImport';
 import { formatJPY } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
@@ -41,7 +41,7 @@ async function readCsv(asset: DocumentPicker.DocumentPickerAsset): Promise<CsvSt
 }
 
 export function CsvImport() {
-  const { state, importMonemyRows, importBankCsvRows } = useFinance();
+  const { state, importMonemyRows, importStatementCsvRows } = useFinance();
   const p = usePalette();
   const latest = useRef(state);
   latest.current = state;
@@ -71,14 +71,15 @@ export function CsvImport() {
       const isMonemy = statement.format === 'monemy';
       const accounts = latest.current.accounts.filter((account) => isMonemy
         ? (!account.currency || account.currency === 'JPY') && account.type !== 'debit'
-        : isBankCsvAccount(account));
-      if (!accounts.length) throw new Error(isMonemy ? '先に円建ての口座を作成してください。' : '先に円建ての銀行口座を作成してください。');
+        : isStatementCsvAccount(account, statement.format));
+      const accountType = isMonemy ? '口座' : statement.format === 'rakuten' ? 'クレジットカード口座' : '銀行口座';
+      if (!accounts.length) throw new Error(`先に円建ての${accountType}を作成してください。`);
       const accountId = await pickOne('取り込み先の口座', accounts.map((account) => ({
         id: account.id, label: account.name, subtitle: account.institution,
       })), {
         description: isMonemy
           ? 'CSVには口座情報がありません。全取引をこの口座へ追加します。複数口座が混在する場合は先にファイルを分けてください。'
-          : `${BANK_CSV_NAMES[statement.format]}の明細を追加する口座を選んでください。`,
+          : `${STATEMENT_CSV_NAMES[statement.format]}の明細を追加する口座を選んでください。`,
       });
       if (!accountId) { reset(); return; }
       setPage(0);
@@ -94,7 +95,7 @@ export function CsvImport() {
     try {
       return pending.format === 'monemy'
         ? { preview: { format: 'monemy' as const, plan: planMonemyImport(state, pending.rows, pending.accountId) } }
-        : { preview: { format: pending.format, plan: planBankCsvImport(state, pending.format, pending.rows, pending.accountId, excluded) } };
+        : { preview: { format: pending.format, plan: planStatementCsvImport(state, pending.format, pending.rows, pending.accountId, excluded) } };
     } catch (error) {
       return { previewError: error instanceof Error ? error.message : '口座を確認してください。' };
     }
@@ -105,7 +106,7 @@ export function CsvImport() {
     confirming.current = true;
     try {
       if (preview.format === 'monemy') await importMonemyRows(preview.plan);
-      else await importBankCsvRows(preview.plan);
+      else await importStatementCsvRows(preview.plan);
       reset();
       setMessage(`${preview.plan.added}件を追加しました。重複${preview.plan.duplicates}件は追加していません。`);
     } catch (error) {
@@ -115,7 +116,7 @@ export function CsvImport() {
     }
   };
   const plan = preview?.plan;
-  const bankPlan = preview && preview.format !== 'monemy' ? preview.plan : null;
+  const statementPlan = preview && preview.format !== 'monemy' ? preview.plan : null;
   const pages = pending ? Math.ceil(pending.rows.length / PAGE_SIZE) : 0;
 
   function includeRow(index: number, include: boolean) {
@@ -129,21 +130,27 @@ export function CsvImport() {
   }
 
   return <Group>
-    <Row title="CSVから取り込む" subtitle="Monemy・三井住友銀行・PayPay銀行" chevron onPress={() => void choose()} />
+    <Row title="CSVから取り込む" subtitle="Monemy・三井住友銀行・PayPay銀行・楽天カード" chevron onPress={() => void choose()} />
     {pending ? <>
-      <Row title={pending.format === 'monemy' ? 'Monemy' : BANK_CSV_NAMES[pending.format]}
+      <Row title={pending.format === 'monemy' ? 'Monemy' : STATEMENT_CSV_NAMES[pending.format]}
         subtitle={`取り込み先  ${state.accounts.find((a) => a.id === pending.accountId)?.name ?? '削除された口座'}`} />
       {plan ? <>
-        <Row title={`追加 ${plan.added}件 / 重複 ${plan.duplicates}件${bankPlan ? ` / 除外 ${pending.rows.length - plan.added - plan.duplicates}件` : ''}`}
+        <Row title={`追加 ${plan.added}件 / 重複 ${plan.duplicates}件${statementPlan ? ` / 除外 ${pending.rows.length - plan.added - plan.duplicates}件` : ''}`}
           subtitle={`収入 ${formatJPY(plan.income)}・支出 ${formatJPY(plan.expense)}${plan.startDate ? `\n${plan.startDate} ～ ${plan.endDate}` : ''}`} />
         {pending.format !== 'monemy' && pending.zeroAmountRows > 0 ? (
           <Row title={`金額が0円の明細 ${pending.zeroAmountRows}件をスキップ`} />
         ) : null}
+        {pending.format !== 'monemy' && !!pending.unsupportedRows ? (
+          <Row title={`取り込み対象外 ${pending.unsupportedRows}件`}
+            subtitle="分割・リボ・返金・手数料のある明細などは取り込み対象外です。" />
+        ) : null}
         {pending.format === 'monemy' ? pending.rows.slice(0, 3).map((row, index) => (
           <Row key={index} title={`${row.date} ${row.title || row.category || 'Monemy取引'}`}
             subtitle={`${row.type === 'income' ? '収入' : '支出'} ${formatJPY(row.amount)} / ${row.category || '未分類'}${row.memo ? `\n${row.memo}` : ''}`} />
-        )) : bankPlan ? <>
-          <Row title="取り込む明細を確認" subtitle="記録済みの振替やカード引き落としなどは、右側のスイッチをオフにして除外できます。" />
+        )) : statementPlan ? <>
+          <Row title="取り込む明細を確認" subtitle={pending.format === 'rakuten'
+            ? '記録済みのカード利用は、右側のスイッチをオフにして除外できます。'
+            : '記録済みの振替やカード引き落としなどは、右側のスイッチをオフにして除外できます。'} />
           {pages > 1 ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 }}>
             <Pressable accessibilityRole="button" accessibilityState={{ disabled: page === 0 }} disabled={page === 0}
               onPress={() => setPage(page - 1)} style={{ padding: 12 }}>
@@ -157,16 +164,19 @@ export function CsvImport() {
           </View> : null}
           {pending.rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map((row, offset) => {
             const index = page * PAGE_SIZE + offset;
-            const title = row.title || '銀行明細';
-            const detail = `${row.date} · ${row.type === 'income' ? '入金' : '出金'} ${formatJPY(row.amount)} · 残高 ${formatJPY(row.balance)}`;
-            if (bankPlan.duplicateIndexes.has(index)) {
+            const title = row.title || '明細';
+            const kind = pending.format === 'rakuten' ? '利用額' : row.type === 'income' ? '入金' : '出金';
+            const detail = `${row.date} · ${kind} ${formatJPY(row.amount)}${row.balance === undefined ? '' : ` · 残高 ${formatJPY(row.balance)}`}`;
+            if (statementPlan.duplicateIndexes.has(index)) {
               return <Row key={index} title={title} subtitle={`${detail}\n重複のためスキップ`} />;
             }
             return <SettingsSwitchRow key={index} title={title} subtitle={row.memo ? `${detail}\n${row.memo}` : detail}
               checked={!excluded.has(index)} onChange={(include) => includeRow(index, include)} />;
           })}
         </> : null}
-        <Row title="口座・残高の確認" subtitle={pending.format === 'monemy'
+        <Row title="口座・残高の確認" subtitle={pending.format === 'rakuten'
+          ? '利用日の利用金額をカード支出として追加します。当月の請求額や銀行口座からの引き落としは、カードの支払いから確認・記録してください。'
+          : pending.format === 'monemy'
           ? '初期残高は変更しません。現在残高を初期残高に設定済みの場合は、履歴追加で二重計上になります。同じ内容でも別口座に取り込むと重複します。CSVにない振替・返金などの意味は推定しません。'
           : '初期残高は変更せず、選択した明細を収入・支出として追加します。現在残高を初期残高に設定済みの場合は、取り込む前に残高を確認してください。'} />
         {plan.added > 0 ? <Row title={`${plan.added}件をこの口座に追加する`} onPress={confirm} /> : null}

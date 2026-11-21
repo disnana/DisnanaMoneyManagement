@@ -37,3 +37,23 @@ export function readCsvRows(text: string): string[][] {
 export function csvHeaderMatches(header: string[] | undefined, expected: readonly string[]): boolean {
   return header?.length === expected.length && header.every((value, i) => value.trim() === expected[i]);
 }
+
+export function csvDate(year: string, month: string, day: string) {
+  if (!/^\d{4}$/.test(year) || !/^\d{1,2}$/.test(month) || !/^\d{1,2}$/.test(day)) {
+    throw new Error('日付が不正です。');
+  }
+  const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error('日付が不正です。');
+  }
+  return date;
+}
+
+export function csvIntegerYen(raw: string) {
+  const value = raw.trim();
+  if (!/^-?(?:\d+|\d{1,3}(?:,\d{3})+)$/.test(value)) throw new Error('金額・残高は整数円で指定してください。');
+  const amount = Number(value.replace(/,/g, ''));
+  if (!Number.isSafeInteger(amount)) throw new Error('金額が安全に扱える範囲を超えています。');
+  return amount;
+}

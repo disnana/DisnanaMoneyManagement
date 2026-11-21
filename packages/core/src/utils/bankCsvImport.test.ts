@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { FinanceState } from '../types/finance';
-import { appendBankCsvRows, detectBankCsvFormat, parseBankCsvRows, planBankCsvImport, type BankCsvFormat } from './bankCsvImport';
+import { appendStatementCsvRows, detectBankCsvFormat, parseBankCsvRows, planStatementCsvImport, type BankCsvFormat } from './bankCsvImport';
 import { readCsvRows } from './csv';
 
 const smbc = '年月日,お引出し,お預入れ,お取り扱い内容,残高,メモ,ラベル';
@@ -36,28 +36,28 @@ describe('bank statement CSV', () => {
     const rows = parse('smbc', [a, b, a].join('\n'));
     expect(new Set(rows.map(({ fingerprint }) => fingerprint)).size).toBe(3);
     const original = state();
-    const first = planBankCsvImport(original, 'smbc', rows, 'bank', new Set([1]));
+    const first = planStatementCsvImport(original, 'smbc', rows, 'bank', new Set([1]));
     expect(first).toMatchObject({ added: 2, duplicates: 0, expense: 1000 });
-    const saved = appendBankCsvRows(first);
+    const saved = appendStatementCsvRows(first);
     expect(saved.accounts).toBe(original.accounts);
     expect(saved.transactions[0]).toMatchObject({ accountId: 'bank', ledgerId: 'work', scope: 'business' });
     // Editing a recorded transaction does not change the source identifier.
     saved.transactions[0] = { ...saved.transactions[0], amount: 600, accountId: 'other' };
-    const again = planBankCsvImport(saved, 'smbc', rows, 'bank', new Set());
+    const again = planStatementCsvImport(saved, 'smbc', rows, 'bank', new Set());
     expect(again).toMatchObject({ added: 1, duplicates: 2, expense: 500 });
     expect(again.duplicateIndexes).toEqual(new Set([0, 2]));
-    expect(planBankCsvImport(saved, 'smbc', rows, 'other', new Set()).added).toBe(3);
+    expect(planStatementCsvImport(saved, 'smbc', rows, 'other', new Set()).added).toBe(3);
   });
 
   it('uses the full PayPay datetime and preserves leading zeros in the source ID', () => {
     const entry = '2026,11,11,19,5,32,0000007,支払い,300,,156,メモ';
     const rows = parse('paypay', [entry, entry.replace('0000007', '7'), entry.replace(',32,', ',33,')].join('\n'));
     expect(new Set(rows.map(({ fingerprint }) => fingerprint)).size).toBe(3);
-    const plan = planBankCsvImport(state(), 'paypay', rows, 'bank', new Set());
+    const plan = planStatementCsvImport(state(), 'paypay', rows, 'bank', new Set());
     expect(plan).toMatchObject({ added: 3, duplicates: 0, expense: 900 });
-    const saved = appendBankCsvRows(plan);
+    const saved = appendStatementCsvRows(plan);
     const updatedNotes = parse('paypay', entry.replace('メモ', 'メモ変更'));
-    expect(planBankCsvImport(saved, 'paypay', updatedNotes, 'bank', new Set())).toMatchObject({ added: 0, duplicates: 1 });
+    expect(planStatementCsvImport(saved, 'paypay', updatedNotes, 'bank', new Set())).toMatchObject({ added: 0, duplicates: 1 });
     expect(() => parse('paypay', [entry, entry.replace(',300,', ',301,')].join('\n'))).toThrow('明細が一致しません');
   });
 
@@ -81,9 +81,9 @@ describe('bank statement CSV', () => {
   it('rejects invalid PayPay times and ineligible destination accounts', () => {
     expect(() => parse('paypay', '2026,11,11,24,0,0,01,摘要,,500,600,')).toThrow('時刻が不正');
     const rows = parse('smbc', '2026/11/1,,100,摘要,100,,');
-    expect(() => planBankCsvImport(state(), 'smbc', rows, 'cash', new Set())).toThrow('銀行口座');
+    expect(() => planStatementCsvImport(state(), 'smbc', rows, 'cash', new Set())).toThrow('銀行口座');
     const foreign = state();
     foreign.accounts[0].currency = 'USD';
-    expect(() => planBankCsvImport(foreign, 'smbc', rows, 'bank', new Set())).toThrow('銀行口座');
+    expect(() => planStatementCsvImport(foreign, 'smbc', rows, 'bank', new Set())).toThrow('銀行口座');
   });
 });

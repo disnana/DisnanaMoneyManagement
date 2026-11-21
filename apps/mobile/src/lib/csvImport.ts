@@ -3,9 +3,11 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { MAX_CSV_SIZE, readCsvRows } from '@dmm/core/utils/csv';
 import { isMonemyCsvHeader, parseMonemyRows, type MonemyRow } from '@dmm/core/utils/monemyImport';
-import { detectBankCsvFormat, parseBankCsvRows, type BankCsvFormat, type BankCsvRow } from '@dmm/core/utils/bankCsvImport';
+import { detectBankCsvFormat, parseBankCsvRows, type StatementCsvFormat, type StatementCsvRow } from '@dmm/core/utils/bankCsvImport';
 
-export type CsvStatement = { format: 'monemy'; rows: MonemyRow[] } | { format: BankCsvFormat; rows: BankCsvRow[]; zeroAmountRows: number };
+import { isRakutenCsvHeader, parseRakutenCsvRows } from '@dmm/core/utils/rakutenCsvImport';
+
+export type CsvStatement = { format: 'monemy'; rows: MonemyRow[] } | { format: StatementCsvFormat; rows: StatementCsvRow[]; zeroAmountRows: number; unsupportedRows?: number };
 
 function digest(text: string): string {
   // Preserve the UTF-16LE fingerprints used by existing Monemy imports.
@@ -35,11 +37,12 @@ export function parseImportCsv(bytes: Uint8Array): CsvStatement {
     throw new Error('CSVに読み取れない文字が含まれています。');
   }
   const table = readCsvRows(text);
+  if (isRakutenCsvHeader(table[0])) return { format: 'rakuten', ...parseRakutenCsvRows(table.slice(1), digest) };
   const format = detectBankCsvFormat(table[0]);
   if (format) return { format, ...parseBankCsvRows(format, table.slice(1), digest) };
   if (isMonemyCsvHeader(table[0])) {
     if (charset !== 'UTF8') throw new Error('MonemyのCSVはUTF-8で保存してください。');
     return { format: 'monemy', rows: parseMonemyRows(table, digest) };
   }
-  throw new Error('CSVの列が一致しません。Monemy・三井住友銀行・PayPay銀行のCSVを選択してください。');
+  throw new Error('CSVの列が一致しません。Monemy・三井住友銀行・PayPay銀行・楽天カードのCSVを選択してください。');
 }
