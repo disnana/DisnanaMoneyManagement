@@ -7,6 +7,8 @@ const main = 'android.intent.action.MAIN';
 const launcher = 'android.intent.category.LAUNCHER';
 const artDir = path.resolve(__dirname, '../assets/launcher-icons');
 const characterIcons = catalog.filter(({ id }) => id !== 'classic');
+const fixedIcons = characterIcons.filter(({ id }) => !id.endsWith('_auto'));
+const automaticIcons = characterIcons.filter(({ id }) => id.endsWith('_auto'));
 const defaultId = characterIcons[0].id;
 const entryActivity = 'expo.modules.launchericons.LauncherEntryActivity';
 
@@ -65,7 +67,7 @@ function withIconResources(config) {
     const adaptive = path.join(res, 'mipmap-anydpi-v26');
     [bitmap, legacy, adaptive].forEach((dir) => fs.mkdirSync(dir, { recursive: true }));
 
-    for (const { id } of characterIcons) {
+    for (const { id } of fixedIcons) {
       const name = 'mane_' + id;
       const background = id.endsWith('_mint') ? '#ACF1DB' : '#124D55';
       fs.copyFileSync(path.join(artDir, id + '.png'), path.join(legacy, name + '.png'));
@@ -79,6 +81,18 @@ function withIconResources(config) {
 </adaptive-icon>
 `);
     }
+
+    // Keep the launcher component stable across theme changes and reuse the fixed artwork.
+    for (const [directory, tone] of [['values', 'mint'], ['values-night', 'teal']]) {
+      const values = path.join(res, directory);
+      fs.mkdirSync(values, { recursive: true });
+      const entries = automaticIcons.map(({ id }) => {
+        const fixedId = id.replace(/_auto$/, '_' + tone);
+        return `  <item type="mipmap" name="mane_${id}">@mipmap/mane_${fixedId}</item>`;
+      });
+      fs.writeFileSync(path.join(values, 'mane_automatic_icons.xml'),
+        `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n${entries.join('\n')}\n</resources>\n`);
+    }
     return result;
   }]);
 }
@@ -91,7 +105,7 @@ module.exports = function withLauncherIcons(config) {
     ], result.modResults);
     return result;
   });
-  const files = characterIcons.flatMap(({ id }) => [id + '.png', id + '-foreground.png']);
+  const files = fixedIcons.flatMap(({ id }) => [id + '.png', id + '-foreground.png']);
   const missing = files.filter((file) => !fs.existsSync(path.join(artDir, file)));
   if (missing.length) throw new Error('Missing launcher artwork: ' + missing.join(', '));
   return withIconResources(withLauncherAliases(config));

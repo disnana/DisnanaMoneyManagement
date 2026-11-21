@@ -25,9 +25,13 @@ export function getLauncherIcons() {
   const available = new Set(native?.available() ?? []);
   return catalog.flatMap((item) => {
     if (!available.has(item.id)) return [];
-    if (item.id === 'classic') return [{ ...item, preview: classic }];
-    const key = './' + item.id + '.png';
-    return previewKeys.has(key) ? [{ ...item, preview: previews(key) }] : [];
+    if (item.id === 'classic') return [{ ...item, preview: classic, nightPreview: undefined }];
+    const automatic = item.id.endsWith('_auto');
+    const key = './' + item.id.replace(/_auto$/, '_mint') + '.png';
+    const night = './' + item.id.replace(/_auto$/, '_teal') + '.png';
+    return previewKeys.has(key) ? [{
+      ...item, preview: previews(key), nightPreview: automatic && previewKeys.has(night) ? previews(night) : undefined,
+    }] : [];
   });
 }
 
