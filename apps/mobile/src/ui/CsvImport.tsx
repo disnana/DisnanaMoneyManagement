@@ -31,7 +31,7 @@ async function readCsv(asset: DocumentPicker.DocumentPickerAsset): Promise<CsvSt
     if (!bytes) throw new Error('ファイルを読み込めませんでした。');
     if (bytes.length > MAX_CSV_SIZE) throw new Error('CSVは2MB以下にしてください。');
 
-    return await parseImportCsv(bytes);
+    return parseImportCsv(bytes);
   } finally {
     if (Platform.OS === 'web' && asset.file) URL.revokeObjectURL(asset.uri);
     if (file && cachePrefix && file.uri.startsWith(cachePrefix)) {

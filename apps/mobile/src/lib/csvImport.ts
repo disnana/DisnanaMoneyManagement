@@ -1,3 +1,4 @@
+import encoding from 'encoding-japanese';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { MAX_CSV_SIZE, readCsvRows } from '@dmm/core/utils/csv';
@@ -17,11 +18,10 @@ function digest(text: string): string {
   return bytesToHex(sha256(bytes));
 }
 
-export async function parseImportCsv(bytes: Uint8Array): Promise<CsvStatement> {
+export function parseImportCsv(bytes: Uint8Array): CsvStatement {
   if (bytes.length > MAX_CSV_SIZE) throw new Error('CSVは2MB以下にしてください。');
 
   // Hermes doesn't decode Windows-31J via TextDecoder. Keep decoding portable.
-  const { default: encoding } = await import('encoding-japanese');
   const newline = bytes.findIndex((byte) => byte === 10 || byte === 13);
   // The SJIS detector rejects some CP932 extensions which the decoder supports.
   const charset = encoding.detect(bytes.subarray(0, newline === -1 ? bytes.length : newline), ['UTF8', 'SJIS']);
