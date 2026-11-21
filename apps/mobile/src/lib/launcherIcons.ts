@@ -21,22 +21,37 @@ const previews = require.context('../../assets/launcher-icons', false, /^\.\/\w+
 const classic = require('../../assets/images/icon.png') as number;
 const previewKeys = new Set(previews.keys());
 
+function artwork(id: string): number | undefined {
+  if (id === 'classic') return classic;
+  const key = './' + id + '.png';
+  return previewKeys.has(key) ? previews(key) : undefined;
+}
+
 export function getLauncherIcons() {
   const available = new Set(native?.available() ?? []);
   return catalog.flatMap((item) => {
     if (!available.has(item.id)) return [];
-    if (item.id === 'classic') return [{ ...item, preview: classic, nightPreview: undefined }];
     const automatic = item.id.endsWith('_auto');
-    const key = './' + item.id.replace(/_auto$/, '_mint') + '.png';
-    const night = './' + item.id.replace(/_auto$/, '_teal') + '.png';
-    return previewKeys.has(key) ? [{
-      ...item, preview: previews(key), nightPreview: automatic && previewKeys.has(night) ? previews(night) : undefined,
-    }] : [];
+    const preview = artwork(item.id.replace(/_auto$/, '_mint'));
+    return preview === undefined ? [] : [{
+      ...item, preview, nightPreview: automatic ? artwork(item.id.replace(/_auto$/, '_teal')) : undefined,
+    }];
   });
 }
 
 export function getLauncherIcon() {
   return native?.selected() ?? null;
+}
+
+export function getStartupIcon(dark: boolean): number {
+  const fallback = artwork('smile_mint') ?? classic;
+  try {
+    const selected = getLauncherIcon() ?? 'smile_mint';
+    return artwork(selected.replace(/_auto$/, dark ? '_teal' : '_mint')) ?? fallback;
+  } catch {
+    // The loading screen should work before the launcher module is ready.
+    return fallback;
+  }
 }
 
 export function selectLauncherIcon(id: string) {
