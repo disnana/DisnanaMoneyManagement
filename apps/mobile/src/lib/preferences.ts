@@ -9,6 +9,7 @@ const whenUnavailable = {
   dmm_reduce_motion: 'on',
   dmm_theme: 'system',
   dmm_analytics_sort: 'amount',
+  dmm_start_guide: 'done',
 } as const;
 type Preference = keyof typeof whenUnavailable;
 
