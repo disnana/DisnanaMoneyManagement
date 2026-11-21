@@ -22,7 +22,12 @@ async function readCsv(asset: DocumentPicker.DocumentPickerAsset): Promise<CsvSt
     if ((asset.size ?? 0) > MAX_CSV_SIZE || (file?.size ?? 0) > MAX_CSV_SIZE) {
       throw new Error('CSVは2MB以下にしてください。');
     }
-    const bytes = asset.file ? new Uint8Array(await asset.file.arrayBuffer()) : await file?.bytes();
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = asset.file ? new Uint8Array(await asset.file.arrayBuffer()) : await file?.bytes();
+    } catch {
+      throw new Error('CSVを読み込めませんでした。保存したファイルを選び直してください。');
+    }
     if (!bytes) throw new Error('ファイルを読み込めませんでした。');
     if (bytes.length > MAX_CSV_SIZE) throw new Error('CSVは2MB以下にしてください。');
 
@@ -55,8 +60,10 @@ export function CsvImport() {
     setImportError('');
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/csv'],
-        copyToCacheDirectory: true, multiple: false, base64: false,
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain', 'application/csv', 'application/vnd.ms-excel'],
+        // Expo Go may place Android picker copies outside the experience's cache.
+        // The original content URI carries the temporary read grant from the picker.
+        copyToCacheDirectory: Platform.OS !== 'android', multiple: false, base64: false,
       });
       const asset = result.canceled ? undefined : result.assets[0];
       if (!asset) { reset(); return; }
