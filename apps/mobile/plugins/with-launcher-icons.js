@@ -46,6 +46,7 @@ function withLauncherAliases(config) {
         'android:exported': 'true',
         'android:enabled': id === defaultId ? 'true' : 'false',
         'android:icon': id === 'classic' ? '@mipmap/ic_launcher' : '@mipmap/mane_' + id,
+        'android:label': '@string/launcher_app_name',
       },
       'intent-filter': [{
         action: [{ $: { 'android:name': main } }],
@@ -84,8 +85,10 @@ function withIconResources(config) {
 
 module.exports = function withLauncherIcons(config) {
   config = withStringsXml(config, (result) => {
-    const appName = result.modResults.resources.string.find(({ $ }) => $.name === 'app_name');
-    if (appName) appName._ = 'マネーちゃん';
+    result.modResults = AndroidConfig.Strings.setStringItem([
+      { $: { name: 'app_name' }, _: 'マネーちゃん' },
+      { $: { name: 'launcher_app_name' }, _: 'マネちゃん' },
+    ], result.modResults);
     return result;
   });
   const files = characterIcons.flatMap(({ id }) => [id + '.png', id + '-foreground.png']);
