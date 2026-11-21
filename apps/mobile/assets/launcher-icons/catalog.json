@@ -1,0 +1,12 @@
+[
+  { "id": "smile_mint", "label": "にっこり・ミント固定" },
+  { "id": "smile_teal", "label": "にっこり・深い青緑固定" },
+  { "id": "smile_auto", "label": "にっこり・自動" },
+  { "id": "smirk_mint", "label": "得意げ・ミント固定" },
+  { "id": "smirk_teal", "label": "得意げ・深い青緑固定" },
+  { "id": "smirk_auto", "label": "得意げ・自動" },
+  { "id": "ledger_mint", "label": "家計簿・ミント固定" },
+  { "id": "ledger_teal", "label": "家計簿・深い青緑固定" },
+  { "id": "ledger_auto", "label": "家計簿・自動" },
+  { "id": "classic", "label": "クラシック" }
+]
