@@ -55,15 +55,15 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', gap: 18, paddingVertical: 12 }}>
+          <Text key={page.title} accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
+            {page.title}
+          </Text>
           <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{
             backgroundColor: p.fill, borderRadius: 24, padding: 10, overflow: 'hidden',
           }}>
             <Image source={imageSource} recyclingKey={Platform.OS === 'android' ? String(imageSource) : undefined}
               contentFit="contain" style={{ height: page.imageHeight, width: '100%' }} />
           </View>
-          <Text key={page.title} accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
-            {page.title}
-          </Text>
           <Text style={{ color: p.textSecondary, fontSize: 16, lineHeight: 24 }}>{page.detail}</Text>
         </ScrollView>
         <View style={{ gap: 6, paddingBottom: 14, paddingTop: 10 }}>
