@@ -1,5 +1,6 @@
 import { router, Stack } from 'expo-router';
 import { Modal, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { GettingStarted } from '@/ui/GettingStarted';
 
@@ -15,9 +16,9 @@ export default function Guide() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       {Platform.OS === 'android' ? (
-        <Modal visible presentationStyle="fullScreen" hardwareAccelerated
+        <Modal visible presentationStyle="fullScreen" hardwareAccelerated statusBarTranslucent navigationBarTranslucent
           animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={closeGuide}>
-          {guide}
+          <SafeAreaProvider>{guide}</SafeAreaProvider>
         </Modal>
       ) : guide}
     </>
