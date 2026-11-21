@@ -510,6 +510,7 @@ class LedgerRow extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
+                flex: 3,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -529,13 +530,17 @@ class LedgerRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Flexible(
-                child: Text(
-                  yen(amount),
-                  textAlign: TextAlign.end,
-                  style: TextStyle(
-                    color: amount < 0 ? colors.error : colors.onSurface,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: _amountFeatures,
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    yen(amount),
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: amount < 0 ? colors.error : colors.onSurface,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: _amountFeatures,
+                    ),
                   ),
                 ),
               ),
