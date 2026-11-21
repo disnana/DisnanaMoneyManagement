@@ -5,5 +5,8 @@
   { "id": "smirk_teal", "label": "得意げ・深い青緑" },
   { "id": "ledger_mint", "label": "家計簿・ミント" },
   { "id": "ledger_teal", "label": "家計簿・深い青緑" },
+  { "id": "smile_auto", "label": "にっこり・自動" },
+  { "id": "smirk_auto", "label": "得意げ・自動" },
+  { "id": "ledger_auto", "label": "家計簿・自動" },
   { "id": "classic", "label": "クラシック" }
 ]

@@ -26,11 +26,16 @@ export default function AppIconSettings() {
     <>
       <Stack.Screen options={{ title: 'アプリアイコン' }} />
       <Screen>
+        {icons.some(({ nightPreview }) => nightPreview !== undefined) ? (
+          <Text style={{ color: p.textSecondary }}>
+            自動は端末のダークモードに連動します。ホームアプリによっては表示が切り替わらない場合があります。
+          </Text>
+        ) : null}
         {icons.length === 0 ? (
           <Text style={{ color: p.textSecondary }}>アプリアイコンの変更には対応するAndroid版が必要です。</Text>
         ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            {icons.map(({ id, label, preview }) => {
+            {icons.map(({ id, label, preview, nightPreview }) => {
               const active = selected === id;
               return (
                 <Pressable
@@ -45,7 +50,12 @@ export default function AppIconSettings() {
                     backgroundColor: active ? p.fill : p.card, padding: 12, gap: 8, alignItems: 'center',
                   }}
                 >
-                  <Image source={preview} style={{ width: 58, height: 58, borderRadius: 13 }} />
+                  {nightPreview !== undefined ? (
+                    <View style={{ height: 58, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Image source={preview} style={{ width: 40, height: 40, borderRadius: 10 }} />
+                      <Image source={nightPreview} style={{ width: 40, height: 40, borderRadius: 10 }} />
+                    </View>
+                  ) : <Image source={preview} style={{ width: 58, height: 58, borderRadius: 13 }} />}
                   <Text style={{ color: p.text, textAlign: 'center', fontWeight: active ? '700' : '500' }}>{label}</Text>
                 </Pressable>
               );
