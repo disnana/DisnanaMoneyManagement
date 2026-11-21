@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/android-play-bundle.yml'
+      - 'apps/mobile/app.json'
+      - 'apps/mobile/plugins/with-optional-portrait-feature.js'
 
 permissions:
   contents: read
