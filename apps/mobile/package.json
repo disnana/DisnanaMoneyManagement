@@ -4,7 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/ui": "~58.0.29",
-    "@noble/hashes": "2.2.0",
+    "@noble/hashes": "2.4.0",
     "@react-native-community/datetimepicker": "9.2.1",
     "expo": "~58.0.26",
     "expo-constants": "~58.0.16",
