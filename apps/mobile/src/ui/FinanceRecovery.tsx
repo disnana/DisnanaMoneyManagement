@@ -1,5 +1,7 @@
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Platform, Text, useColorScheme, View } from 'react-native';
 import type { FinanceState } from '@dmm/core/types/finance';
+import { getStartupIcon } from '@/lib/launcherIcons';
 import { usePalette } from '@/lib/theme';
 import { Group, Row } from './kit';
 import { LocalFinanceBackup } from './LocalFinanceBackup';
@@ -8,6 +10,17 @@ export function FinanceRecovery({ loading, retry, restore }: {
   loading: boolean; retry: () => void; restore: (state: FinanceState) => Promise<void>;
 }) {
   const p = usePalette();
+  const dark = useColorScheme() === 'dark';
+  if (loading && Platform.OS === 'android') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, backgroundColor: p.bg }}>
+        <Image source={getStartupIcon(dark)} style={{ width: 92, height: 92, borderRadius: 24 }} />
+        <Text style={{ color: p.text, fontSize: 22, fontWeight: '700', textAlign: 'center' }}>マネーちゃん</Text>
+        <ActivityIndicator color={p.tint} />
+        <Text accessibilityLiveRegion="polite" style={{ color: p.textSecondary, textAlign: 'center' }}>家計データを読み込み中</Text>
+      </View>
+    );
+  }
   return <View style={{ flex: 1, justifyContent: 'center', gap: 16, padding: 24, backgroundColor: p.bg }}>
     {loading ? <ActivityIndicator color={p.tint} accessibilityLabel="家計データを読み込み中" /> : <>
       <Text accessibilityRole="header" style={{ color: p.text, fontSize: 20, fontWeight: '700' }}>家計データを開けませんでした</Text>
