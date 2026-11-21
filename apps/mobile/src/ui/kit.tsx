@@ -200,7 +200,9 @@ export function Segmented<T extends string>({
   );
 }
 
-export function MonthBar({ month, onChange }: { month: string; onChange: (m: string) => void }) {
+export function MonthBar({ month, onChange, compact = false }: {
+  month: string; onChange: (m: string) => void; compact?: boolean;
+}) {
   const p = usePalette();
   const [open, setOpen] = useState(false);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
@@ -212,7 +214,7 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
         tick();
         onChange(shiftMonth(month, delta));
       }}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      style={{ width: compact ? 48 : 44, height: compact ? 48 : 44, alignItems: 'center', justifyContent: 'center' }}>
       <SymbolView name={name} size={18} tintColor={p.tint} />
     </Pressable>
   );
@@ -222,8 +224,9 @@ export function MonthBar({ month, onChange }: { month: string; onChange: (m: str
         {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
         <Pressable accessibilityRole="button" accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
           onPress={() => { tick(); setOpen(true); }}
-          style={{ minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+          style={{ minWidth: compact ? 0 : 150, minHeight: compact ? 48 : 44, flexShrink: compact ? 1 : 0,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: compact ? 4 : 6 }}>
+          <Text style={{ color: p.text, flexShrink: 1, fontSize: compact ? 14 : 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
           <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
         </Pressable>
         {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}

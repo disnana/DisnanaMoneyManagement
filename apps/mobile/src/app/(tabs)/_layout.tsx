@@ -1,8 +1,8 @@
 import { useCallback, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen as NativeScreen } from 'react-native-screens';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
@@ -72,6 +72,8 @@ function FocusedTab({ children, reset, onMonthReset }: {
 
 export default function TabsLayout() {
   const p = usePalette();
+  const insets = useSafeAreaInsets();
+  const floating = Platform.OS === 'android';
   // TabSlot already renders the destination after navigation, so recording the
   // pending month does not need to schedule a second render of the tab bar.
   const pendingReset = useRef<MonthReset | undefined>(undefined);
@@ -101,11 +103,16 @@ export default function TabsLayout() {
         }}>
           {tab('home', 'ホーム', { ios: 'house', android: 'home' })}
           {tab('transactions', '取引', { ios: 'list.bullet.rectangle', android: 'receipt_long' })}
-          <AddButton />
+          {floating ? null : <AddButton />}
           {tab('analytics', '分析', { ios: 'chart.pie', android: 'pie_chart' })}
           {tab('accounts', '口座', { ios: 'wallet.pass', android: 'account_balance_wallet' })}
         </SafeAreaView>
       </TabList>
+      {floating ? (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: insets.right + 16, bottom: insets.bottom + 72 }}>
+          <AddButton floating />
+        </View>
+      ) : null}
     </Tabs>
   );
 }

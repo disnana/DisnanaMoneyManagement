@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
@@ -15,6 +15,7 @@ import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
 
 const BALANCE_PREVIEW_COUNT = 4;
+const EXPRESSIVE = Platform.OS === 'android';
 
 function openAccount(id: string) {
   router.navigate({ pathname: '/accounts/[id]', params: { id } }, { withAnchor: true });
@@ -34,16 +35,17 @@ export default function Home() {
   const banks = new Map(state.accounts.map((account) => [account.id, account]));
 
   return (
-    <MonthScreen showMonthBar={false}>
+    <MonthScreen showMonthBar={false} {...(EXPRESSIVE
+      ? { contentContainerStyle: { paddingHorizontal: 16, paddingTop: 4, gap: 12, paddingBottom: 100 } } : {})}>
       {(month) => (
         <>
-          <HeroCard assets={assets} />
-          <SectionTitle>月の収支</SectionTitle>
-          <MonthlyCashFlow month={month} />
+          <HeroCard assets={assets} integrated={EXPRESSIVE} />
+          {EXPRESSIVE ? null : <SectionTitle>月の収支</SectionTitle>}
+          <MonthlyCashFlow month={month} integrated={EXPRESSIVE} />
           <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
-          <AccountSummaryGroup>
+          <AccountSummaryGroup inline={EXPRESSIVE}>
             {listed.length ? listed.map((account) => (
-              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0}
+              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0} inline={EXPRESSIVE}
                 linkedBank={banks.get(account.linkedBankAccountId ?? '')} onPress={() => openAccount(account.id)} />
             )) : [<Row key="empty" compact title="この家計グループに表示する口座がありません" />]}
             {accounts.length > BALANCE_PREVIEW_COUNT ? (
@@ -51,7 +53,7 @@ export default function Home() {
                 onPress={() => setShowAllBalances((expanded) => !expanded)}
                 style={({ pressed }) => ({
                   minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : p.card,
+                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : EXPRESSIVE ? 'transparent' : p.card,
                 })}>
                 <Text style={{ color: p.tint, fontSize: 13, fontWeight: '600' }}>
                   {showAllBalances ? '口座を折りたたむ' : `残りの${accounts.length - BALANCE_PREVIEW_COUNT}件を表示`}

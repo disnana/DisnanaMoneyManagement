@@ -5,8 +5,9 @@ import { SymbolView } from 'expo-symbols';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
+import { RecordAction } from './RecordAction';
 
-export function AddButton() {
+export function AddButton({ floating = false }: { floating?: boolean }) {
   const p = usePalette();
   const reduceMotion = useAppReducedMotion();
   const pathname = usePathname();
@@ -15,16 +16,19 @@ export function AddButton() {
   useLayoutEffect(() => {
     if (pathname !== '/add') opening.current = false;
   }, [pathname]);
+  const open = () => {
+    if (opening.current || pathname === '/add') return;
+    opening.current = true;
+    tick();
+    router.navigate('/add');
+  };
+  if (floating) return <RecordAction floating label="記録する" onPress={open} />;
+
   return (
     <Pressable
       accessibilityLabel="収支を記録"
       accessibilityRole="button"
-      onPress={() => {
-        if (opening.current || pathname === '/add') return;
-        opening.current = true;
-        tick();
-        router.navigate('/add');
-      }}
+      onPress={open}
       style={({ pressed }) => ({
         width: 54, height: 54, marginHorizontal: 5, borderRadius: 27,
         alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,

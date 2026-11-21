@@ -13,12 +13,13 @@ export function isPaymentCard(account: Account) {
   return account.type === 'credit' || account.type === 'debit';
 }
 
-export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting = false, onPress }: {
+export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting = false, inline = false, onPress }: {
   account: Account;
   balance: number;
   bill?: { label: string; remaining: number; warning?: string };
   linkedBank?: Account;
   sorting?: boolean;
+  inline?: boolean;
   onPress?: () => void;
 }) {
   const p = usePalette();
@@ -57,19 +58,18 @@ export function AccountSummaryRow({ account, balance, bill, linkedBank, sorting 
   return sorting
     ? <View style={rowStyle}>{content}</View>
     : <Pressable accessibilityRole="button" onPress={onPress}
-        style={({ pressed }) => [rowStyle, { backgroundColor: pressed ? p.fill : p.card }]}>{content}</Pressable>;
+        style={({ pressed }) => [rowStyle, inline && { paddingHorizontal: 4, minHeight: 56 },
+          { backgroundColor: pressed ? p.fill : inline ? 'transparent' : p.card }]}>{content}</Pressable>;
 }
 
-export function AccountSummaryGroup({ children }: { children: ReactNode }) {
+export function AccountSummaryGroup({ children, inline = false }: { children: ReactNode; inline?: boolean }) {
   const p = usePalette();
-  return (
-    <CardSurface>
-      {Children.toArray(children).map((child, index) => (
-        <View key={index}>
-          {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: p.outline, marginHorizontal: 12 }} /> : null}
-          {child}
-        </View>
-      ))}
-    </CardSurface>
-  );
+  const rows = Children.toArray(children).map((child, index) => (
+    <View key={index}>
+      {index > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: inline ? p.fill : p.outline,
+        marginHorizontal: inline ? 4 : 12 }} /> : null}
+      {child}
+    </View>
+  ));
+  return inline ? <View>{rows}</View> : <CardSurface>{rows}</CardSurface>;
 }

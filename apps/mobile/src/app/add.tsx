@@ -26,6 +26,7 @@ import { FormScrollView } from '@/ui/FormScrollView';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { TransactionDatePicker } from '@/ui/TransactionDatePicker';
 import { TransactionInput } from '@/ui/TransactionForm';
+import { RecordAction } from '@/ui/RecordAction';
 
 const TYPE_LABELS = { income: '収入', expense: '支出', transfer: '振替' };
 const TAX_CATEGORY_GUIDE: Record<IncomeTaxCategory, string> = {
@@ -71,6 +72,7 @@ export default function AddScreen() {
   const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
   const [date, setDate] = useState(editing?.date ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
     getOrderedCategories('expense', state.customCategories, state.categoryOrder?.expense, state.hiddenCategoryIds)[0]?.id ?? '');
@@ -103,6 +105,7 @@ export default function AddScreen() {
   const account = state.accounts.find((a) => a.id === accountId);
   const destination = state.accounts.find((a) => a.id === toAccountId);
   const isCardPayment = type === 'transfer' && destination?.type === 'credit';
+  const quickExpense = Platform.OS === 'android' && type === 'expense' && !editing && !paymentMonth;
   const allowsPoints = type === 'expense' || isCardPayment;
   const points = allowsPoints ? Number(pointUsed) : 0;
   const validPoints = Number.isSafeInteger(points) && points >= 0 && points <= Number(amount);
@@ -295,6 +298,26 @@ export default function AddScreen() {
     </View>
   );
 
+  const amountField = (
+    <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
+      accessibilityHint="円単位で入力" value={amount}
+      onChangeText={(value) => {
+        lastContinuedAmount.current = '';
+        setAmount(value.replace(/[^0-9]/g, ''));
+      }}
+      keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
+      style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
+        fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
+  );
+  const ledgerField = fieldRow('家計グループ', ledger.name, async () => {
+      const choice = await pickLedger(ledger.id);
+      const group = ledgers.find((item) => item.id === choice);
+      if (group) {
+        setLedgerId(group.id);
+        setScope(group.kind === 'business' ? 'business' : 'personal');
+      }
+    }, { name: ledgerIcon(ledger), color: ledgerColor(ledger) ?? p.tint });
+
   return (
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Stack.Screen
@@ -314,7 +337,7 @@ export default function AddScreen() {
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ flexGrow: 1, padding: 16, gap: 16, paddingBottom: 28 }}>
+        contentContainerStyle={{ flexGrow: 1, padding: 16, gap: quickExpense ? 12 : 16, paddingBottom: 28 }}>
         {!paymentMonth ? <Segmented<TransactionType>
           value={type}
           onChange={changeType}
@@ -324,6 +347,12 @@ export default function AddScreen() {
             { id: 'transfer', label: '振替' },
           ]}
         /> : null}
+
+        {quickExpense ? (
+          <View style={{ backgroundColor: p.sectionHeader, borderRadius: 22, paddingVertical: 10 }}>
+            {amountField}
+          </View>
+        ) : null}
 
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: p.card, borderRadius: metrics.cardRadius }}>
           {dateStep(-1, '前の日', { ios: 'chevron.left', android: 'chevron_left' })}
@@ -342,14 +371,7 @@ export default function AddScreen() {
           {accountRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法',
             account, setAccountId, type === 'transfer' ? toAccountId : undefined)}
           {type === 'transfer' ? accountRow('入金先', destination, setToAccountId, accountId) : null}
-          {fieldRow('家計グループ', ledger.name, async () => {
-            const choice = await pickLedger(ledger.id);
-            const group = ledgers.find((item) => item.id === choice);
-            if (group) {
-              setLedgerId(group.id);
-              setScope(group.kind === 'business' ? 'business' : 'personal');
-            }
-          }, { name: ledgerIcon(ledger), color: ledgerColor(ledger) ?? p.tint })}
+          {quickExpense ? null : ledgerField}
           {type === 'expense' && (account?.type === 'credit' || account?.type === 'debit') ? (
             <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 16, paddingVertical: 10 }}>
               {account.type === 'credit'
@@ -364,16 +386,23 @@ export default function AddScreen() {
           ) : null}
         </Group>
 
+        {quickExpense ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={detailsOpen ? '詳細を閉じる' : '詳細を追加'}
+            accessibilityState={{ expanded: detailsOpen }} onPress={() => setDetailsOpen((open) => !open)}
+            style={({ pressed }) => ({ minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12,
+              paddingHorizontal: 8, backgroundColor: pressed ? p.fill : 'transparent' })}>
+            <SymbolView name={{ android: 'tune', ios: 'slider.horizontal.3' }} tintColor={p.tint} size={20} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>{detailsOpen ? '詳細を閉じる' : '詳細を追加'}</Text>
+              {!detailsOpen ? <Text style={{ color: p.textSecondary, fontSize: 12 }}>ポイント・メモ・立て替えなど</Text> : null}
+            </View>
+            <SymbolView name={{ android: detailsOpen ? 'expand_less' : 'expand_more', ios: 'chevron.down' }} tintColor={p.textSecondary} size={17} />
+          </Pressable>
+        ) : null}
+
+        {!quickExpense || detailsOpen ? <>
         <Group>
-          <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
-            accessibilityHint="円単位で入力" value={amount}
-            onChangeText={(value) => {
-              lastContinuedAmount.current = '';
-              setAmount(value.replace(/[^0-9]/g, ''));
-            }}
-            keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
-            style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
-              fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
+          {quickExpense ? ledgerField : amountField}
           {allowsPoints ? (
             <TransactionInput label="うちポイント充当" icon={{ ios: 'star.circle', android: 'stars' }} optional unit="円"
               accessibilityHint="使ったポイントの円換算額" value={pointUsed} placeholder="0"
@@ -517,7 +546,17 @@ export default function AddScreen() {
           </Group>
         ) : null}
 
-        {!editing ? <View style={{ flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 4 }}>
+        </> : null}
+
+        {quickExpense ? (
+          <View style={{ marginTop: 'auto', paddingTop: 4, gap: 4 }}>
+            <RecordAction label="支出を登録" onPress={() => save(false)} />
+            <Pressable accessibilityRole="button" onPress={() => save(true)}
+              style={{ minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: p.tint, fontWeight: '700' }}>続けて登録</Text>
+            </Pressable>
+          </View>
+        ) : !editing ? <View style={{ flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 4 }}>
           <Pressable
             accessibilityRole="button"
             onPress={() => save(false)}

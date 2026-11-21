@@ -11,19 +11,19 @@ import { LedgerPill } from '@/ui/LedgerPill';
 import { MonthBar } from '@/ui/kit';
 import { CardHeader, CardSurface } from './CardSurface';
 
-export function HeroCard({ assets }: { assets: number }) {
+export function HeroCard({ assets, integrated = false }: { assets: number; integrated?: boolean }) {
   const p = usePalette();
   const [hidden, toggle] = useHomeAssetVisibility();
 
-  return (
-    <CardSurface>
-      <View style={{ backgroundColor: `${p.tint}0A`, paddingHorizontal: 18, paddingVertical: 14, gap: 8 }}>
+  const body = (
+      <View style={{ backgroundColor: integrated ? 'transparent' : `${p.tint}0A`,
+        paddingHorizontal: integrated ? 4 : 18, paddingVertical: integrated ? 0 : 14, gap: integrated ? 0 : 8 }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
             <Text accessibilityRole="header" style={{ color: p.text, flexShrink: 1, fontSize: 15, fontWeight: '700' }}>現在の総資産</Text>
             <Pressable accessibilityRole="button" accessibilityLabel={hidden ? '総資産を表示' : '総資産を隠す'}
               onPress={() => { tick(); toggle(); }}
-              style={({ pressed }) => ({ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}>
+              style={({ pressed }) => ({ width: integrated ? 48 : 44, height: integrated ? 48 : 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}>
               <SymbolView name={hidden ? { ios: 'eye.slash', android: 'visibility_off' } : { ios: 'eye', android: 'visibility' }}
                 size={17} tintColor={p.textSecondary} />
             </Pressable>
@@ -32,15 +32,17 @@ export function HeroCard({ assets }: { assets: number }) {
         </View>
         <Text accessibilityLabel={hidden ? '総資産は非表示' : undefined} numberOfLines={1} adjustsFontSizeToFit
           style={{ color: hidden ? p.text : assets < 0 ? p.danger : p.income,
-            fontSize: 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+            fontSize: integrated ? 42 : 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
           {hidden ? '¥・・・・・・' : formatJPY(assets)}
         </Text>
       </View>
-    </CardSurface>
   );
+  return integrated ? body : <CardSurface>{body}</CardSurface>;
 }
 
-export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; showNetSign?: boolean }) {
+export function MonthlyCashFlow({ month, showNetSign = true, integrated = false }: {
+  month: string; showNetSign?: boolean; integrated?: boolean;
+}) {
   const p = usePalette();
   const { visibleState, setMonth } = useFinance();
   const { income, expense, net } = useMemo(() => computeMonthCashFlow(visibleState, month), [visibleState, month]);
@@ -49,6 +51,39 @@ export function MonthlyCashFlow({ month, showNetSign = true }: { month: string; 
     { label: '支出', amount: expense, color: expense > 0 ? p.danger : p.income },
     { label: '収支', amount: net, color: net < 0 ? p.danger : p.income },
   ];
+
+  if (integrated) {
+    const total = Math.abs(income) + Math.abs(expense);
+    return (
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: p.outline, paddingTop: 6, gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1, marginLeft: -8 }}>
+            <MonthBar month={month} onChange={setMonth} compact />
+          </View>
+          <View style={{ alignItems: 'flex-end', maxWidth: '47%', paddingRight: 4 }}>
+            <Text style={{ color: p.textSecondary, fontSize: 12 }}>月の収支</Text>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={{ color: stats[2].color, fontSize: 24,
+              fontWeight: '800', fontVariant: ['tabular-nums'] }}>
+              {showNetSign && net > 0 ? '+' : ''}{formatJPY(net)}
+            </Text>
+          </View>
+        </View>
+        <View aria-hidden style={{ height: 6, borderRadius: 3, flexDirection: 'row', backgroundColor: p.fill, overflow: 'hidden' }}>
+          {total > 0 ? stats.slice(0, 2).map(({ label, amount, color }) => (
+            <View key={label} style={{ flex: Math.abs(amount), backgroundColor: color }} />
+          )) : null}
+        </View>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8, paddingHorizontal: 4 }}>
+          {stats.slice(0, 2).map(({ label, amount, color }) => (
+            <View key={label} style={{ flexShrink: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
+              <Text style={{ color: p.textSecondary, fontSize: 13 }}>{label}</Text>
+              <Text style={{ color, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{formatJPY(amount)}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <CardSurface>
