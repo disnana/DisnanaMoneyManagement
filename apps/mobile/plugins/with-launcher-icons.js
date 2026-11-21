@@ -8,6 +8,7 @@ const launcher = 'android.intent.category.LAUNCHER';
 const artDir = path.resolve(__dirname, '../assets/launcher-icons');
 const characterIcons = catalog.filter(({ id }) => id !== 'classic');
 const defaultId = characterIcons[0].id;
+const entryActivity = 'expo.modules.launchericons.LauncherEntryActivity';
 
 function withLauncherAliases(config) {
   return withAndroidManifest(config, (result) => {
@@ -24,13 +25,24 @@ function withLauncherAliases(config) {
       activity['intent-filter'] = filters.filter((filter) => !launcherFilters.includes(filter));
     }
 
+    const activities = (app.activity ?? []).filter(({ $ }) => $['android:name'] !== entryActivity);
+    app.activity = [...activities, {
+      $: {
+        'android:name': entryActivity,
+        'android:exported': 'false',
+        'android:excludeFromRecents': 'true',
+        'android:taskAffinity': '',
+        'android:theme': '@android:style/Theme.NoDisplay',
+      },
+    }];
+
     const otherAliases = (app['activity-alias'] ?? []).filter(({ $ }) =>
       !$['android:name'].startsWith('.LauncherIcon_')
     );
     app['activity-alias'] = [...otherAliases, ...catalog.map(({ id }) => ({
       $: {
         'android:name': '.LauncherIcon_' + id,
-        'android:targetActivity': activity.$['android:name'],
+        'android:targetActivity': entryActivity,
         'android:exported': 'true',
         'android:enabled': id === defaultId ? 'true' : 'false',
         'android:icon': id === 'classic' ? '@mipmap/ic_launcher' : '@mipmap/mane_' + id,
