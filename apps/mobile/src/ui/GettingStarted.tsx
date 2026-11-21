@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View, useColorScheme } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { metrics, usePalette } from '@/lib/theme';
 
@@ -40,6 +40,7 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
   const isDark = useColorScheme() === 'dark';
   const [index, setIndex] = useState(0);
   const page = pages[index];
+  const imageSource = isDark ? page.darkImage : page.image;
   const last = index === pages.length - 1;
 
   return (
@@ -57,7 +58,8 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
           <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{
             backgroundColor: p.fill, borderRadius: 24, padding: 10, overflow: 'hidden',
           }}>
-            <Image source={isDark ? page.darkImage : page.image} contentFit="contain" style={{ height: page.imageHeight, width: '100%' }} />
+            <Image source={imageSource} recyclingKey={Platform.OS === 'android' ? String(imageSource) : undefined}
+              contentFit="contain" style={{ height: page.imageHeight, width: '100%' }} />
           </View>
           <Text key={page.title} accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
             {page.title}
