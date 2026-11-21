@@ -6,7 +6,7 @@
       "name": "mobile",
       "dependencies": {
         "@expo/ui": "~58.0.29",
-        "@noble/hashes": "2.2.0",
+        "@noble/hashes": "2.4.0",
         "@react-native-community/datetimepicker": "9.2.1",
         "expo": "~58.0.26",
         "expo-constants": "~58.0.16",
@@ -287,7 +287,7 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@noble/hashes": ["@noble/hashes@2.2.0", "", {}, "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg=="],
+    "@noble/hashes": ["@noble/hashes@2.4.0", "", {}, "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="],
 
     "@noxcturnal/noxcturnal-darwin-arm64": ["@noxcturnal/noxcturnal-darwin-arm64@0.1.14", "", { "os": "darwin", "cpu": "arm64" }, "sha512-5g1fvtfmDsaDzNoqZicO7UKUUaGm9HOTJy30KNxXbSJRreLOQwK0fd0wuAA0OEbBgJSQAvVdAovpjT5HvYRIWw=="],
 
