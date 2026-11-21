@@ -218,6 +218,7 @@ class Ledger {
     this.reduceMotion = false,
     this.haptics = false,
     this.appLock = false,
+    this.guideSeen = false,
     this.groups = householdDefaults,
     this.recurrences = const [],
     this.purchases = const [],
@@ -256,6 +257,7 @@ class Ledger {
       reduceMotion: json['reduceMotion'] as bool? ?? false,
       haptics: json['haptics'] as bool? ?? false,
       appLock: json['appLock'] as bool? ?? false,
+      guideSeen: json['guideSeen'] as bool? ?? false,
       groups:
           (json['groups'] as List?)?.cast<String>().toList() ??
           householdDefaults,
@@ -527,7 +529,7 @@ class Ledger {
   final List<String> categories, incomeCategories;
   final List<Goal> goals;
   final int budget;
-  final bool hideBalance, reduceMotion, haptics, appLock;
+  final bool hideBalance, reduceMotion, haptics, appLock, guideSeen;
   final String theme;
   final List<String> groups;
   final List<Recurrence> recurrences;
@@ -546,6 +548,7 @@ class Ledger {
     bool? reduceMotion,
     bool? haptics,
     bool? appLock,
+    bool? guideSeen,
     List<String>? groups,
     List<Recurrence>? recurrences,
     List<PurchasePlan>? purchases,
@@ -562,6 +565,7 @@ class Ledger {
     reduceMotion: reduceMotion ?? this.reduceMotion,
     haptics: haptics ?? this.haptics,
     appLock: appLock ?? this.appLock,
+    guideSeen: guideSeen ?? this.guideSeen,
     groups: groups ?? this.groups,
     recurrences: recurrences ?? this.recurrences,
     purchases: purchases ?? this.purchases,
@@ -647,6 +651,7 @@ class Ledger {
     'reduceMotion': reduceMotion,
     'haptics': haptics,
     'appLock': appLock,
+    'guideSeen': guideSeen,
     'groups': groups,
     'recurrences': recurrences,
     'purchases': purchases,

@@ -48,6 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         reduceMotion: ledger.reduceMotion,
         haptics: ledger.haptics,
         appLock: ledger.appLock,
+        guideSeen: ledger.guideSeen,
       ),
     );
   }
@@ -147,7 +148,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '復元',
           ) &&
           mounted) {
-        await apply(next.copyWith(appLock: ledger.appLock));
+        await apply(
+          next.copyWith(appLock: ledger.appLock, guideSeen: ledger.guideSeen),
+        );
       }
     } on Object catch (error) {
       if (mounted) {
@@ -195,6 +198,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     body: ListView(
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
       children: [
+        SettingRow(
+          '使い方',
+          Icons.help_outline_rounded,
+          subtitle: 'はじめてのガイドを見直す',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (route) => GettingStarted(
+                review: true,
+                onClose: () => Navigator.pop(route),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         const SectionHeading('表示'),
         if (_android)
           SettingRow(
@@ -572,6 +589,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 category: result,
                 memo: e.memo,
                 points: e.points,
+                info: e.info,
               )
             else
               e,

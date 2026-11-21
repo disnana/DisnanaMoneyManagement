@@ -22,6 +22,7 @@ part 'book_screens.dart';
 part 'plan_screens.dart';
 part 'card_screen.dart';
 part 'launcher_screen.dart';
+part 'guide_screen.dart';
 
 void main() => runApp(ManeApp(storage: DeviceLedgerStorage()));
 
@@ -67,6 +68,7 @@ class _ManeAppState extends State<ManeApp> with WidgetsBindingObserver {
   bool _loadFailed = false;
   String? _launcherId;
   bool _locked = false;
+  bool _showGuide = false;
   bool _authenticating = false;
   bool _authFailed = false;
 
@@ -126,6 +128,7 @@ class _ManeAppState extends State<ManeApp> with WidgetsBindingObserver {
         setState(() {
           _ledger = ledger;
           _locked = _mobile && ledger.appLock;
+          _showGuide = !_locked && !ledger.guideSeen && ledger.entries.isEmpty;
         });
       }
     } on Object {
@@ -148,6 +151,13 @@ class _ManeAppState extends State<ManeApp> with WidgetsBindingObserver {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  void finishGuide() {
+    final ledger = _ledger;
+    if (!_showGuide || ledger == null) return;
+    setState(() => _showGuide = false);
+    _save(ledger.copyWith(guideSeen: true));
   }
 
   ThemeData _theme(Brightness brightness) {
@@ -241,7 +251,9 @@ class _ManeAppState extends State<ManeApp> with WidgetsBindingObserver {
       _ => ThemeMode.system,
     },
     home: _ledger != null
-        ? Workspace(ledger: _ledger!, save: _save, busy: _busy)
+        ? _showGuide
+              ? GettingStarted(onClose: finishGuide)
+              : Workspace(ledger: _ledger!, save: _save, busy: _busy)
         : Scaffold(
             body: Center(
               child: _loadFailed

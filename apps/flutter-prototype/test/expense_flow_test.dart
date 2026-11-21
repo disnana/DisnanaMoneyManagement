@@ -6,7 +6,7 @@ import 'package:mane_chan_prototype/main.dart';
 import 'package:material_ui/material_ui.dart';
 
 class TestStorage implements LedgerStorage {
-  Ledger ledger = Ledger.empty();
+  Ledger ledger = Ledger.empty().copyWith(guideSeen: true);
   bool failNextSave = false;
 
   @override
@@ -153,6 +153,32 @@ void main() {
       expect(find.text('該当する取引はありません。'), findsOneWidget);
     },
   );
+
+  testWidgets('shows the guide once and lets users reopen it from settings', (
+    tester,
+  ) async {
+    final storage = TestStorage()..ledger = Ledger.empty();
+    await tester.pumpWidget(ManeApp(storage: storage));
+    await tester.pumpAndSettle();
+    expect(find.text('画面下の＋から記録'), findsOneWidget);
+    await tester.tap(find.text('次へ'));
+    await tester.pumpAndSettle();
+    expect(find.text('何にいくら使ったか確認'), findsOneWidget);
+    await tester.tap(find.text('次へ'));
+    await tester.pumpAndSettle();
+    expect(find.text('カードの未払いとポイント'), findsOneWidget);
+    await tester.tap(find.text('次へ'));
+    await tester.pumpAndSettle();
+    expect(find.text('目的に合わせて貯金'), findsOneWidget);
+    await tester.tap(find.text('はじめる'));
+    await tester.pumpAndSettle();
+    expect(storage.ledger.guideSeen, isTrue);
+    await tester.tap(find.byTooltip('設定'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('使い方'));
+    await tester.pumpAndSettle();
+    expect(find.text('画面下の＋から記録'), findsOneWidget);
+  });
 
   testWidgets('keeps the yen sign when hiding the public total', (
     tester,
