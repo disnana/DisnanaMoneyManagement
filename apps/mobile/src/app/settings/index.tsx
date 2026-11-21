@@ -9,6 +9,7 @@ import Constants from 'expo-constants';
 import { Group, Row, Screen, Segmented, SectionTitle } from '@/ui/kit';
 import { useThemePref, type ThemePref } from '@/lib/themePref';
 import { usePalette } from '@/lib/theme';
+import { getLauncherIcons } from '@/lib/launcherIcons';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
@@ -23,6 +24,7 @@ export default function Settings() {
   const [reduceMotion, setReduceMotion] = useMotionPreference();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
   const lockOn = useLockEnabled();
+  const [launcherIcons] = useState(getLauncherIcons);
   const { state } = useFinance();
   const pendingTotal = getPendingAdvances(state.transactions).reduce((n, t) => n + t.amount, 0);
   return (
@@ -41,6 +43,13 @@ export default function Settings() {
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           「自動」は端末の設定に合わせます。
         </Text>
+
+        {launcherIcons.length > 1 ? (
+          <Group>
+            <Row title="アプリアイコン" icon={{ ios: 'app', android: 'apps' }} chevron
+              onPress={() => router.push('/settings/app-icon')} />
+          </Group>
+        ) : null}
 
         <SectionTitle>操作</SectionTitle>
         <Group>

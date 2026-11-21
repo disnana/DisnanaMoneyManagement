@@ -16,7 +16,7 @@
       }
     },
     "android": {
-      "package": "com.disnana.moneymanagement",
+      "package": "com.disnana.mane_chan",
       "adaptiveIcon": {
         "backgroundColor": "#0F766E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,7 +41,8 @@
       ],
       "expo-sqlite",
       "expo-local-authentication",
-      "./plugins/with-finance-backup"
+      "./plugins/with-finance-backup",
+      "./plugins/with-launcher-icons"
     ],
     "experiments": {
       "typedRoutes": true,

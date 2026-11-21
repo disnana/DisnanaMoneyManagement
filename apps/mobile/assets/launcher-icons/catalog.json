@@ -1,0 +1,9 @@
+[
+  { "id": "smile_mint", "label": "にっこり・ミント" },
+  { "id": "smile_teal", "label": "にっこり・深い青緑" },
+  { "id": "smirk_mint", "label": "得意げ・ミント" },
+  { "id": "smirk_teal", "label": "得意げ・深い青緑" },
+  { "id": "ledger_mint", "label": "家計簿・ミント" },
+  { "id": "ledger_teal", "label": "家計簿・深い青緑" },
+  { "id": "classic", "label": "クラシック" }
+]
