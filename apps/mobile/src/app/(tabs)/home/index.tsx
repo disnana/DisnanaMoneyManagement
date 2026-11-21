@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text } from 'react-native';
+import { Modal, Pressable, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
@@ -10,6 +10,9 @@ import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
 import { HeroCard, MonthlyCashFlow } from '@/ui/HeroCard';
+import { GettingStarted } from '@/ui/GettingStarted';
+import { readPreference, savePreference } from '@/lib/preferences';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { Group, Row, SectionTitle } from '@/ui/kit';
 import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
@@ -25,6 +28,21 @@ export default function Home() {
   const { state, visibleState } = useFinance();
   const balances = useCurrentBalances();
   const [showAllBalances, setShowAllBalances] = useState(false);
+  const reduceMotion = useAppReducedMotion();
+  const [showGuide, setShowGuide] = useState(() =>
+    state.transactions.length === 0 && readPreference('dmm_start_guide') !== 'done');
+  useEffect(() => {
+    if (state.transactions.length > 0 && readPreference('dmm_start_guide') !== 'done') {
+      savePreference('dmm_start_guide', 'done');
+      setShowGuide(false);
+    }
+  }, [state.transactions.length]);
+
+  function closeGuide() {
+    savePreference('dmm_start_guide', 'done');
+    setShowGuide(false);
+  }
+
   const assets = visibleState.accounts.reduce((sum, account) => sum + (balances[account.id] ?? 0), 0);
   const accounts = visibleState.accounts.filter((account) =>
     account.type !== 'credit' &&
@@ -32,6 +50,14 @@ export default function Home() {
   );
   const listed = showAllBalances ? accounts : accounts.slice(0, BALANCE_PREVIEW_COUNT);
   const banks = new Map(state.accounts.map((account) => [account.id, account]));
+
+  if (showGuide) {
+    return (
+      <Modal visible presentationStyle="fullScreen" animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={closeGuide}>
+        <GettingStarted onClose={closeGuide} />
+      </Modal>
+    );
+  }
 
   return (
     <MonthScreen showMonthBar={false}>
