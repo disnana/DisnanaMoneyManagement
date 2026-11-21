@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
@@ -15,6 +15,7 @@ import { MonthScreen } from '@/ui/MonthScreen';
 import { TxRow } from '@/ui/TxRow';
 
 const BALANCE_PREVIEW_COUNT = 4;
+const EXPRESSIVE_HOME = Platform.OS === 'android';
 
 function openAccount(id: string) {
   router.navigate({ pathname: '/accounts/[id]', params: { id } }, { withAnchor: true });
@@ -37,13 +38,13 @@ export default function Home() {
     <MonthScreen showMonthBar={false}>
       {(month) => (
         <>
-          <HeroCard assets={assets} />
-          <SectionTitle>月の収支</SectionTitle>
-          <MonthlyCashFlow month={month} />
+          <HeroCard assets={assets} expressive={EXPRESSIVE_HOME} />
+          {EXPRESSIVE_HOME ? null : <SectionTitle>月の収支</SectionTitle>}
+          <MonthlyCashFlow month={month} expressive={EXPRESSIVE_HOME} />
           <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
-          <AccountSummaryGroup>
+          <AccountSummaryGroup flat={EXPRESSIVE_HOME}>
             {listed.length ? listed.map((account) => (
-              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0}
+              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0} flat={EXPRESSIVE_HOME}
                 linkedBank={banks.get(account.linkedBankAccountId ?? '')} onPress={() => openAccount(account.id)} />
             )) : [<Row key="empty" compact title="この家計グループに表示する口座がありません" />]}
             {accounts.length > BALANCE_PREVIEW_COUNT ? (
@@ -51,7 +52,7 @@ export default function Home() {
                 onPress={() => setShowAllBalances((expanded) => !expanded)}
                 style={({ pressed }) => ({
                   minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : p.card,
+                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : EXPRESSIVE_HOME ? 'transparent' : p.card,
                 })}>
                 <Text style={{ color: p.tint, fontSize: 13, fontWeight: '600' }}>
                   {showAllBalances ? '口座を折りたたむ' : `残りの${accounts.length - BALANCE_PREVIEW_COUNT}件を表示`}
@@ -85,11 +86,11 @@ function HomeActivity({ month, balances }: { month: string; balances: Record<str
       {statements.length > 0 ? (
         <>
           <SectionTitle>カードの支払い</SectionTitle>
-          <AccountSummaryGroup>
+          <AccountSummaryGroup flat={EXPRESSIVE_HOME}>
             {statements.map((statement) => {
               const { card } = statement;
               const warning = getPaymentWarning(statement, today);
-              return <AccountSummaryRow key={card.id} account={card} balance={balances[card.id] ?? 0}
+              return <AccountSummaryRow key={card.id} account={card} balance={balances[card.id] ?? 0} flat={EXPRESSIVE_HOME}
                 bill={{ label: `${formatMonthLabel(month)}分の残額`, remaining: statement.thisMonthRemaining,
                   warning: warning === null ? undefined : warning === 0 ? '今日が支払日' : `支払日まであと${warning}日` }} onPress={() => openAccount(card.id)} />;
             })}
