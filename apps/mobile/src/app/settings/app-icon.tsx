@@ -1,42 +1,61 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Stack } from 'expo-router';
 import { Image } from 'expo-image';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { getLauncherIcon, getLauncherIcons, selectLauncherIcon } from '@/lib/launcherIcons';
 import { usePalette } from '@/lib/theme';
-import { Screen } from '@/ui/kit';
+import { Group, Screen } from '@/ui/kit';
+import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 
 export default function AppIconSettings() {
   const p = usePalette();
   const [icons] = useState(getLauncherIcons);
   const [selected, setSelected] = useState(getLauncherIcon);
+  const lastFixedTone = useRef(selected?.endsWith('_teal') ? 'teal' : 'mint');
+  const canFollowTheme = icons.some(({ nightPreview }) => nightPreview !== undefined);
+  const followsTheme = icons.some(({ id, nightPreview }) => id === selected && nightPreview !== undefined);
+  const choices = icons.filter(({ nightPreview }) => (nightPreview !== undefined) === followsTheme);
 
   function choose(id: string) {
     if (id === selected) return;
     try {
       selectLauncherIcon(id);
       setSelected(id);
+      if (id.endsWith('_mint')) lastFixedTone.current = 'mint';
+      if (id.endsWith('_teal')) lastFixedTone.current = 'teal';
     } catch {
       setSelected(getLauncherIcon());
       Alert.alert('アイコンを変更できませんでした');
     }
   }
 
+  function changeMode(on: boolean) {
+    const family = selected?.replace(/_(auto|mint|teal)$/, '');
+    const suffix = on ? '_auto' : '_' + lastFixedTone.current;
+    const next = icons.find(({ id }) => id === family + suffix)
+      ?? icons.find(({ id }) => id.endsWith(suffix));
+    if (next) choose(next.id);
+  }
+
   return (
     <>
       <Stack.Screen options={{ title: 'アプリアイコン' }} />
       <Screen>
-        {icons.some(({ nightPreview }) => nightPreview !== undefined) ? (
-          <Text style={{ color: p.textSecondary }}>
-            自動は端末のダークモードに連動します。ホームアプリによっては表示が切り替わらない場合があります。
-          </Text>
+        {canFollowTheme ? (
+          <Group>
+            <SettingsSwitchRow title="端末の明暗に合わせる" checked={followsTheme} onChange={changeMode}
+              subtitle={followsTheme
+                ? 'ホームアプリによっては色が切り替わらない場合があります。'
+                : '好みの絵柄と色を固定します。'} />
+          </Group>
         ) : null}
         {icons.length === 0 ? (
           <Text style={{ color: p.textSecondary }}>アプリアイコンの変更には対応するAndroid版が必要です。</Text>
         ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            {icons.map(({ id, label, preview, nightPreview }) => {
+            {choices.map(({ id, label, preview, nightPreview }) => {
               const active = selected === id;
+              const [name, variant] = label.split('・');
               return (
                 <Pressable
                   key={id}
@@ -56,7 +75,14 @@ export default function AppIconSettings() {
                       <Image source={nightPreview} style={{ width: 40, height: 40, borderRadius: 10 }} />
                     </View>
                   ) : <Image source={preview} style={{ width: 58, height: 58, borderRadius: 13 }} />}
-                  <Text style={{ color: p.text, textAlign: 'center', fontWeight: active ? '700' : '500' }}>{label}</Text>
+                  <View style={{ alignItems: 'center' }}>
+                    <Text style={{ color: p.text, textAlign: 'center', fontWeight: active ? '700' : '500' }}>{name}</Text>
+                    {variant && !followsTheme ? (
+                      <Text style={{ color: p.textSecondary, fontSize: 13, textAlign: 'center' }}>
+                        {variant.replace(/固定$/, '')}
+                      </Text>
+                    ) : null}
+                  </View>
                 </Pressable>
               );
             })}
