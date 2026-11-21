@@ -1,7 +1,31 @@
-import { Stack, router } from 'expo-router';
+import { Stack, router, type NativeStackNavigationOptions } from 'expo-router';
+import { Platform } from 'react-native';
 import { HeaderAction } from '@/ui/HeaderAction';
 import { androidSettingsTransition, useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
+
+function renderBackButton() {
+  return (
+    <HeaderAction name={{ ios: 'chevron.left', android: 'arrow_back' }} label="戻る" circular={Platform.OS === 'ios'}
+      onPress={() => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/accounts');
+      }} />
+  );
+}
+
+const settingsIndexOptions: NativeStackNavigationOptions = {
+  title: '設定',
+  ...(Platform.OS === 'ios' ? {
+    unstable_headerLeftItems: () => [{
+      type: 'custom',
+      element: renderBackButton(),
+      hidesSharedBackground: true,
+    }],
+  } : {
+    headerLeft: renderBackButton,
+  }),
+};
 
 export default function Layout() {
   const p = usePalette();
@@ -12,12 +36,7 @@ export default function Layout() {
       headerStyle: { backgroundColor: p.bg }, headerTintColor: p.text, headerShadowVisible: false,
       contentStyle: { backgroundColor: p.bg },
     }}>
-      <Stack.Screen name="index" options={{ title: '設定', headerLeft: () => (
-        <HeaderAction name={{ ios: 'chevron.left', android: 'arrow_back' }} label="戻る" onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/accounts');
-        }} />
-      ) }} />
+      <Stack.Screen name="index" options={settingsIndexOptions} />
     </Stack>
   );
 }
