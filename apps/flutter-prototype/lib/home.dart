@@ -149,7 +149,7 @@ class HomeContent extends StatelessWidget {
                 const SizedBox(height: 11),
                 LinearProgressIndicator(
                   value: (spent / ledger.budget).clamp(0, 1),
-                  minHeight: 6,
+                  minHeight: 9,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 const SizedBox(height: 8),

@@ -1,5 +1,10 @@
 part of 'main.dart';
 
+typedef _MonthlyFlow = ({String label, int income, int spending});
+
+const _cashChartHeight = 132.0;
+final _compactYen = NumberFormat.compact(locale: 'ja_JP');
+
 class AnalyticsContent extends StatefulWidget {
   const AnalyticsContent({
     super.key,
@@ -35,7 +40,7 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
           entries: ledger.monthEntries(moveMonth(month, offset), group: group),
         ),
     ];
-    final values = [
+    final values = <_MonthlyFlow>[
       for (final item in history)
         (
           label: '${item.month.month}月',
@@ -44,7 +49,7 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
         ),
     ];
     final peak = values.fold(
-      1,
+      0,
       (max, item) =>
           [max, item.income, item.spending].reduce((a, b) => a > b ? a : b),
     );
@@ -96,53 +101,13 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
           const SizedBox(height: 23),
           const SectionHeading('6か月の収支'),
           const SizedBox(height: 13),
-          if (peak == 1)
+          if (peak == 0)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 18),
               child: Text('取引を記録すると、月ごとの変化が見られます。'),
             )
           else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (final item in values)
-                  Expanded(
-                    child: Tooltip(
-                      message:
-                          '${item.label}　収入 ${yen(item.income)}　支出 ${yen(item.spending)}',
-                      child: Semantics(
-                        label:
-                            '${item.label}　収入 ${yen(item.income)}　支出 ${yen(item.spending)}',
-                        excludeSemantics: true,
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: 108,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  _ColumnBar(
-                                    value: item.income / peak,
-                                    color: context.income,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  _ColumnBar(
-                                    value: item.spending / peak,
-                                    color: context.expense,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(item.label, style: context.type.labelSmall),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            _CashFlowHistory(key: ValueKey(month), months: values, peak: peak),
           const SizedBox(height: 20),
           const Divider(),
           const SizedBox(height: 18),
@@ -212,9 +177,9 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
                     ),
                     const SizedBox(height: 7),
                     LinearProgressIndicator(
-                      value: item.value / ranked.first.value,
+                      value: item.value / composition,
                       color: highlight,
-                      minHeight: 5,
+                      minHeight: 8,
                       borderRadius: BorderRadius.circular(5),
                     ),
                   ],
@@ -227,14 +192,206 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
   }
 }
 
+class _CashFlowHistory extends StatefulWidget {
+  const _CashFlowHistory({super.key, required this.months, required this.peak});
+  final List<_MonthlyFlow> months;
+  final int peak;
+
+  @override
+  State<_CashFlowHistory> createState() => _CashFlowHistoryState();
+}
+
+class _CashFlowHistoryState extends State<_CashFlowHistory> {
+  late int selected = widget.months.length - 1;
+
+  @override
+  Widget build(BuildContext context) {
+    const divisions = 3;
+    final step = _axisStep((widget.peak / divisions).ceil());
+    final limit = step * divisions;
+    final line = context.colors.outlineVariant;
+    final selection = widget.months[selected];
+    final labelStyle = context.type.labelSmall?.copyWith(
+      color: context.colors.onSurfaceVariant,
+      fontFeatures: _figures,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ExcludeSemantics(
+              child: SizedBox(
+                width: 42,
+                height: _cashChartHeight,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    for (var i = 0; i <= divisions; i++)
+                      Positioned(
+                        top: _cashChartHeight * i / divisions - 7,
+                        left: 0,
+                        right: 6,
+                        child: Text(
+                          _compactYen.format(limit - step * i),
+                          textAlign: TextAlign.end,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: labelStyle,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: Stack(
+                children: [
+                  SizedBox(
+                    height: _cashChartHeight,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        for (var i = 0; i <= divisions; i++)
+                          Divider(height: 1, thickness: 1, color: line),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      for (final (index, item) in widget.months.indexed)
+                        Expanded(
+                          child: _CashFlowMonth(
+                            flow: item,
+                            limit: limit,
+                            selected: index == selected,
+                            onTap: () => setState(() => selected = index),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 12,
+          runSpacing: 5,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(selection.label, style: context.type.labelLarge),
+            _ChartLabel('収入', context.income, amount: selection.income),
+            _ChartLabel('支出', context.expense, amount: selection.spending),
+          ],
+        ),
+      ],
+    );
+  }
+
+  int _axisStep(int minimum) {
+    var unit = 1;
+    while (unit * 10 <= minimum) {
+      unit *= 10;
+    }
+    return [1, 2, 5, 10].firstWhere((n) => n * unit >= minimum) * unit;
+  }
+}
+
+class _CashFlowMonth extends StatelessWidget {
+  const _CashFlowMonth({
+    required this.flow,
+    required this.limit,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _MonthlyFlow flow;
+  final int limit;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(8);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${flow.label} 収入 ${yen(flow.income)} 支出 ${yen(flow.spending)}',
+      onTap: onTap,
+      excludeSemantics: true,
+      child: InkWell(
+        borderRadius: radius,
+        onTap: onTap,
+        child: Ink(
+          decoration: BoxDecoration(
+            color: selected
+                ? context.colors.primary.withValues(alpha: 0.09)
+                : null,
+            borderRadius: radius,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = ((constraints.maxWidth - 12) / 2).clamp(1.0, 28.0);
+              return Column(
+                children: [
+                  SizedBox(
+                    height: _cashChartHeight,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _ColumnBar(
+                          width: width,
+                          value: flow.income / limit,
+                          color: context.income,
+                        ),
+                        const SizedBox(width: 4),
+                        _ColumnBar(
+                          width: width,
+                          value: flow.spending / limit,
+                          color: context.expense,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Text(
+                      flow.label,
+                      maxLines: 1,
+                      style: context.type.labelSmall?.copyWith(
+                        fontWeight: selected
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ColumnBar extends StatelessWidget {
-  const _ColumnBar({required this.value, required this.color});
+  const _ColumnBar({
+    required this.width,
+    required this.value,
+    required this.color,
+  });
+  final double width;
   final double value;
   final Color color;
   @override
   Widget build(BuildContext context) => Container(
-    width: 13,
-    height: 108 * value,
+    width: width,
+    height: _cashChartHeight * value,
     decoration: BoxDecoration(
       color: color,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
