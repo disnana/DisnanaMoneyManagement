@@ -37,7 +37,16 @@
           "backgroundColor": "#F2F3F7",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 96,
-          "dark": { "backgroundColor": "#000000" }
+          "dark": { "backgroundColor": "#000000" },
+          "android": {
+            "image": "./assets/launcher-icons/smile_mint-foreground.png",
+            "imageWidth": 132,
+            "backgroundColor": "#F3F7F6",
+            "dark": {
+              "image": "./assets/launcher-icons/smile_teal-foreground.png",
+              "backgroundColor": "#0E1413"
+            }
+          }
         }
       ],
       "expo-sqlite",
