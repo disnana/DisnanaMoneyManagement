@@ -39,11 +39,17 @@ export function LockGate({ children }: { children: ReactNode }) {
     let leftAt = 0;
     const sub = AppState.addEventListener('change', (s) => {
       setCovered(s !== 'active');
-      if (s === 'background') leftAt = Date.now();
-      if (s === 'active' && leftAt && Date.now() - leftAt > 5000) {
+      if (s === 'background') {
+        // Android may launch a separate activity for device credentials.
+        leftAt = busy.current ? 0 : Date.now();
+      }
+      if (s === 'active') {
+        const shouldRelock = leftAt > 0 && Date.now() - leftAt > 5000;
         leftAt = 0;
-        setLocked(true);
-        void unlock();
+        if (shouldRelock && !busy.current) {
+          setLocked(true);
+          void unlock();
+        }
       }
     });
     return () => sub.remove();
