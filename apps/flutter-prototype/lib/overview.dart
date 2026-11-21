@@ -23,58 +23,107 @@ class AnalyticsContent extends StatefulWidget {
   State<AnalyticsContent> createState() => _AnalyticsContentState();
 }
 
+enum _AnalyticsView { breakdown, trend }
+
+class _CategoryFlow {
+  _CategoryFlow(this.name);
+  final String name;
+  final entries = <Entry>[];
+  int amount = 0;
+}
+
+class _AnalyticsSummary {
+  _AnalyticsSummary(Ledger ledger, DateTime month, String? group) {
+    final start = moveMonth(month, -5);
+    final end = moveMonth(month, 1);
+    final income = List<int>.filled(6, 0);
+    final spending = List<int>.filled(6, 0);
+    final byKind = <EntryKind, Map<String, _CategoryFlow>>{
+      EntryKind.income: {},
+      EntryKind.expense: {},
+    };
+    for (final entry in ledger.entries) {
+      if (!entry.countsInSummary ||
+          entry.kind == EntryKind.transfer ||
+          (group != null && entry.info.group != group) ||
+          entry.date.isBefore(start) ||
+          !entry.date.isBefore(end)) {
+        continue;
+      }
+      final date = entry.date.toLocal();
+      final index = (date.year - start.year) * 12 + date.month - start.month;
+      final expense = entry.kind == EntryKind.expense;
+      final amount = expense ? entry.paid : entry.inflow;
+      (expense ? spending : income)[index] += amount;
+      if (index == 5 && amount > 0) {
+        byKind[entry.kind]!.putIfAbsent(
+            entry.category,
+            () => _CategoryFlow(entry.category),
+          )
+          ..amount += amount
+          ..entries.add(entry);
+      }
+    }
+    months = [
+      for (var i = 0; i < 6; i++)
+        (
+          label: '${moveMonth(start, i).month}月',
+          income: income[i],
+          spending: spending[i],
+        ),
+    ];
+    categories = {
+      for (final item in byKind.entries)
+        item.key: item.value.values.toList()
+          ..sort((a, b) {
+            final amountOrder = b.amount.compareTo(a.amount);
+            return amountOrder == 0 ? a.name.compareTo(b.name) : amountOrder;
+          }),
+    };
+    peak = months.fold(
+      0,
+      (peak, item) => math.max(peak, math.max(item.income, item.spending)),
+    );
+  }
+
+  late final List<_MonthlyFlow> months;
+  late final Map<EntryKind, List<_CategoryFlow>> categories;
+  late final int peak;
+}
+
 class _AnalyticsContentState extends State<AnalyticsContent> {
   EntryKind kind = EntryKind.expense;
+  _AnalyticsView view = _AnalyticsView.breakdown;
+  late var summary = _AnalyticsSummary(
+    widget.ledger,
+    widget.month,
+    widget.group,
+  );
+
+  @override
+  void didUpdateWidget(covariant AnalyticsContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.ledger, widget.ledger) ||
+        oldWidget.month != widget.month ||
+        oldWidget.group != widget.group) {
+      summary = _AnalyticsSummary(widget.ledger, widget.month, widget.group);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ledger = widget.ledger;
     final month = widget.month;
-    final group = widget.group;
-    final selected = ledger.monthEntries(month, group: group);
-    final income = sumKind(selected, EntryKind.income);
-    final spending = sumKind(selected, EntryKind.expense);
-    final history = [
-      for (var offset = -5; offset <= 0; offset++)
-        (
-          month: moveMonth(month, offset),
-          entries: ledger.monthEntries(moveMonth(month, offset), group: group),
-        ),
+    final current = summary.months.last;
+    final income = current.income;
+    final spending = current.spending;
+    final ranked = summary.categories[kind]!;
+    final composition = ranked.fold(0, (total, item) => total + item.amount);
+    final colors = context.dark ? _darkCategoryColors : _lightCategoryColors;
+    final slices = [
+      for (final (index, item) in ranked.indexed)
+        (amount: item.amount, color: colors[index % colors.length]),
     ];
-    final values = <_MonthlyFlow>[
-      for (final item in history)
-        (
-          label: '${item.month.month}月',
-          income: sumKind(item.entries, EntryKind.income),
-          spending: sumKind(item.entries, EntryKind.expense),
-        ),
-    ];
-    final peak = values.fold(
-      0,
-      (max, item) =>
-          [max, item.income, item.spending].reduce((a, b) => a > b ? a : b),
-    );
-    final expense = kind == EntryKind.expense;
-    final composition = expense ? spending : income;
-    final highlight = expense ? context.expense : context.income;
-    final byCategory = <String, int>{};
-    final matching = selected
-        .where(
-          (e) =>
-              e.kind == kind &&
-              e.countsInSummary &&
-              (expense ? e.paid : e.inflow) > 0,
-        )
-        .toList();
-    for (final entry in matching) {
-      final amount = expense ? entry.paid : entry.inflow;
-      byCategory.update(
-        entry.category,
-        (previous) => previous + amount,
-        ifAbsent: () => amount,
-      );
-    }
-    final ranked = byCategory.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
     return PageInset(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -98,98 +147,225 @@ class _AnalyticsContentState extends State<AnalyticsContent> {
               _ChartLabel('支出', context.expense, amount: spending),
             ],
           ),
-          const SizedBox(height: 23),
-          const SectionHeading('6か月の収支'),
-          const SizedBox(height: 13),
-          if (peak == 0)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
-              child: Text('取引を記録すると、月ごとの変化が見られます。'),
-            )
-          else
-            _CashFlowHistory(key: ValueKey(month), months: values, peak: peak),
-          const SizedBox(height: 20),
-          const Divider(),
           const SizedBox(height: 18),
-          const SectionHeading('カテゴリ別の内訳'),
-          const SizedBox(height: 8),
-          SegmentedButton<EntryKind>(
+          SegmentedButton<_AnalyticsView>(
             showSelectedIcon: false,
             segments: const [
-              ButtonSegment(value: EntryKind.expense, label: Text('支出')),
-              ButtonSegment(value: EntryKind.income, label: Text('収入')),
+              ButtonSegment(value: _AnalyticsView.breakdown, label: Text('内訳')),
+              ButtonSegment(value: _AnalyticsView.trend, label: Text('推移')),
             ],
-            selected: {kind},
-            onSelectionChanged: (value) => setState(() => kind = value.single),
+            selected: {view},
+            onSelectionChanged: (value) => setState(() => view = value.single),
           ),
-          const SizedBox(height: 10),
-          if (ranked.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text('この月の${kind.label}はありません。'),
+          const SizedBox(height: 16),
+          if (view == _AnalyticsView.trend) ...[
+            const SectionHeading('6か月の収支'),
+            const SizedBox(height: 13),
+            if (summary.peak == 0)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 18),
+                child: Text('取引を記録すると、月ごとの変化が見られます。'),
+              )
+            else
+              _CashFlowHistory(
+                key: ValueKey(month),
+                months: summary.months,
+                peak: summary.peak,
+              ),
+          ] else ...[
+            const SectionHeading('カテゴリ別の内訳'),
+            const SizedBox(height: 8),
+            SegmentedButton<EntryKind>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: EntryKind.expense, label: Text('支出')),
+                ButtonSegment(value: EntryKind.income, label: Text('収入')),
+              ],
+              selected: {kind},
+              onSelectionChanged: (value) =>
+                  setState(() => kind = value.single),
             ),
-          for (final item in ranked)
-            InkWell(
-              onTap: () async {
-                final chosen = await Navigator.of(context).push<Entry>(
-                  MaterialPageRoute(
-                    builder: (route) => Scaffold(
-                      appBar: AppBar(title: Text(item.key)),
-                      body: ListView(
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          for (final entry in matching.where(
-                            (e) => e.category == item.key,
-                          ))
-                            EntryRow(
+            const SizedBox(height: 10),
+            if (ranked.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text('この月の${kind.label}はありません。'),
+              )
+            else
+              _CategoryDonut(
+                label: kind.label,
+                total: composition,
+                slices: slices,
+              ),
+            for (final (index, item) in ranked.indexed)
+              InkWell(
+                onTap: () async {
+                  final chosen = await Navigator.of(context).push<Entry>(
+                    MaterialPageRoute(
+                      builder: (route) => Scaffold(
+                        appBar: AppBar(title: Text(item.name)),
+                        body: ListView.builder(
+                          padding: const EdgeInsets.all(24),
+                          itemCount: item.entries.length,
+                          itemBuilder: (context, index) {
+                            final entry = item.entries[index];
+                            return EntryRow(
                               entry: entry,
                               ledger: ledger,
                               showDay: true,
                               onTap: () => Navigator.pop(route, entry),
-                            ),
-                        ],
+                            );
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                );
-                if (mounted && chosen != null) widget.onEdit(chosen);
-              },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(categoryIcon(item.key), size: 17),
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(item.key)),
-                        Money(item.value),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          width: 35,
-                          child: Text(
-                            '${(item.value / composition * 100).round()}%',
-                            textAlign: TextAlign.end,
-                            style: context.type.labelSmall,
+                  );
+                  if (mounted && chosen != null) widget.onEdit(chosen);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            categoryIcon(item.name),
+                            size: 17,
+                            color: slices[index].color,
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 7),
-                    LinearProgressIndicator(
-                      value: item.value / composition,
-                      color: highlight,
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(5),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(item.name)),
+                          Money(item.amount),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 35,
+                            child: Text(
+                              '${(item.amount / composition * 100).round()}%',
+                              textAlign: TextAlign.end,
+                              style: context.type.labelSmall,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      LinearProgressIndicator(
+                        value: item.amount / composition,
+                        color: slices[index].color,
+                        backgroundColor: context.colors.surfaceContainerHighest,
+                        minHeight: 8,
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+const _lightCategoryColors = [
+  Color(0xff28715e),
+  Color(0xffb15a38),
+  Color(0xff436ba2),
+  Color(0xff8d557c),
+  Color(0xff9a711e),
+  Color(0xff486968),
+  Color(0xff765fad),
+  Color(0xffa95154),
+];
+
+const _darkCategoryColors = [
+  Color(0xff70c4a9),
+  Color(0xfff1a07f),
+  Color(0xff8eb6ed),
+  Color(0xffdca5c6),
+  Color(0xffdcb568),
+  Color(0xff91b8b7),
+  Color(0xffb9a8e3),
+  Color(0xffed9a9d),
+];
+
+typedef _CategorySlice = ({int amount, Color color});
+
+class _CategoryDonut extends StatelessWidget {
+  const _CategoryDonut({
+    required this.label,
+    required this.total,
+    required this.slices,
+  });
+
+  final String label;
+  final int total;
+  final List<_CategorySlice> slices;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Center(
+      child: Semantics(
+        label: '$labelの円グラフ',
+        child: SizedBox.square(
+          dimension: 168,
+          child: CustomPaint(
+            painter: _CategoryDonutPainter(total, slices),
+            child: Center(
+              child: SizedBox(
+                width: 106,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('$label合計', style: context.type.labelMedium),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Money(total, size: 22),
                     ),
                   ],
                 ),
               ),
             ),
-        ],
+          ),
+        ),
       ),
-    );
+    ),
+  );
+}
+
+class _CategoryDonutPainter extends CustomPainter {
+  const _CategoryDonutPainter(this.total, this.slices);
+
+  final int total;
+  final List<_CategorySlice> slices;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const thickness = 24.0;
+    final center = size.center(Offset.zero);
+    final radius = (size.shortestSide - thickness) / 2;
+    final bounds = Rect.fromCircle(center: center, radius: radius);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = thickness;
+    var start = -math.pi / 2;
+    for (final slice in slices) {
+      final sweep = 2 * math.pi * slice.amount / total;
+      final gap = slices.length == 1 ? 0.0 : math.min(0.045, sweep / 5);
+      canvas.drawArc(
+        bounds,
+        start + gap / 2,
+        sweep - gap,
+        false,
+        paint..color = slice.color,
+      );
+      start += sweep;
+    }
   }
+
+  @override
+  bool shouldRepaint(_CategoryDonutPainter oldDelegate) =>
+      total != oldDelegate.total || !listEquals(slices, oldDelegate.slices);
 }
 
 class _CashFlowHistory extends StatefulWidget {

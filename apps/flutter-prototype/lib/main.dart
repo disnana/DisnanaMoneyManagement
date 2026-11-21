@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, listEquals, TargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:share_plus/share_plus.dart' hide XFile;
