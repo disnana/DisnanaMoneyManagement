@@ -1,0 +1,68 @@
+name: Android Play bundle
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/android-play-bundle.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  android-play-bundle:
+    name: Build unsigned Android App Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: bun install --frozen-lockfile
+      - run: bunx expo prebuild --platform android --no-install
+      - name: Build the bundle without Expo's development signing key
+        working-directory: apps/mobile/android
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/build.gradle')
+          text = path.read_text()
+          begin = text.index('        release {')
+          before, release = text[:begin], text[begin:]
+          generated = '            signingConfig signingConfigs.debug\n'
+          if release.count(generated) != 1:
+              raise RuntimeError('Expo release signing template changed')
+          path.write_text(before + release.replace(generated, '            signingConfig = null\n'))
+          PY
+          ./gradlew bundleRelease --no-daemon
+      - name: Check that the bundle has no development signature
+        working-directory: apps/mobile/android
+        run: |
+          test -s app/build/outputs/bundle/release/app-release.aab
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('app/build/outputs/bundle/release/app-release.aab') as bundle:
+              signed = [entry for entry in bundle.namelist() if entry.upper().startswith('META-INF/')
+                        and entry.upper().endswith(('.SF', '.RSA', '.DSA', '.EC'))]
+              if signed:
+                  raise RuntimeError('Expected an unsigned App Bundle')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mane-chan-unsigned-app-bundle
+          path: apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
