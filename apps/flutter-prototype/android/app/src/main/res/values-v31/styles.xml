@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="LaunchTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">@color/mane_launch_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_mane</item>
+        <item name="android:windowBackground">@color/mane_launch_bg</item>
+    </style>
+</resources>

@@ -1,0 +1,63 @@
+name: Flutter mobile prototype
+
+on:
+  push:
+    branches: [prototype/flutter-android]
+    paths:
+      - 'apps/flutter-prototype/**'
+      - '.github/workflows/flutter-mobile.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/flutter-prototype
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          channel: stable
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mane-chan-Flutter-debug-APK
+          path: apps/flutter-prototype/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.1'
+          channel: stable
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build ios --simulator
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mane-chan-Flutter-iOS-Simulator
+          path: apps/flutter-prototype/build/ios/iphonesimulator/Runner.app
+          if-no-files-found: error

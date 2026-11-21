@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="mipmap" name="mane_smile_auto">@mipmap/mane_smile_mint</item>
+    <item type="mipmap" name="mane_smirk_auto">@mipmap/mane_smirk_mint</item>
+    <item type="mipmap" name="mane_ledger_auto">@mipmap/mane_ledger_mint</item>
+</resources>
