@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { formatFullDate, formatMonthLabel, formatShortDate, getTodayString, shiftMonth } from '@dmm/core/utils/format';
+import { getJapaneseHoliday, withHolidayName } from '@dmm/core/utils/japaneseHolidays';
 import { tick } from '@/lib/haptics';
 import { metrics, usePalette } from '@/lib/theme';
 import { CalendarDialog } from './CalendarDialog';
 import { MonthPicker } from './MonthPicker';
+import { calendarDayNumber } from './calendarDayNumber';
 
 const WEEK = ['月', '火', '水', '木', '金', '土', '日'];
 const COLUMN_WIDTH = '14.285714%';
@@ -49,7 +51,7 @@ export function TransactionDatePicker({ date, title = '取引日を選ぶ', allo
   );
 
   return (
-    <CalendarDialog title={title} value={formatShortDate(selected)} onCancel={onCancel} onApply={() => onPick(selected)}>
+    <CalendarDialog title={title} value={withHolidayName(formatShortDate(selected), getJapaneseHoliday(selected))} onCancel={onCancel} onApply={() => onPick(selected)}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         {stepper(-1)}
         {allowMonthJump ? (
@@ -72,16 +74,17 @@ export function TransactionDatePicker({ date, title = '取引日を選ぶ', allo
           const value = `${month}-${String(day).padStart(2, '0')}`;
           const active = value === selected;
           if (day < 1 || day > days) return <View key={index} style={{ width: COLUMN_WIDTH, height: 44 }} />;
+          const holiday = getJapaneseHoliday(value);
           return (
-            <Pressable key={index} accessibilityRole="button" accessibilityLabel={formatFullDate(value)}
+            <Pressable key={index} accessibilityRole="button" accessibilityLabel={withHolidayName(formatFullDate(value), holiday)}
               accessibilityState={{ selected: active }} aria-pressed={active}
               onPress={() => { tick(); setSelected(value); }}
               style={({ pressed }) => ({
                 width: COLUMN_WIDTH, height: 44, alignItems: 'center', justifyContent: 'center', padding: 2,
                 borderRadius: metrics.controlRadius + 4, backgroundColor: active ? p.tint : pressed ? p.fill : 'transparent',
               })}>
-              <Text style={{ color: active ? p.onTint : value === today ? p.tint : p.text,
-                fontSize: 15, fontWeight: active || value === today ? '700' : '500' }}>{day}</Text>
+              <Text style={{ color: active ? p.onTint : value === today ? p.tint : holiday ? p.danger : p.text,
+                fontSize: 15, fontWeight: active || value === today ? '700' : '500' }}>{calendarDayNumber(day, holiday)}</Text>
             </Pressable>
           );
         })}
