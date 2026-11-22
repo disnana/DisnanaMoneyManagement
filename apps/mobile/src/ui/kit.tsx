@@ -1,13 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import Animated from 'react-native-reanimated';
 import { Platform, Pressable, type PressableProps, useColorScheme, ScrollViewProps, StyleSheet, Text, View } from 'react-native';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import type { SymbolViewProps } from 'expo-symbols';
+import { AppSymbol } from '@/ui/AppSymbol';
 import { fontFamily, metrics, usePalette } from '@/lib/theme';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
 import { formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
 import { FormScrollView } from './FormScrollView';
 import { MonthPicker } from './MonthPicker';
+import { historyStyles } from './historyStyles';
 
 /** Scrollable screen. On iOS the transparent large-title bar insets content automatically. */
 export function Screen({ children, ...rest }: ScrollViewProps & { children: ReactNode }) {
@@ -78,7 +80,7 @@ export function IconBadge({ name, color, size = 40, filledInDark = false }: {
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <SymbolView name={name} size={size * 0.48} tintColor={filled ? iconOnColor(color) : color} />
+      <AppSymbol name={name} size={size * 0.48} tintColor={filled ? iconOnColor(color) : color} />
     </View>
   );
 }
@@ -145,7 +147,7 @@ export function Row({
       {right ? (
         <Text style={{ color: rightColor ?? p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{right}</Text>
       ) : null}
-      {chevron ? <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={14} tintColor={p.textSecondary} /> : null}
+      {chevron ? <AppSymbol name={{ ios: 'chevron.right', android: 'chevron_right' }} size={14} tintColor={p.textSecondary} /> : null}
     </Pressable>
   );
 }
@@ -200,34 +202,49 @@ export function Segmented<T extends string>({
   );
 }
 
-export function MonthBar({ month, onChange }: { month: string; onChange: (m: string) => void }) {
+export function MonthBar({ month, onChange, heading = false }: { month: string; onChange: (m: string) => void; heading?: boolean }) {
   const p = usePalette();
   const [open, setOpen] = useState(false);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
     <Pressable
-      hitSlop={8}
+      hitSlop={heading ? undefined : 8}
       accessibilityRole="button"
       accessibilityLabel={delta < 0 ? '前月' : '翌月'}
       onPress={() => {
         tick();
         onChange(shiftMonth(month, delta));
       }}
-      style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
-      <SymbolView name={name} size={18} tintColor={p.tint} />
+      style={({ pressed }) => heading
+        ? [historyStyles.iconButton, { backgroundColor: pressed ? p.fill : 'transparent' }]
+        : { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+      <AppSymbol name={name} size={18} tintColor={p.tint} />
+    </Pressable>
+  );
+  const previous = btn(-1, { ios: 'chevron.left', android: 'chevron_left' });
+  const next = btn(1, { ios: 'chevron.right', android: 'chevron_right' });
+  const picker = (
+    <Pressable accessibilityRole="button" accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
+      onPress={() => { tick(); setOpen(true); }}
+      style={({ pressed }) => heading
+        ? [historyStyles.period, { opacity: pressed ? 0.65 : 1 }]
+        : { minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+      <Text style={heading ? [historyStyles.periodTitle, { color: p.text }]
+        : { color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+      <AppSymbol name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
     </Pressable>
   );
   return (
     <>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-        {btn(-1, { ios: 'chevron.left', android: 'chevron_left' })}
-        <Pressable accessibilityRole="button" accessibilityLabel={`年月を選ぶ ${formatMonthLabel(month)}`}
-          onPress={() => { tick(); setOpen(true); }}
-          style={{ minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Text style={{ color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
-          <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
-        </Pressable>
-        {btn(1, { ios: 'chevron.right', android: 'chevron_right' })}
-      </View>
+      {heading ? (
+        <View style={historyStyles.toolbar}>
+          {picker}
+          <View style={historyStyles.stepButtons}>{previous}{next}</View>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+          {previous}{picker}{next}
+        </View>
+      )}
       {open ? <MonthPicker month={month} onCancel={() => setOpen(false)} onPick={(m) => {
         setOpen(false);
         onChange(m);

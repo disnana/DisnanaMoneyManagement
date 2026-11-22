@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { router, usePathname } from 'expo-router';
 import { Pressable } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { AppSymbol } from '@/ui/AppSymbol';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
 import { tick } from '@/lib/haptics';
@@ -30,7 +30,7 @@ export function AddButton() {
         alignItems: 'center', justifyContent: 'center', backgroundColor: p.tint, opacity: pressed ? 0.8 : 1,
         transform: [{ scale: !reduceMotion && pressed ? 0.94 : 1 }],
       })}>
-      <SymbolView name={{ ios: 'plus', android: 'add' }} size={27} tintColor={p.onTint} />
+      <AppSymbol name={{ ios: 'plus', android: 'add' }} size={27} tintColor={p.onTint} />
     </Pressable>
   );
 }

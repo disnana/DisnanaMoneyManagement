@@ -1,19 +1,28 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
-import type { TransactionType } from '@dmm/core/types/finance';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
-import { formatMonthLabel } from '@dmm/core/utils/format';
 import { useFinance } from '@/lib/store';
-import { Segmented } from '@/ui/kit';
-import { TxGroups } from '@/ui/TxGroups';
-import { LedgerPicker } from '@/ui/LedgerPicker';
 import { HeaderAction } from '@/ui/HeaderAction';
-import { MonthlyCashFlow } from '@/ui/HeroCard';
-import { MonthScreen } from '@/ui/MonthScreen';
+import { HistorySummary } from '@/ui/HistorySummary';
+import { historyMetrics as m } from '@/ui/historyStyles';
+import { Screen } from '@/ui/kit';
+import { MonthPager } from '@/ui/MonthScreen';
 import { TransactionCalendar } from '@/ui/TransactionCalendar';
+import { TransactionHistoryList } from '@/ui/TransactionHistoryList';
 
-type Filter = 'all' | TransactionType;
+function CalendarMonth({ month, isPreview }: { month: string; isPreview: boolean }) {
+  const { visibleState } = useFinance();
+  return (
+    <Screen directionalLockEnabled scrollEnabled={!isPreview}
+      contentContainerStyle={{ paddingBottom: m.bottom, width: '100%', maxWidth: m.maxWidth, alignSelf: 'center' }}>
+      <HistorySummary month={month} />
+      <View style={{ paddingHorizontal: m.medium, gap: m.medium }}>
+        <TransactionCalendar month={month} transactions={getMonthTransactions(visibleState.transactions, month)} isPreview={isPreview} />
+      </View>
+    </Screen>
+  );
+}
 
 export default function Transactions() {
   const [calendar, setCalendar] = useState(false);
@@ -21,46 +30,18 @@ export default function Transactions() {
     <>
       <Stack.Screen options={{ headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <HeaderAction name={{ ios: 'magnifyingglass', android: 'search' }} label="取引を検索" onPress={() => router.push('/search')} />
-          <HeaderAction name={{ ios: 'list.bullet', android: 'view_list' }} label="一覧表示" selected={!calendar} onPress={() => setCalendar(false)} />
-          <HeaderAction name={{ ios: 'calendar', android: 'calendar_month' }} label="カレンダー表示" selected={calendar} onPress={() => setCalendar(true)} />
+          <HeaderAction targetSize={m.touch} name={{ ios: 'magnifyingglass', android: 'search' }}
+            label="取引を検索" onPress={() => router.push('/search')} />
+          <HeaderAction targetSize={m.touch} name={calendar
+            ? { ios: 'list.bullet', android: 'view_list' } : { ios: 'calendar', android: 'calendar_month' }}
+            label={calendar ? '一覧表示' : 'カレンダー表示'} onPress={() => setCalendar(!calendar)} />
         </View>
       ) }} />
-      <MonthScreen showMonthBar={false}>
-        {(month, isPreview) => <TransactionsMonth month={month} calendar={calendar} isPreview={isPreview} />}
-      </MonthScreen>
-    </>
-  );
-}
-
-function TransactionsMonth({ month, calendar, isPreview }: { month: string; calendar: boolean; isPreview: boolean }) {
-  const { visibleState, transactionFilter, setTransactionFilter } = useFinance();
-  const monthTransactions = getMonthTransactions(visibleState.transactions, month);
-  const transactions = useMemo(
-    () => transactionFilter === 'all' ? monthTransactions : monthTransactions.filter((tx) => tx.type === transactionFilter),
-    [monthTransactions, transactionFilter]
-  );
-
-  return (
-    <>
-      <LedgerPicker />
-      {!calendar ? <Segmented<Filter>
-        prominent
-        value={transactionFilter}
-        onChange={setTransactionFilter}
-        options={[
-          { id: 'all', label: 'すべて' },
-          { id: 'expense', label: '支出' },
-          { id: 'income', label: '収入' },
-          { id: 'transfer', label: '振替' },
-        ]}
-      /> : null}
-
-      <MonthlyCashFlow month={month} showNetSign={false} />
-      {calendar
-        ? <TransactionCalendar month={month} transactions={monthTransactions} isPreview={isPreview} />
-        : <TxGroups dayCards transactions={isPreview ? transactions.slice(0, 18) : transactions}
-          empty={`${formatMonthLabel(month)}の該当する取引はありません`} />}
+      <MonthPager>
+        {(month, isPreview) => calendar
+          ? <CalendarMonth month={month} isPreview={isPreview} />
+          : <TransactionHistoryList month={month} isPreview={isPreview} />}
+      </MonthPager>
     </>
   );
 }

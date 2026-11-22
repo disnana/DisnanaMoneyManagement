@@ -1,0 +1,53 @@
+import { StyleSheet } from 'react-native';
+
+// Logical units. Text can grow independently of controls and decorative icons.
+export const historyMetrics = {
+  gap: 4, small: 8, medium: 12, gutter: 20, section: 24, bottom: 48,
+  touch: 48, badge: 36, icon: 18, disclosure: 14, row: 64, rule: StyleSheet.hairlineWidth,
+  maxWidth: 760, stackedWidth: 326, previewRows: 18,
+  largeAmountSize: 38, compactAmountSize: 23, longAmountLength: 12,
+} as const;
+
+const m = historyMetrics;
+export const historyStyles = StyleSheet.create({
+  page: { flex: 1 },
+  column: { width: '100%', maxWidth: m.maxWidth, alignSelf: 'center', paddingBottom: m.bottom },
+  hero: { paddingHorizontal: m.gutter, paddingTop: m.gap, paddingBottom: m.medium },
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' },
+  period: { flexDirection: 'row', alignItems: 'center', gap: m.small, minHeight: m.touch, flexShrink: 1 },
+  periodTitle: { fontSize: 22, fontWeight: '700', fontVariant: ['tabular-nums'], flexShrink: 1 },
+  stepButtons: { flexDirection: 'row', alignItems: 'center' },
+  iconButton: { height: m.touch, width: m.touch, borderRadius: m.touch / 2, alignItems: 'center', justifyContent: 'center' },
+  context: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', rowGap: m.gap, columnGap: m.medium },
+  balance: { maxWidth: '100%', gap: m.gap },
+  scope: { flexDirection: 'row', alignItems: 'center', gap: m.gap, minHeight: m.touch, flexShrink: 1 },
+  scopeText: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
+  label: { fontSize: 14, fontWeight: '500' },
+  heroAmount: { fontSize: m.largeAmountSize, fontWeight: '700', fontVariant: ['tabular-nums'], flexShrink: 1 },
+  cashPair: { flexDirection: 'row', flexWrap: 'wrap', columnGap: m.medium, rowGap: m.small, marginTop: m.medium },
+  cashItem: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: m.small, rowGap: m.gap, flexGrow: 1, maxWidth: '100%' },
+  cashLabel: { flexDirection: 'row', alignItems: 'center', gap: m.gap },
+  cashAmount: { fontSize: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  listTitle: { paddingHorizontal: m.gutter, marginTop: m.medium, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: m.small },
+  title: { fontSize: 20, fontWeight: '700' },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: m.gutter, borderBottomWidth: m.rule },
+  filter: { minHeight: m.touch, minWidth: m.touch, flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: m.small, paddingHorizontal: m.gap },
+  filterText: { fontSize: 15, textAlign: 'center' },
+  selectedLine: { position: 'absolute', bottom: 0, width: 28, height: 3, borderRadius: 2 },
+  day: { marginHorizontal: m.gutter, paddingTop: m.medium, paddingBottom: m.small, gap: m.small, flexDirection: 'row',
+    flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'baseline', borderBottomWidth: m.rule },
+  dayTitle: { fontSize: 18, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  supporting: { fontSize: 13, fontWeight: '500' },
+  dayTotal: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  entry: { minHeight: m.row, flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: m.gutter, paddingVertical: m.medium, gap: m.medium },
+  entryBody: { flex: 1, gap: m.gap, minWidth: 0 },
+  entryLine: { flexDirection: 'row', alignItems: 'baseline', gap: m.small },
+  stacked: { flexDirection: 'column', alignItems: 'flex-start', gap: m.gap },
+  entryTitle: { fontSize: 16, fontWeight: '600', flexShrink: 1 },
+  expand: { flex: 1 },
+  amount: { fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'], maxWidth: '100%' },
+  detail: { fontSize: 13 },
+  rowRule: { height: m.rule, marginLeft: m.gutter + m.badge + m.medium, marginRight: m.gutter },
+  empty: { paddingHorizontal: m.gutter, paddingVertical: m.section, alignItems: 'flex-start', gap: m.small },
+  emptyAction: { minHeight: m.touch, justifyContent: 'center' },
+});

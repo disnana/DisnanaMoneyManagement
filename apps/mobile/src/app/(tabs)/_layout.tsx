@@ -1,10 +1,11 @@
-import { useCallback, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { TabList, TabSlot, Tabs, TabTrigger, type TabTriggerSlotProps } from 'expo-router/ui';
-import { Pressable, Text } from 'react-native';
+import { Platform, Pressable, Text } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Screen as NativeScreen } from 'react-native-screens';
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
+import type { SymbolViewProps } from 'expo-symbols';
+import { AppSymbol } from '@/ui/AppSymbol';
 import { getCurrentMonthKey } from '@dmm/core/utils/format';
 import { useAppReducedMotion } from '@/lib/motionPref';
 import { tick } from '@/lib/haptics';
@@ -26,24 +27,27 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
   const restColor = isFocused ? p.fill : 'transparent';
   const pressedColor = `${p.tint}42`;
   const capsule = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(emphasis.value, [0, 1], [restColor, pressedColor]),
-    transform: [{ scale: reduceMotion ? 1 : 1 - emphasis.value * 0.05 }],
+    backgroundColor: interpolateColor(emphasis.get(), [0, 1], [restColor, pressedColor]),
+    transform: [{ scale: reduceMotion ? 1 : 1 - emphasis.get() * 0.05 }],
   }));
   const color = isFocused ? p.tint : p.textSecondary;
   return (
-    <Pressable {...props} accessibilityRole="tab" accessibilityState={{ selected: !!isFocused }} accessibilityLabel={label}
+    <Pressable {...props} accessibilityRole={Platform.OS === 'web' ? 'link' : 'tab'}
+      accessibilityState={Platform.OS === 'web' ? undefined : { selected: !!isFocused }}
+      {...(Platform.OS === 'web' && isFocused ? { 'aria-current': 'page' as const } : {})}
+      accessibilityLabel={label}
       onPress={(event) => {
         if (!isFocused && !event.isDefaultPrevented()) onSwitch();
         onPress?.(event);
       }}
       onPressIn={() => {
-        emphasis.value = reduceMotion ? 1 : withTiming(1, { duration: 65 });
+        emphasis.set(reduceMotion ? 1 : withTiming(1, { duration: 65 }));
         tick();
       }}
-      onPressOut={() => { emphasis.value = reduceMotion ? 0 : withTiming(0, { duration: 185 }); }}
+      onPressOut={() => { emphasis.set(reduceMotion ? 0 : withTiming(0, { duration: 185 })); }}
       style={{ flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
       <Animated.View style={[{ width: 52, height: 30, maxWidth: '100%', borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, capsule]}>
-        <SymbolView name={icon} size={21} tintColor={color} />
+        <AppSymbol name={icon} size={21} tintColor={color} />
       </Animated.View>
       <Text style={{ color, fontSize: 11, fontWeight: isFocused ? '700' : '500' }}>{label}</Text>
     </Pressable>
@@ -56,18 +60,15 @@ function FocusedTab({ children, reset, onMonthReset }: {
   onMonthReset: (reset: MonthReset) => void;
 }) {
   const { month, setMonth } = useFinance();
-  const applied = useRef<MonthReset | undefined>(undefined);
-  const requestedMonth = reset && reset !== applied.current ? reset.month : undefined;
-
+  // TabSlot mounts this component only for the focused route. Consume the entry request once.
+  const [entryMonth, finishEntry] = useState(() => reset && reset.month !== month ? reset.month : null);
+  if (entryMonth !== null && entryMonth === month) finishEntry(null);
   useLayoutEffect(() => {
-    if (!reset || !requestedMonth) return;
-    applied.current = reset;
-    if (requestedMonth !== month) setMonth(requestedMonth);
-    onMonthReset(reset);
-  }, [month, reset, requestedMonth, onMonthReset, setMonth]);
+    if (entryMonth && entryMonth !== month) setMonth(entryMonth);
+    if (reset) onMonthReset(reset);
+  }, [entryMonth, month, reset, onMonthReset, setMonth]);
 
-  // Reset the destination before its first render when the old tab was in another month.
-  return requestedMonth && month !== requestedMonth ? null : children;
+  return entryMonth && entryMonth !== month ? null : children;
 }
 
 export default function TabsLayout() {
@@ -95,7 +96,8 @@ export default function TabsLayout() {
         </NativeScreen>
       ) : null} />
       <TabList asChild>
-        <SafeAreaView edges={['left', 'right', 'bottom']} style={{
+        <SafeAreaView edges={['left', 'right', 'bottom']}
+          {...(Platform.OS === 'web' ? { role: 'navigation' as const, 'aria-label': 'メインナビゲーション' } : {})} style={{
           backgroundColor: p.card, borderTopWidth: 1, borderTopColor: p.fill,
           alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingTop: 6, paddingBottom: 6,
         }}>
