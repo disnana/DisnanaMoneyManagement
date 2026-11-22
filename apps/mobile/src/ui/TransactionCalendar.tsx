@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Transaction } from '@dmm/core/types/finance';
 import { formatFullDate, getTodayString } from '@dmm/core/utils/format';
+import { getJapaneseHoliday, withHolidayName } from '@dmm/core/utils/japaneseHolidays';
 import { indexTransactionsByDate } from '@dmm/core/utils/metrics';
 import { tick } from '@/lib/haptics';
 import { usePalette } from '@/lib/theme';
 import { SectionTitle } from './kit';
 import { TxGroups } from './TxGroups';
+import { calendarDayNumber } from './calendarDayNumber';
 
 const WEEK = ['月', '火', '水', '木', '金', '土', '日'];
 const COLUMN_WIDTH = '14.285714%';
@@ -45,6 +47,8 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
               };
               if (n < 1 || n > days) return <View key={day} style={{ ...cell, backgroundColor: p.bg }} />;
               const date = `${month}-${String(n).padStart(2, '0')}`;
+              const holiday = getJapaneseHoliday(date);
+              const dayColor = holiday ? p.danger : col >= 5 ? weekdayColor(col) : p.text;
               const summary = byDate.get(date);
               const active = date === selected;
               const amountLines = summary ? [
@@ -54,7 +58,7 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
               ].filter(({ amount }) => amount > 0) : [];
               return (
                 <Pressable key={date} accessibilityRole="button" accessibilityState={{ selected: active }}
-                  accessibilityLabel={`${formatFullDate(date)} ${summary?.items.length ?? 0}件`}
+                  accessibilityLabel={`${withHolidayName(formatFullDate(date), holiday)} ${summary?.items.length ?? 0}件`}
                   onPress={() => { tick(); setPicked(date); }}
                   style={({ pressed }) => ({
                     ...cell, paddingHorizontal: 3, paddingVertical: 3, justifyContent: 'space-between',
@@ -62,8 +66,8 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
                   })}>
                   <View style={{ width: 24, height: 24, borderRadius: 12, overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
                     backgroundColor: active ? p.tint : 'transparent' }}>
-                    <Text style={{ color: active ? p.onTint : date === today ? p.tint : col >= 5 ? weekdayColor(col) : p.text,
-                      fontSize: 13, fontWeight: date === today || active ? '800' : '600' }}>{n}</Text>
+                    <Text style={{ color: active ? p.onTint : date === today ? p.tint : dayColor,
+                      fontSize: 13, fontWeight: date === today || active ? '800' : '600' }}>{calendarDayNumber(n, holiday)}</Text>
                   </View>
                   <View>
                     {amountLines.map(({ key, amount, color, prefix }) => (
@@ -82,7 +86,7 @@ export function TransactionCalendar({ month, transactions, isPreview }: { month:
           </View>
         ))}
       </View>
-      <SectionTitle>{formatFullDate(selected)}</SectionTitle>
+      <SectionTitle>{withHolidayName(formatFullDate(selected), getJapaneseHoliday(selected))}</SectionTitle>
       {isPreview ? null : <TxGroups transactions={byDate.get(selected)?.items ?? []} empty="この日の取引はありません" />}
     </>
   );
