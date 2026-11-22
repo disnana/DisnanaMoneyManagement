@@ -32,6 +32,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -156,6 +158,7 @@ private fun LedgerApp(model: LedgerModel) {
         floatingActionButton = {
             if (!showingEditor && !settings) {
                 ExtendedFloatingActionButton(
+                    modifier = Modifier.semantics { contentDescription = "取引を記録" },
                     text = { Text("記録", fontWeight = FontWeight.Bold) },
                     icon = { Icon(Icons.Default.Add, null) },
                     onClick = { if (!saving) editorId = 0L },
@@ -419,7 +422,8 @@ private fun CategoryRow(row: CategoryTotal, total: Long, color: Color) {
                 style = MaterialTheme.typography.labelMedium)
         }
         LinearProgressIndicator(progress = { fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(6.dp),
-            color = color, trackColor = MaterialTheme.colorScheme.surfaceContainer, gapSize = 0.dp)
+            color = color, trackColor = MaterialTheme.colorScheme.surfaceContainer, gapSize = 0.dp,
+            drawStopIndicator = {})
     }
 }
 
