@@ -192,14 +192,14 @@ async function deepPaths(page, fixture, result) {
 }
 
 async function runCase(spec) {
-  const { count, width, theme, large, flow, audit, filtered } = spec;
+  const { count, width, height = width >= 600 ? 960 : Math.round(width * 2.22), theme, large, flow, audit, filtered } = spec;
   const name = `${label}-${count}-${width}-${theme}${large ? '-large' : ''}${filtered ? '-filtered' : ''}`;
   const fixture = process.env.FIXTURE_DIR ? JSON.parse(await readFile(path.join(process.env.FIXTURE_DIR, `${count}.json`), 'utf8')) : historyFixture(count);
   if (filtered) fixture.transactions = fixture.transactions.filter(tx => tx.type !== 'income');
   if (large) fixture.transactions[0].amount = 9876543210;
   const titles = [...new Set(fixture.transactions.map(tx => tx.title))];
-  const ctx = await browser.newContext({ locale: 'ja-JP', colorScheme: theme, viewport: { width, height: width >= 600 ? 960 : Math.round(width * 2.22) } });
-  const result = { name, ...spec, errors: [] };
+  const ctx = await browser.newContext({ locale: 'ja-JP', colorScheme: theme, viewport: { width, height } });
+  const result = { name, ...spec, height, errors: [] };
   report.cases.push(result);
   try {
     // Isolated origin and profile: migration reads the normal on-disk public backup format.
@@ -285,7 +285,21 @@ async function runCase(spec) {
         const box = await control.first().boundingBox();
         if (box) result.controls[key] = [Math.round(box.width), Math.round(box.height)];
       }
-      result.accessibleRows = await page.getByRole('button', { name: /青葉ベーカリー/ }).count();
+      const firstRow = page.getByRole('button', { name: /青葉ベーカリー/ });
+      result.accessibleRows = await firstRow.count();
+      if (await page.getByRole('button', { name: /月の収支.*内訳/ }).count()) {
+        assert.equal(result.accessibleRows, 1);
+        for (const [name, [w, h]] of Object.entries(result.controls)) assert.ok(w >= 48 && h >= 48, name);
+        const date = await page.getByRole('heading', { name: /^11月22日/ }).boundingBox();
+        const title = await firstRow.getByText('青葉ベーカリー', { exact: true }).boundingBox();
+        const amount = await firstRow.getByText('-¥1,280', { exact: true }).boundingBox();
+        const above = (a, b) => a.y + a.height <= b.y + 1;
+        const beside = (a, b) => a.x + a.width <= b.x + 1;
+        assert.ok(date && title && amount);
+        assert.ok((above(date, title) || beside(date, title)) && (above(title, amount) || beside(title, amount)));
+        assert.ok(amount.x + amount.width <= width);
+        result.readingOrder = { date: above(date, title) ? 'above' : 'left', amount: above(title, amount) ? 'below' : 'right' };
+      }
     }
     if (count <= 5) await page.screenshot({ path: path.join(outputPath, `${name}.png`) });
     if (process.env.DEEP_PATHS_ONLY === '1') await deepPaths(page, fixture, result);
@@ -338,6 +352,13 @@ async function runFlows(page, titles, result) {
     try { await action(); result.flows[name] = 'pass'; } catch (e) { result.flows[name] = String(e.message).slice(0, 190); }
   };
   await verify('income filter', async () => {
+    const disclosure = page.getByRole('button', { name: /月の収支.*内訳/ });
+    if (await disclosure.count()) {
+      assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.getByText('¥5,680', { exact: true }).filter({ visible: true }).count(), 0);
+      await disclosure.click();
+      assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
+    }
     const all = choices(page, 'すべて'), income = choices(page, '収入');
     result.filterStateBefore = { all: await all.getAttribute('aria-pressed'), income: await income.getAttribute('aria-pressed') };
     await income.click();
@@ -348,6 +369,10 @@ async function runFlows(page, titles, result) {
     }
     result.filterStateAfter = { all: await all.getAttribute('aria-pressed'), income: await income.getAttribute('aria-pressed') };
     await all.click();
+    if (await disclosure.count()) {
+      await disclosure.click();
+      assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
+    }
   });
   await verify('calendar and list', async () => {
     await page.getByRole('button', { name: /カレンダー(表示|に切り替え)/ }).click();
@@ -382,6 +407,8 @@ async function runFlows(page, titles, result) {
     const title = '街の本屋と文具店 駅前店で手帳と来年のカレンダーを購入';
     await page.getByText(title, { exact:true }).filter({ visible:true }).last().click();
     await page.waitForURL(/\/add\?id=preview-1/);
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('input,textarea')).some(field =>
+      field.value === '家計を記録するための手帳。翌年の予定もここにまとめる。'));
     await page.goBack();
     await page.getByRole('textbox', { name: '検索キーワード' }).waitFor();
     await page.goBack();
@@ -481,6 +508,7 @@ async function verifyMonthNavigation() {
 
 const cases = [
   { count: 5, width: 393, theme:'light', flow:true, audit:true }, { count: 5, width: 393, theme:'dark', audit:true },
+  { count: 5, width: 320, height: 568, theme: 'light', audit: true }, { count: 5, width: 412, height: 915, theme: 'light', audit: true },
   { count: 50, width: 393, theme:'light' }, { count: 1000, width: 393, theme:'light' }, { count: 10000, width: 393, theme:'light' },
   { count: 0, width:360, theme:'light' }, { count:5, width:360, theme:'light', large:true }, { count:5, width:600, theme:'dark' }, { count:5, width:360, theme:'dark', filtered:true },
 ];

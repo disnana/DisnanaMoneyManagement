@@ -202,7 +202,9 @@ export function Segmented<T extends string>({
   );
 }
 
-export function MonthBar({ month, onChange, heading = false }: { month: string; onChange: (m: string) => void; heading?: boolean }) {
+export function MonthBar({ month, onChange, heading = false, trailing }: {
+  month: string; onChange: (m: string) => void; heading?: boolean; trailing?: ReactNode;
+}) {
   const p = usePalette();
   const [open, setOpen] = useState(false);
   const btn = (delta: number, name: SymbolViewProps['name']) => (
@@ -237,8 +239,8 @@ export function MonthBar({ month, onChange, heading = false }: { month: string; 
     <>
       {heading ? (
         <View style={historyStyles.toolbar}>
-          {picker}
-          <View style={historyStyles.stepButtons}>{previous}{next}</View>
+          <View style={historyStyles.monthNavigation}>{picker}{previous}{next}</View>
+          {trailing}
         </View>
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
