@@ -3,6 +3,8 @@ import { Platform, Pressable, SectionList, type SectionListRenderItem, Text, use
 import type { Transaction } from '@dmm/core/types/finance';
 import { formatJPY, formatMonthLabel, getCurrentMonthKey, getTodayString } from '@dmm/core/utils/format';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
+import { pickOne } from '@/lib/pick';
+import { AppSymbol } from './AppSymbol';
 import { tick } from '@/lib/haptics';
 import { historySections } from '@/lib/historySections';
 import { useFinance } from '@/lib/store';
@@ -16,33 +18,47 @@ const filterKeys = Object.keys(filters) as Filter[];
 const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 const transactionKey = (item: Transaction) => item.id;
 
-function HistoryFilters({ value, count, paired, onChange }: {
-  value: Filter; count: number; paired: boolean; onChange: (value: Filter) => void;
+function HistoryFilters({ value, count, compact, onChange }: {
+  value: Filter; count: number; compact: boolean; onChange: (value: Filter) => void;
 }) {
   const p = usePalette();
+  const chooseFilter = async () => {
+    tick();
+    const choice = await pickOne('表示する取引', filterKeys.map(id => ({ id, label: filters[id], selected: id === value })));
+    const next = filterKeys.find(id => id === choice);
+    if (next) onChange(next);
+  };
   return (
     <View style={s.filterRow}>
-      <View style={[s.filters, paired && s.pairedFilters, { backgroundColor: p.fill }]}>
-        {filterKeys.map((key) => {
-          const selected = value === key;
-          return (
-            <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected }}
-              {...(Platform.OS === 'web' ? { 'aria-pressed': selected } : {})}
-              accessibilityLabel={`${filters[key]}の明細`} onPress={() => {
-                if (!selected) { tick(); onChange(key); }
-              }}
-              style={[s.filter, paired && s.pairedFilter]}>
-              {({ pressed }) => (
-                <View style={[s.filterFace, { backgroundColor: selected ? p.tint : pressed ? p.sectionHeader : 'transparent' }]}>
-                  <Text style={[s.filterText, { color: selected ? p.onTint : p.textSecondary, fontWeight: selected ? '700' : '500' }]}>
-                    {filters[key]}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
+      {compact ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`取引の種類を選ぶ、${filters[value]}`} onPress={chooseFilter}
+          style={({ pressed }) => [s.filterPicker, { backgroundColor: pressed ? p.sectionHeader : p.fill }]}>
+          <Text style={[s.filterText, { color: p.text }]}>{value === 'all' ? 'すべての取引' : filters[value]}</Text>
+          <AppSymbol size={m.disclosure} tintColor={p.tint} name={{ ios: 'chevron.down', android: 'expand_more' }} />
+        </Pressable>
+      ) : (
+        <View style={[s.filters, { backgroundColor: p.fill }]}>
+          {filterKeys.map((key) => {
+            const selected = value === key;
+            return (
+              <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected }}
+                {...(Platform.OS === 'web' ? { 'aria-pressed': selected } : {})}
+                accessibilityLabel={`${filters[key]}の明細`} onPress={() => {
+                  if (!selected) { tick(); onChange(key); }
+                }}
+                style={s.filter}>
+                {({ pressed }) => (
+                  <View style={[s.filterFace, { backgroundColor: selected ? p.tint : pressed ? p.sectionHeader : 'transparent' }]}>
+                    <Text style={[s.filterText, { color: selected ? p.onTint : p.textSecondary, fontWeight: selected ? '700' : '500' }]}>
+                      {filters[key]}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
       <Text accessibilityLiveRegion="polite" style={[s.count, { color: p.textSecondary }]}>{count.toLocaleString('ja-JP')}件</Text>
     </View>
   );
@@ -56,7 +72,7 @@ function HistoryDate({ date, today, inline }: { date: string; today: boolean; in
   return (
     <View accessible accessibilityRole="header" accessibilityLabel={spokenDate}
       style={[inline ? s.dateInline : s.dateMark, today && { backgroundColor: p.fill }]}>
-      <Text style={[s.dayNumber, { color: today ? p.tint : p.text }]}>{day.getDate()}</Text>
+      <Text style={[s.dayNumber, inline && s.inlineDayNumber, { color: today ? p.tint : p.text }]}>{day.getDate()}{inline ? '日' : ''}</Text>
       <Text style={[s.weekday, { color: today ? p.tint : p.textSecondary }]}>{today ? '今日' : weekday + '曜'}</Text>
     </View>
   );
@@ -109,7 +125,7 @@ export function TransactionHistoryList({ month, isPreview, summary }: { month: s
   const sections = useMemo(() => historySections(transactions, isPreview ? m.previewRows : Infinity), [transactions, isPreview]);
   const pageWidth = Math.min(width, m.maxWidth);
   const stacked = pageWidth / fontScale < m.stackedWidth;
-  const pairedFilters = (pageWidth - 2 * m.gutter) / fontScale < m.pairedFilterWidth;
+  const compactFilters = (pageWidth - 2 * m.gutter) / fontScale < m.compactControlsWidth;
   const today = getTodayString();
   const renderEntry = useCallback<SectionListRenderItem<Transaction, HistorySection>>(({ item, index, section }) => {
     const first = index === 0;
@@ -132,7 +148,7 @@ export function TransactionHistoryList({ month, isPreview, summary }: { month: s
       windowSize={7} stickySectionHeadersEnabled={false} ItemSeparatorComponent={separator}
       ListHeaderComponent={<>
         {summary}
-        <HistoryFilters value={transactionFilter} count={transactions.length} paired={pairedFilters} onChange={setTransactionFilter} />
+        <HistoryFilters value={transactionFilter} count={transactions.length} compact={compactFilters} onChange={setTransactionFilter} />
       </>}
       renderSectionFooter={({ section }) => <DaySubtotal net={section.net} filter={transactionFilter} />}
       ListEmptyComponent={<HistoryEmpty month={month} filter={transactionFilter} monthHasEntries={monthEntries.length > 0} />}

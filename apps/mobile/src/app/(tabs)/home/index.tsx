@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { router } from 'expo-router';
-import { Modal, Pressable, Text } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { Modal } from 'react-native';
 import { computeCreditCardSummary, getPaymentWarning } from '@dmm/core/utils/creditCard';
 import { getMonthTransactions } from '@dmm/core/utils/metrics';
 import { formatMonthLabel, getTodayString } from '@dmm/core/utils/format';
 import { useCurrentBalances } from '@/lib/currentBalances';
 import { useFinance } from '@/lib/store';
-import { usePalette } from '@/lib/theme';
+import { useHomeAssetVisibility } from '@/lib/homeAssetVisibility';
+import { AccountBalanceList } from '@/ui/AccountBalanceList';
 import { AccountSummaryGroup, AccountSummaryRow } from '@/ui/AccountSummaryRow';
 import { HeroCard, MonthlyCashFlow } from '@/ui/HeroCard';
 import { GettingStarted } from '@/ui/GettingStarted';
@@ -24,19 +24,20 @@ function openAccount(id: string) {
 }
 
 export default function Home() {
-  const p = usePalette();
+  const [hidden] = useHomeAssetVisibility();
+  const [showAllBalances, setShowAllBalances] = useState(false);
   const { state, visibleState } = useFinance();
   const balances = useCurrentBalances();
-  const [showAllBalances, setShowAllBalances] = useState(false);
   const reduceMotion = useAppReducedMotion();
   const [showGuide, setShowGuide] = useState(() =>
     state.transactions.length === 0 && readPreference('dmm_start_guide') !== 'done');
+  const hasTransactions = state.transactions.length > 0;
+  if (showGuide && hasTransactions) setShowGuide(false);
   useEffect(() => {
-    if (state.transactions.length > 0 && readPreference('dmm_start_guide') !== 'done') {
+    if (hasTransactions && readPreference('dmm_start_guide') !== 'done') {
       savePreference('dmm_start_guide', 'done');
-      setShowGuide(false);
     }
-  }, [state.transactions.length]);
+  }, [hasTransactions]);
 
   function closeGuide() {
     savePreference('dmm_start_guide', 'done');
@@ -48,7 +49,6 @@ export default function Home() {
     account.type !== 'credit' &&
     (account.type !== 'debit' || !account.linkedBankAccountId || (balances[account.id] ?? 0) !== 0)
   );
-  const listed = showAllBalances ? accounts : accounts.slice(0, BALANCE_PREVIEW_COUNT);
   const banks = new Map(state.accounts.map((account) => [account.id, account]));
 
   if (showGuide) {
@@ -64,29 +64,11 @@ export default function Home() {
       {(month) => (
         <>
           <HeroCard assets={assets} />
+          <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
+          <AccountBalanceList accounts={accounts} balances={balances} accountById={banks} onSelect={openAccount}
+            preview={{ limit: BALANCE_PREVIEW_COUNT, expanded: showAllBalances, toggle: () => setShowAllBalances(open => !open) }} hidden={hidden} />
           <SectionTitle>月の収支</SectionTitle>
           <MonthlyCashFlow month={month} />
-          <SectionTitle action="口座を見る" onAction={() => router.navigate('/accounts')}>口座別残高</SectionTitle>
-          <AccountSummaryGroup>
-            {listed.length ? listed.map((account) => (
-              <AccountSummaryRow key={account.id} account={account} balance={balances[account.id] ?? 0}
-                linkedBank={banks.get(account.linkedBankAccountId ?? '')} onPress={() => openAccount(account.id)} />
-            )) : [<Row key="empty" compact title="この家計グループに表示する口座がありません" />]}
-            {accounts.length > BALANCE_PREVIEW_COUNT ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAllBalances }}
-                onPress={() => setShowAllBalances((expanded) => !expanded)}
-                style={({ pressed }) => ({
-                  minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-                  paddingHorizontal: 12, backgroundColor: pressed ? p.fill : p.card,
-                })}>
-                <Text style={{ color: p.tint, fontSize: 13, fontWeight: '600' }}>
-                  {showAllBalances ? '口座を折りたたむ' : `残りの${accounts.length - BALANCE_PREVIEW_COUNT}件を表示`}
-                </Text>
-                <SymbolView name={showAllBalances ? { ios: 'chevron.up', android: 'expand_less' } : { ios: 'chevron.down', android: 'expand_more' }}
-                  tintColor={p.tint} size={12} />
-              </Pressable>
-            ) : null}
-          </AccountSummaryGroup>
           <HomeActivity month={month} balances={balances} />
         </>
       )}

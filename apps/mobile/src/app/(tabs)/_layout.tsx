@@ -49,7 +49,7 @@ function TabButton({ label, icon, isFocused, onPress, onSwitch, ...props }: Comp
       <Animated.View style={[{ width: 52, height: 30, maxWidth: '100%', borderRadius: 15, alignItems: 'center', justifyContent: 'center' }, capsule]}>
         <AppSymbol name={icon} size={21} tintColor={color} />
       </Animated.View>
-      <Text style={{ color, fontSize: 11, fontWeight: isFocused ? '700' : '500' }}>{label}</Text>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: '100%', color, fontSize: 11, fontWeight: isFocused ? '700' : '500' }}>{label}</Text>
     </Pressable>
   );
 }

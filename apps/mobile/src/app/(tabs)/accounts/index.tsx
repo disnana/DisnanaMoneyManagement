@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Account } from '@dmm/core/types/finance';
 import { computeCreditCardSummary } from '@dmm/core/utils/creditCard';
-import { formatJPY, formatMonthLabel } from '@dmm/core/utils/format';
+import { formatMonthLabel } from '@dmm/core/utils/format';
 import { useCurrentBalances } from '@/lib/currentBalances';
 import { tick } from '@/lib/haptics';
 import { useFinance } from '@/lib/store';
-import { metrics, usePalette } from '@/lib/theme';
+import { usePalette } from '@/lib/theme';
+import { AccountBalanceList } from '@/ui/AccountBalanceList';
 import { LedgerPill } from '@/ui/LedgerPill';
 import { ReorderList, SortActions } from '@/ui/ReorderList';
 import { AccountSummaryGroup, AccountSummaryRow, isPaymentCard } from '@/ui/AccountSummaryRow';
@@ -21,7 +22,6 @@ export default function Accounts() {
   const sorting = snapshot !== undefined;
   const cards = visibleState.accounts.filter(isPaymentCard);
   const accounts = visibleState.accounts.filter((account) => !isPaymentCard(account));
-  const total = accounts.reduce((sum, account) => sum + (balances[account.id] ?? 0), 0);
   const bankById = new Map(state.accounts.map((account) => [account.id, account]));
 
   const reorder = (section: Account[], ids: string[]) => {
@@ -43,12 +43,10 @@ export default function Accounts() {
     );
   };
 
-  const list = (section: Account[], empty: string) => sorting
-    ? <ReorderList items={section} renderItem={rowFor} getLabel={(account) => account.name}
-        onReorder={(ids) => reorder(section, ids)} />
-    : <AccountSummaryGroup>
-        {section.length ? section.map(rowFor) : [<Row key="empty" compact title={empty} />]}
-      </AccountSummaryGroup>;
+  const sortingList = (section: Account[]) => (
+    <ReorderList items={section} renderItem={rowFor} getLabel={account => account.name}
+      onReorder={ids => reorder(section, ids)} />
+  );
 
   return (
     <Screen>
@@ -66,21 +64,17 @@ export default function Accounts() {
           ) : null}
         </View>
       )}
-      {!sorting ? (
-        <View style={{ backgroundColor: p.sectionHeader, borderRadius: metrics.cardRadius, borderCurve: 'continuous',
-          borderWidth: StyleSheet.hairlineWidth, borderColor: p.outline, paddingHorizontal: 14, paddingVertical: 12,
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text accessibilityRole="header" style={{ color: p.text, fontSize: 14, fontWeight: '700', flexShrink: 1 }}>口座残高の合計</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit
-            style={{ color: total < 0 ? p.danger : p.income, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-            {formatJPY(total)}
-          </Text>
-        </View>
-      ) : null}
       <SectionTitle action={sorting ? undefined : '口座を追加'} onAction={() => router.push('/accounts/account')}>口座</SectionTitle>
-      {list(accounts, 'この家計グループに口座がありません')}
+      {sorting ? sortingList(accounts) : (
+        <AccountBalanceList accounts={accounts} balances={balances} accountById={bankById}
+          onSelect={id => router.push({ pathname: '/accounts/[id]', params: { id } })} />
+      )}
       <SectionTitle action={sorting ? undefined : 'カードを追加'} onAction={() => router.push('/accounts/card')}>カード</SectionTitle>
-      {list(cards, 'この家計グループにカードがありません')}
+      {sorting ? sortingList(cards) : (
+        <AccountSummaryGroup>
+          {cards.length ? cards.map(rowFor) : <Row compact title="この家計グループにカードがありません" />}
+        </AccountSummaryGroup>
+      )}
     </Screen>
   );
 }

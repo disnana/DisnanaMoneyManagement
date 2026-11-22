@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import { readPreference, savePreference } from './preferences';
 
+export const hiddenAssetAmount = '¥・・・・・・';
+
 const key = 'dmm_home_hide_assets';
 const saved = readPreference(key);
 let hidden = saved !== null && saved !== 'off';

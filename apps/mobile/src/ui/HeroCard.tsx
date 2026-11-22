@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AppSymbol } from './AppSymbol';
 import { computeMonthCashFlow } from '@dmm/core/utils/metrics';
 import { formatJPY } from '@dmm/core/utils/format';
 import { tick } from '@/lib/haptics';
-import { useHomeAssetVisibility } from '@/lib/homeAssetVisibility';
+import { hiddenAssetAmount, useHomeAssetVisibility } from '@/lib/homeAssetVisibility';
 import { useFinance } from '@/lib/store';
 import { usePalette } from '@/lib/theme';
 import { LedgerPill } from '@/ui/LedgerPill';
@@ -14,6 +14,7 @@ import { CardHeader, CardSurface } from './CardSurface';
 export function HeroCard({ assets }: { assets: number }) {
   const p = usePalette();
   const [hidden, toggle] = useHomeAssetVisibility();
+  const { width, fontScale } = useWindowDimensions();
 
   return (
     <CardSurface>
@@ -24,7 +25,7 @@ export function HeroCard({ assets }: { assets: number }) {
             <Pressable accessibilityRole="button" accessibilityLabel={hidden ? '総資産を表示' : '総資産を隠す'}
               onPress={() => { tick(); toggle(); }}
               style={({ pressed }) => ({ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.65 : 1 })}>
-              <SymbolView name={hidden ? { ios: 'eye.slash', android: 'visibility_off' } : { ios: 'eye', android: 'visibility' }}
+              <AppSymbol name={hidden ? { ios: 'eye.slash', android: 'visibility_off' } : { ios: 'eye', android: 'visibility' }}
                 size={17} tintColor={p.textSecondary} />
             </Pressable>
           </View>
@@ -32,8 +33,8 @@ export function HeroCard({ assets }: { assets: number }) {
         </View>
         <Text accessibilityLabel={hidden ? '総資産は非表示' : undefined} numberOfLines={1} adjustsFontSizeToFit
           style={{ color: hidden ? p.text : assets < 0 ? p.danger : p.income,
-            fontSize: 37, fontWeight: '800', fontVariant: ['tabular-nums'] }}>
-          {hidden ? '¥・・・・・・' : formatJPY(assets)}
+            fontSize: (width - 32) / fontScale < 300 ? 20 : 27, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+          {hidden ? hiddenAssetAmount : formatJPY(assets)}
         </Text>
       </View>
     </CardSurface>

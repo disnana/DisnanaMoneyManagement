@@ -202,8 +202,8 @@ export function Segmented<T extends string>({
   );
 }
 
-export function MonthBar({ month, onChange, heading = false, trailing }: {
-  month: string; onChange: (m: string) => void; heading?: boolean; trailing?: ReactNode;
+export function MonthBar({ month, onChange, heading = false, compactHeading = false, trailing }: {
+  month: string; onChange: (m: string) => void; heading?: boolean; compactHeading?: boolean; trailing?: ReactNode;
 }) {
   const p = usePalette();
   const [open, setOpen] = useState(false);
@@ -230,8 +230,8 @@ export function MonthBar({ month, onChange, heading = false, trailing }: {
       style={({ pressed }) => heading
         ? [historyStyles.period, { opacity: pressed ? 0.65 : 1 }]
         : { minWidth: 150, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-      <Text style={heading ? [historyStyles.periodTitle, { color: p.text }]
-        : { color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{formatMonthLabel(month)}</Text>
+      <Text style={heading ? [historyStyles.periodTitle, compactHeading && historyStyles.compactPeriod, { color: p.text }]
+        : { color: p.text, fontSize: 17, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{compactHeading ? month.replace('-', '/') : formatMonthLabel(month)}</Text>
       <AppSymbol name={{ ios: 'chevron.down', android: 'expand_more' }} size={12} tintColor={p.tint} />
     </Pressable>
   );

@@ -1,5 +1,5 @@
 import { Pressable, Text } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { AppSymbol } from './AppSymbol';
 import { ALL_LEDGER_ICON, ledgerColor, ledgerIcon } from '@/lib/ledgerAppearance';
 import { useLedgerPicker } from '@/lib/ledgerPicker';
 import { tick } from '@/lib/haptics';
@@ -20,9 +20,9 @@ export function LedgerPill() {
       }}
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: 16,
         backgroundColor: pressed ? p.separator : p.fill })}>
-      <SymbolView name={activeLedger ? ledgerIcon(activeLedger) : ALL_LEDGER_ICON} size={13} tintColor={ledgerColor(activeLedger) ?? p.tint} />
+      <AppSymbol name={activeLedger ? ledgerIcon(activeLedger) : ALL_LEDGER_ICON} size={13} tintColor={ledgerColor(activeLedger) ?? p.tint} />
       <Text numberOfLines={1} style={{ color: p.text, fontSize: 13, fontWeight: '700', maxWidth: 120 }}>{activeLedger?.name ?? 'すべて'}</Text>
-      <SymbolView name={{ ios: 'chevron.down', android: 'expand_more' }} size={10} tintColor={p.textSecondary} />
+      <AppSymbol name={{ ios: 'chevron.down', android: 'expand_more' }} size={10} tintColor={p.textSecondary} />
     </Pressable>
   );
 }

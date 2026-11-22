@@ -1,0 +1,19 @@
+{
+  "accounts": [
+    {"id":"bank-a","type":"bank","name":"青葉銀行","initialBalance":52340,"ledgerId":"personal"},
+    {"id":"bank-b","type":"bank","name":"みなと銀行","initialBalance":38650,"ledgerId":"household"},
+    {"id":"wallet","type":"cash","name":"お財布","initialBalance":650,"ledgerId":"personal"},
+    {"id":"adjust","type":"bank","name":"調整口座","initialBalance":-650,"ledgerId":"personal"},
+    {"id":"rail","type":"emoney","name":"交通用IC","initialBalance":0,"ledgerId":"personal"},
+    {"id":"savings","type":"bank","name":"予備口座","initialBalance":0,"ledgerId":"personal"},
+    {"id":"business","type":"bank","name":"ひなた工房の事業用普通口座","initialBalance":0,"ledgerId":"business"},
+    {"id":"debit","type":"debit","name":"青葉デビット","initialBalance":0,"ledgerId":"personal","linkedBankAccountId":"bank-a"},
+    {"id":"credit","type":"credit","name":"こもれびカード","initialBalance":0,"ledgerId":"personal","closingDay":31,"paymentDay":10,"paymentMonthOffset":1,"linkedBankAccountId":"bank-a"}
+  ],
+  "transactions": [
+    {"id":"debit-snack","accountId":"debit","type":"expense","categoryId":"food","title":"デビットでおやつ","amount":100,"date":"2026-11-10"},
+    {"id":"card-books","accountId":"credit","type":"expense","categoryId":"hobby","title":"書店でまとめ買い","amount":12400,"date":"2026-10-22"},
+    {"id":"future","accountId":"bank-a","type":"income","categoryId":"salary","title":"翌月の予定入金","amount":200000,"date":"2026-12-22"}
+  ],
+  "budgets": [], "recurringItems": [], "savingsGoals": []
+}
