@@ -38,7 +38,7 @@ export async function finishLogin(request, env, fetcher) {
   const attempt = await callBackend(env, 'oauth-claim', { key: await hash(state), claim: crypto.randomUUID() });
   if (!attempt) return fail();
   const exchange = await fetcher('https://oauth2.googleapis.com/token', {
-    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
+    method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
     body: new URLSearchParams({
       client_id: env.GOOGLE_WEB_CLIENT_ID, client_secret: env.GOOGLE_WEB_CLIENT_SECRET,
       code, code_verifier: attempt.verifier, grant_type: 'authorization_code', redirect_uri: url(env, callback),

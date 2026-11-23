@@ -121,6 +121,7 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
       if (node === nodeB) usedB = true;
       return db.dispatch(url, options, node);
     }
+    assert.equal(options.redirect, 'manual');
     assert.equal(options.headers.get('Authorization'), 'Bearer sk_test_fixture');
     if (url.pathname === '/v1/checkout/sessions') {
       created++;
@@ -196,6 +197,7 @@ test('Google OAuth callback consumes state once and browser session cookie is se
   let nodeOnline = nodeA;
   const worker = createWorker({random:() => 0.9, fetchNode:async (uri, options) => {
     if (uri === 'https://oauth2.googleapis.com/token') {
+      assert.equal(options.redirect, 'manual');
       exchanges++;
       assert.match(options.body.get('code_verifier'), /^[\w-]{43}$/);
       return Response.json({ id_token: 'fixture_google_id_token' });

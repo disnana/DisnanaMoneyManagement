@@ -29,7 +29,7 @@ async function stripe(env, fetcher, path, form, idempotency) {
   const headers = new Headers({ Authorization: 'Bearer ' + env.STRIPE_SECRET_KEY });
   if (idempotency) headers.set('Idempotency-Key', idempotency);
   const response = await fetcher('https://api.stripe.com/v1' + path, {
-    headers, method: form ? 'POST' : 'GET', body: form, redirect: 'error', signal: AbortSignal.timeout(7000),
+    headers, method: form ? 'POST' : 'GET', body: form, redirect: 'manual', signal: AbortSignal.timeout(7000),
   });
   if (!response.ok) throw new Error('Stripe request failed (' + response.status + ')');
   return response.json();
