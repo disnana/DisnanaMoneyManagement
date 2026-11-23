@@ -1,0 +1,17 @@
+# Android認証API
+
+最初のPoCのHTTPハンドラは `apps/server/internal/androidauth`。既存同期サーバーの本番ルーターには登録していない。検証は2つのローカルHTTPノードを立てるGoテストで行う。配備時のクライアントはHTTPSを使う。
+
+| 接続先 | メソッドとパス | 成功時 |
+| --- | --- | --- |
+| 共通入口 | POST `/auth/challenge` | チャレンジ、ID、発行ノード名、固定の応答先オリジン、5,000msをJSONで返す |
+| 指定ノード | POST `/auth/google` | GoogleとPlay Integrityと端末署名を確認し、セッション・Access・Refreshを返す |
+| 指定ノード | GET `/v1/me` | セッションに結び付いたGoogleの `sub` を返す |
+| 指定ノード | POST `/auth/refresh` | セッションIDと現在のRefreshを検証し、新しいAccess・Refreshを返す |
+| 指定ノード | POST `/auth/logout` | 発行済みのAccessを含め失効させ、204を返す |
+
+発行要求の `operation` は `method`、`path`、`body_sha256`。ログインの発行時は `device_public_key`、更新の発行時は `session_id`、本人情報・ログアウトの発行時はAuthorizationヘッダーを添える。ログイン本文は `id_token`、`integrity_token`、`device_public_key`。更新本文は `session_id` と `refresh_token`。本文のない操作のハッシュは空バイト列のSHA-256。対象パスにクエリは許可しない。セッション応答は `session_id`、`access_token`、`refresh_token`、`expires_at`（Unix秒）。
+
+指定ノードへの要求には `X-Mane-Challenge`、`X-Mane-Request-Id`、`X-Mane-Device-Signature` を付ける。署名入力はUTF-8の `mane-device-proof-v1\n` とチャレンジ文字列の連結。公開鍵と署名はパディングなしbase64urlのDER。チャレンジはbase64urlのJSONとHMACをピリオドで結ぶ。認証情報を含む応答はキャッシュ禁止。400は入力不正、401は認証・期限・使用済み・宛先の不一致、503は発行枠の逼迫等。レスポンスにトークン検証の内部エラーを含めない。
+
+後続の候補には `/v1/credits`、`/v1/credit-packs`、`/v1/billing/verify`、`/v1/ai/receipt-jobs`、`/v1/discount`、`/v1/feedback`、`/health/live` と `/health/ready` がある。AdMob SSVの公開コールバックはGoogleからのGETを原文の署名対象で検証する。Androidの端末署名とは別経路。[AdMob SSV](https://developers.google.com/admob/android/ssv)
