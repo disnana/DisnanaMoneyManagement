@@ -53,7 +53,8 @@
       "expo-local-authentication",
       "./plugins/with-finance-backup",
       "./plugins/with-launcher-icons",
-      "./plugins/with-optional-portrait-feature"
+      "./plugins/with-optional-portrait-feature",
+      "./plugins/with-android-build-commit"
     ],
     "experiments": {
       "typedRoutes": true,

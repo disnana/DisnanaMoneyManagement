@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
-import { Alert, Linking, Platform, Text } from 'react-native';
+import { Alert, Linking, Platform, Text, View } from 'react-native';
+import { requireOptionalNativeModule } from 'expo';
 import { router, useFocusEffect } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
@@ -14,6 +15,10 @@ import { getLauncherIcons } from '@/lib/launcherIcons';
 import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
+
+const buildCommit = Platform.OS === 'android'
+  ? requireOptionalNativeModule<{ getCommit(): string | null }>('ManeBuildInfo')?.getCommit()
+  : undefined;
 
 const officialURLs = {
   terms: 'https://dmm.disnana.com/terms/',
@@ -129,6 +134,14 @@ export default function Settings() {
         <SectionTitle>情報</SectionTitle>
         <Group>
           <Row title="バージョン" right={Constants.expoConfig?.version ?? '-'} />
+          {buildCommit ? (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 4 }}>
+              <Text style={{ color: p.text, fontSize: 15, fontWeight: '600' }}>ビルドコミット</Text>
+              <Text selectable style={{ color: p.textSecondary, fontFamily: 'monospace', fontSize: 13 }}>
+                {buildCommit}
+              </Text>
+            </View>
+          ) : null}
         </Group>
         <SectionTitle>公式情報</SectionTitle>
         <Group>
