@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWorker } from '../index.mjs';
 import { encode, hash, hex, hmac } from './protocol.mjs';
+import { catalog } from './payments.mjs';
 
 const keys = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
 const [nodeA, nodeB] = [
@@ -75,6 +76,14 @@ const backendFixture = () => {
 const site = 'https://dmm.example.test';
 const requestID = '08b9c655-5cc5-4f9a-b701-a1d7b72691b9';
 const pack = { id: 'fixture', title: '試験クレジット', amount: 200, credits: 12, validity_seconds: null };
+
+test('catalog groups only explicitly categorized packs regardless of validity', () => {
+  const short = { ...pack, validity_seconds: 3600 };
+  const configured = { ...pack, id: 'other', category: ' テスト用 ' };
+  const result = catalog({ MANE_SHOP_PACKS: JSON.stringify([short, configured]) });
+  assert.equal(result[0].category, undefined);
+  assert.equal(result[1].category, 'テスト用');
+});
 const sessionID = 'cs_test_fixture';
 const intentID = 'pi_fixture';
 const chargeID = 'ch_fixture';

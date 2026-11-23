@@ -12,9 +12,10 @@ export function packs(env) {
   const entries = JSON.parse(env.MANE_SHOP_PACKS ?? '[]');
   if (!Array.isArray(entries) || entries.length > 16) throw new Error('invalid pack configuration');
   const ids = new Set();
-  for (const { id, title, amount, credits, validity_seconds } of entries) {
+  for (const { id, title, amount, credits, validity_seconds, category } of entries) {
     if (typeof id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(id) || ids.has(id) || typeof title !== 'string' ||
         !title.trim() || title.length > 80 || !Number.isSafeInteger(amount) || amount <= 0 ||
+        (category !== undefined && (typeof category !== 'string' || category.trim().length > 40)) ||
         !Number.isSafeInteger(credits) || credits <= 0 ||
         (validity_seconds !== null && (!Number.isSafeInteger(validity_seconds) || validity_seconds <= 0))) {
       throw new Error('invalid pack configuration');
@@ -201,7 +202,9 @@ export async function webhook(env, fetcher, request) {
 }
 
 export function catalog(env) {
-  return packs(env).map(({ id, title, amount, credits, validity_seconds }) => ({ id, title, amount, credits, validity_seconds }));
+  return packs(env).map(({ id, title, amount, credits, validity_seconds, category }) => ({
+    id, title, amount, credits, validity_seconds, category: category?.trim() || undefined,
+  }));
 }
 export async function canCheckout(env, subject) {
   if (env.MANE_SHOP_TEST_MODE !== '1' || !stripeTestAvailable(env) || !subject) return false;
