@@ -11,7 +11,7 @@ function closeGuide() {
 
 export default function Guide() {
   const reduceMotion = useAppReducedMotion();
-  const guide = <GettingStarted review onClose={closeGuide} />;
+  const guide = <GettingStarted review reviewRoute={Platform.OS === 'android' ? undefined : {}} onClose={closeGuide} />;
   return (
     <>
       {Platform.OS !== 'ios' ? <Stack.Screen options={{ headerShown: false }} /> : null}

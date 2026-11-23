@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
-import { Stack } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tick } from '@/lib/haptics';
 import { metrics, usePalette } from '@/lib/theme';
+import { Group, Row, SectionTitle } from '@/ui/kit';
 
 type GuideImage = { image: number; darkImage: number };
 type GuideStep = { instruction: string; screenshot: GuideImage };
@@ -97,31 +97,59 @@ const topics = {
 } satisfies Record<string, GuidePage>;
 
 const introduction: readonly GuidePage[] = [topics.record, topics.vibration, topics.analysis, topics.card, topics.savings];
+export type GuideTopic = keyof typeof topics;
+
+export function isGuideTopic(topic: unknown): topic is GuideTopic {
+  return typeof topic === 'string' && Object.hasOwn(topics, topic);
+}
+
+export function isGuideStep(topic: GuideTopic, step: string | undefined) {
+  return step !== undefined && /^[0-9]+$/.test(step) && Number(step) < topics[topic].steps.length;
+}
+
 const topicGroups = [
-  { title: '記録・確認', pages: [topics.record, topics.search, topics.analysis, topics.card] },
-  { title: '設定・データ', pages: [topics.vibration, topics.categories, topics.backups] },
-  { title: '予算・貯金', pages: [topics.planning, topics.savings] },
-];
-const reviewPages: readonly GuidePage[] = topicGroups.flatMap((group) => group.pages);
+  { title: '記録・確認', pages: ['record', 'search', 'analysis', 'card'] },
+  { title: '設定・データ', pages: ['vibration', 'categories', 'backups'] },
+  { title: '予算・貯金', pages: ['planning', 'savings'] },
+] as const satisfies readonly { title: string; pages: readonly GuideTopic[] }[];
+const reviewPageIds: readonly GuideTopic[] = topicGroups.flatMap((group) => [...group.pages]);
+const reviewPages: readonly GuidePage[] = reviewPageIds.map((id) => topics[id]);
 const screenshotRatio = 390 / 844;
 
-export function GettingStarted({ onClose, review = false }: { onClose: () => void; review?: boolean }) {
+export function GettingStarted({ onClose, review = false, reviewRoute }: {
+  onClose: () => void;
+  review?: boolean;
+  reviewRoute?: { topic?: GuideTopic; step?: number };
+}) {
   const p = usePalette();
   const isDark = useColorScheme() === 'dark';
   const { width, fontScale } = useWindowDimensions();
   const [index, setIndex] = useState<number | null>(review ? null : 0);
-  const [openImage, setOpenImage] = useState<GuideStep>();
+  const [previewImage, setPreviewImage] = useState<GuideStep>();
   const pages = review ? reviewPages : introduction;
-  const page = index === null ? undefined : pages[index];
+  const page = reviewRoute?.topic ? topics[reviewRoute.topic] : index === null ? undefined : pages[index];
+  const openImage = reviewRoute?.step === undefined ? previewImage : page?.steps[reviewRoute.step];
   const sideBySide = width >= 360 && fontScale < 1.3 && page?.steps.length === 2;
   const last = index === pages.length - 1;
   const backLabel = openImage ? '手順へ戻る' : page ? '一覧へ戻る' : '設定へ戻る';
   const nativeReviewHeader = review && Platform.OS === 'ios';
+  const showReviewFooter = review && !!page;
 
   function goBack() {
-    if (openImage) setOpenImage(undefined);
+    if (reviewRoute) onClose();
+    else if (openImage) setPreviewImage(undefined);
     else if (review && page) setIndex(null);
     else onClose();
+  }
+
+  function openTopic(topic: GuideTopic) {
+    if (reviewRoute) router.push({ pathname: '/settings/guide-topic', params: { topic } });
+    else setIndex(reviewPageIds.indexOf(topic));
+  }
+
+  function showImage(step: GuideStep, position: number) {
+    if (reviewRoute?.topic) router.push({ pathname: '/settings/guide-image', params: { topic: reviewRoute.topic, step: String(position) } });
+    else setPreviewImage(step);
   }
 
   return (
@@ -131,14 +159,14 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
         title: openImage ? '画面の拡大' : '使い方',
         headerShown: true,
         headerBackVisible: false,
-        gestureEnabled: !page && !openImage,
+        gestureEnabled: true,
         unstable_headerLeftItems: () => [{
           type: 'button', icon: { type: 'sfSymbol', name: 'chevron.left' }, label: backLabel,
           onPress: () => { tick(); goBack(); },
         }],
-      }} /> : null}
-      <View style={{ flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 24 }}>
-        {nativeReviewHeader ? null : review || openImage ? (
+      }} /> : reviewRoute ? <Stack.Screen options={{ headerShown: false }} /> : null}
+      <View style={{ flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: review && !page ? 16 : 24 }}>
+        {nativeReviewHeader || (showReviewFooter && !openImage) ? null : review || openImage ? (
           <Pressable accessibilityRole="button" accessibilityLabel={backLabel} onPress={goBack}
             style={{ minHeight: 44, marginTop: 6, alignSelf: 'flex-start', justifyContent: 'center' }}>
             <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>← {backLabel}</Text>
@@ -158,7 +186,7 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
               accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
               contentFit="contain" style={{ width: '100%', aspectRatio: screenshotRatio, borderRadius: 14 }} />
           </ScrollView>
-        ) : page && index !== null ? (
+        ) : page ? (
           <>
             <ScrollView key={page.title} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', gap: 14, paddingVertical: 12 }}>
               <Text accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
@@ -173,7 +201,7 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
                         {page.steps.length > 1 ? `${stepIndex + 1}. ` : ''}{step.instruction}
                       </Text>
                       <Pressable accessibilityRole="button" accessibilityLabel={`画面を拡大：${step.instruction}`}
-                        onPress={() => setOpenImage(step)} style={{ width: '100%', maxWidth: 190, alignSelf: 'center' }}>
+                        onPress={() => showImage(step, stepIndex)} style={{ width: '100%', maxWidth: 190, alignSelf: 'center' }}>
                         <Image source={source} recyclingKey={Platform.OS === 'android' ? String(source) : undefined}
                           accessibilityElementsHidden importantForAccessibility="no-hide-descendants" contentFit="contain"
                           style={{ width: '100%', aspectRatio: screenshotRatio, borderWidth: 1, borderColor: p.outline, borderRadius: 12 }} />
@@ -184,15 +212,15 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
               </View>
               <Text style={{ color: p.textSecondary, fontSize: 13, textAlign: 'center' }}>画像をタップすると拡大できます</Text>
             </ScrollView>
-            {!review ? <View style={{ gap: 6, paddingBottom: 14, paddingTop: 10 }}>
-              <Pressable accessibilityRole="button" onPress={last ? onClose : () => setIndex(index + 1)}
+            {!review || showReviewFooter ? <View style={{ gap: 6, paddingBottom: 14, paddingTop: 10 }}>
+              <Pressable accessibilityRole="button" onPress={review ? goBack : last ? onClose : () => setIndex((index ?? 0) + 1)}
                 style={({ pressed }) => ({
                   minHeight: 52, borderRadius: metrics.controlRadius, backgroundColor: p.tint,
                   alignItems: 'center', justifyContent: 'center', padding: 10, opacity: pressed ? 0.83 : 1,
                 })}>
-                <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>{last ? 'はじめる' : '次へ'}</Text>
+                <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>{review ? backLabel : last ? 'はじめる' : '次へ'}</Text>
               </Pressable>
-              {index > 0 ? (
+              {review ? null : index !== null && index > 0 ? (
                 <Pressable accessibilityRole="button" onPress={() => setIndex(index - 1)}
                   style={{ minHeight: 44, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ color: p.tint, fontSize: 14, fontWeight: '600' }}>前へ</Text>
@@ -204,25 +232,14 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
           <ScrollView contentContainerStyle={{ gap: 16, paddingVertical: 10 }}>
             {!nativeReviewHeader ? <Text accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>使い方</Text> : null}
             {topicGroups.map((group) => (
-              <View key={group.title} style={{ gap: 4 }}>
-                <Text accessibilityRole="header" style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>{group.title}</Text>
-                <View>
-                  {group.pages.map((topic) => (
-                    <Pressable key={topic.title} accessibilityRole="button" accessibilityLabel={topic.title}
-                      accessibilityHint={topic.location}
-                      onPress={() => setIndex(reviewPages.indexOf(topic))} style={({ pressed }) => ({
-                        minHeight: 52, flexDirection: 'row', gap: 10, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4,
-                        borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: p.outline,
-                        backgroundColor: pressed ? p.fill : 'transparent',
-                      })}>
-                      <View style={{ flex: 1, gap: 2 }}>
-                        <Text style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>{topic.title}</Text>
-                        <Text style={{ color: p.textSecondary, fontSize: 13 }}>{topic.location}</Text>
-                      </View>
-                      <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={15} tintColor={p.tint} accessible={false} />
-                    </Pressable>
-                  ))}
-                </View>
+              <View key={group.title} style={{ gap: 16 }}>
+                <SectionTitle>{group.title}</SectionTitle>
+                <Group>
+                  {group.pages.map((topicId) => {
+                    const topic = topics[topicId];
+                    return <Row key={topicId} title={topic.title} subtitle={topic.location} compact chevron onPress={() => openTopic(topicId)} />;
+                  })}
+                </Group>
               </View>
             ))}
           </ScrollView>

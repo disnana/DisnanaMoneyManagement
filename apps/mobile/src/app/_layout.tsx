@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, type NativeStackNavigationOptions } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, useSegments, type NativeStackNavigationOptions } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
 import { Platform, useColorScheme } from 'react-native';
@@ -20,6 +20,9 @@ export default function RootLayout() {
   const p = usePalette();
   const reduceMotion = useAppReducedMotion();
   const root = useRootNavigationState();
+  const segments: readonly string[] = useSegments();
+  const [section, screen] = segments;
+  const showingGuide = section === 'settings' && (screen === 'guide' || screen === 'guide-topic' || screen === 'guide-image');
   const firstScreenKey = root.routes[root.index]?.state?.routes[0]?.key;
   const settingsTransition = androidSettingsTransition(reduceMotion);
   function settingsEntryOptions(key?: string): NativeStackNavigationOptions {
@@ -65,7 +68,9 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
           {/* Back from a direct settings link replaces the route with /accounts. */}
           <Stack.Screen name="(tabs)" options={Platform.OS === 'android' ? { animationTypeForReplace: 'pop' } : undefined} />
-          <Stack.Screen name="settings" options={({ route }) => settingsEntryOptions(route.key)} />
+          <Stack.Screen name="settings" options={({ route }) => Platform.OS === 'ios'
+            ? { gestureEnabled: !showingGuide }
+            : settingsEntryOptions(route.key)} />
           <Stack.Screen name="categories" options={({ route }) => ({ ...detailOptions, ...settingsEntryOptions(route.key) })} />
           {(['category-editor', 'category-detail'] as const).map((name) => (
             <Stack.Screen key={name} name={name} options={{ ...detailOptions, ...settingsTransition }} />
