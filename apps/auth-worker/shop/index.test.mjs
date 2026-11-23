@@ -108,6 +108,7 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
   const db = backendFixture();
   db.sessions.set(await hash(accountCookie), {subject:'same-google-sub'});
   let created = 0, outage = false, pending = true, usedB = false;
+  let stripeStatus = 'open', checkoutEnds = cutoff() + 3600;
   const charge = { id: chargeID, payment_intent: intentID, amount_refunded: 0, currency: 'jpy',
     livemode: false, paid: true, created: cutoff(), receipt_url: 'https://pay.stripe.com/receipts/test' };
   const intent = { id: intentID, livemode: false, status: 'succeeded', amount_received: pack.amount,
@@ -134,7 +135,8 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
     if (url.pathname === '/v1/payment_intents/' + intentID) return Response.json(intent);
     assert.equal(url.pathname, '/v1/checkout/sessions/' + sessionID);
     return Response.json({ id: sessionID, metadata: { mane_order: requestID }, client_reference_id: requestID,
-      livemode: false, mode: 'payment', currency: 'jpy', amount_total: pack.amount, status: 'complete',
+      livemode: false, mode: 'payment', currency: 'jpy', amount_total: pack.amount, status: stripeStatus,
+      expires_at: checkoutEnds, url: 'https://checkout.stripe.com/c/pay/test',
       payment_status: pending ? 'unpaid' : 'paid', payment_intent: intent });
   } });
   const input = { pack_id: pack.id, request_id: requestID, amount: 1, subject: 'user-input' };
@@ -144,6 +146,15 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
   assert.equal((await publicFetch(worker, post('checkout', input, payHeaders), env)).status, 200);
   assert.equal((await publicFetch(worker, post('checkout', input, payHeaders), env)).status, 200);
   assert.equal(created, 1);
+  const reconcilePath = 'orders/' + requestID + '/reconcile';
+  const resumePath = 'orders/' + requestID + '/resume';
+  const getOrderState = path => publicFetch(worker, post(path, {}, payHeaders), env).then(r => r.json());
+  assert.deepEqual(await getOrderState(reconcilePath), { status: 'pending', resume_available: true });
+  assert.deepEqual(await getOrderState(resumePath), { checkout_url: 'https://checkout.stripe.com/c/pay/test' });
+  assert.equal(created, 1);
+  checkoutEnds = cutoff() - 1;
+  assert.deepEqual(await getOrderState(resumePath), { status: 'pending', resume_available: false });
+  stripeStatus = 'complete';
   const send = async payload => {
     const [raw, signature] = await signed(payload, env.STRIPE_WEBHOOK_SECRET);
     return publicFetch(worker, post('stripe/webhook', raw, { 'Stripe-Signature': signature }), env);
@@ -157,14 +168,16 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
   outage = true;
   assert.equal((await send(paid)).status, 503);
   outage = false;
-  const reconcilePath = 'orders/' + requestID + '/reconcile';
   assert.equal((await publicFetch(worker, post(reconcilePath, {}, {Origin:site}), env)).status, 401);
   const otherToken = 'x'.repeat(43);
   db.sessions.set(await hash(otherToken), {subject:'different-user'});
   const otherHeaders = {Origin:site,Cookie:'__Secure-mane-shop='+otherToken};
   assert.equal((await publicFetch(worker, post(reconcilePath, {}, otherHeaders), env)).status, 404);
+  assert.equal((await publicFetch(worker, post(resumePath, {}, otherHeaders), env)).status, 404);
   const checked = await publicFetch(worker, post(reconcilePath, {}, payHeaders), env);
-  assert.deepEqual(await checked.json(), {status:'paid'});
+  assert.deepEqual(await checked.json(), {status:'paid',resume_available:false});
+  assert.deepEqual(await getOrderState(resumePath), {status:'paid',resume_available:false});
+  assert.equal(created, 1);
   assert.equal((await send(paid)).status, 200);
   assert.equal((await send(paid)).status, 200);
   assert.equal(db.grants, 1);

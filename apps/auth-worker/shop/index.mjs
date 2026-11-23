@@ -7,13 +7,13 @@ const routes = new Map([
   ['packs', 'GET'], ['auth/start', 'GET'], ['auth/callback', 'GET'], ['auth/logout', 'POST'],
   ['account', 'GET'], ['checkout', 'POST'], ['stripe/webhook', 'POST'],
 ]);
-const reconcileRoute = /^orders\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/reconcile$/;
+const orderRoute = /^orders\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/(reconcile|resume)$/;
 
 export async function shopRequest(request, env, fetcher) {
   const url = new URL(request.url);
   if (url.origin !== env.SITE_ORIGIN || url.protocol !== 'https:') return json({ error: 'not_found' }, 404);
   const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : '';
-  const match = reconcileRoute.exec(path);
+  const match = orderRoute.exec(path);
   const method = match ? 'POST' : routes.get(path);
   if (!method) return json({ error: 'not_found' }, 404);
   if (request.method !== method) return json({ error: 'method_not_allowed' }, 405);
@@ -36,7 +36,7 @@ export async function shopRequest(request, env, fetcher) {
   if (!await allow(env, scope + ':' + user.subject, path === 'account' ? 30 : 8)) {
     return json({ error: 'too_many_requests' }, 429);
   }
-  if (match) return reconcile(env, fetcher, user.subject, match[1]);
+  if (match) return reconcile(env, fetcher, user.subject, match[1], match[2] === 'resume');
   if (path === 'checkout') {
     let input;
     try { input = JSON.parse(decode(await readBytes(request, 4096))); }
@@ -47,5 +47,5 @@ export async function shopRequest(request, env, fetcher) {
     callBackend(env, 'wallet', { subject: user.subject }),
     callBackend(env, 'orders', { subject: user.subject }),
   ]);
-  return json({ account_id: user.subject, wallet, orders });
+  return json({ account_id: user.subject, resume_supported: true, wallet, orders });
 }

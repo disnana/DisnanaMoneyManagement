@@ -54,7 +54,11 @@ export async function checkout(env, fetcher, user, input) {
   if (!order || order.subject !== user || order.pack !== pack.id || order.status !== 'pending') return json({ error: 'order_conflict' }, 409);
   const expires = order.created_at + checkoutLifetime;
   const remaining = expires - unix();
-  if (order.checkout_url && remaining > 0) return json({ checkout_url: order.checkout_url });
+  if (order.stripe_session) {
+    const result = await onCheckout(env, fetcher, order.stripe_session, undefined, order);
+    if (result?.resumeURL) return json({ checkout_url: result.resumeURL });
+    return json({ error: result?.status === 'expired' ? 'order_expired' : 'order_conflict' }, 409);
+  }
   if (remaining <= minimumCheckoutLifetime) return json({ error: 'order_expired' }, 409);
   const site = env.SITE_ORIGIN;
   // Use the stored order, so retries are stable even if the pack is edited.
@@ -137,12 +141,20 @@ async function onCheckout(env, fetcher, id, eventType, expectedOrder) {
       session.mode !== 'payment' || session.currency !== 'jpy' || session.amount_total !== order.amount ||
       (order.stripe_session && order.stripe_session !== id)) throw new Error('Checkout order mismatch');
   if (session.payment_status === 'paid' && session.status === 'complete' && session.payment_intent) {
-    return settle(env, order, session.id, session.payment_intent, session.payment_intent.latest_charge);
+    const updated = await settle(env, order, session.id, session.payment_intent, session.payment_intent.latest_charge);
+    return { status: updated?.status ?? order.status };
   }
   const failure = session.status === 'expired' ? 'expired' :
     eventType === 'checkout.session.async_payment_failed' ? 'payment_failed' : null;
-  if (failure) return apply(env, order, failure, { stripe_session: id });
-  return order;
+  if (failure) {
+    const updated = await apply(env, order, failure, { stripe_session: id });
+    return { status: updated?.status ?? order.status };
+  }
+  const resumeURL = order.status === 'pending' && session.status === 'open' && session.payment_status === 'unpaid' &&
+    Number.isSafeInteger(session.expires_at) && session.expires_at > unix()
+    ? trustedURL(session.url, 'checkout.stripe.com') : null;
+  return { status: order.status, resumeURL };
+
 }
 
 const chargeEvents = new Set(['charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed']);
@@ -198,10 +210,13 @@ export async function canCheckout(env, subject) {
   return (env.MANE_SHOP_TEST_SUBJECT_HASHES ?? '').split(',').map(x => x.trim()).includes(subjectHash);
 }
 
-export async function reconcile(env, fetcher, subject, id) {
+export async function reconcile(env, fetcher, subject, id, resume = false) {
   const order = await findOrder(env, id, subject);
   if (!order) return json({ error: 'order_not_found' }, 404);
-  if (!order.stripe_session) return json({ status: order.status });
-  const updated = await onCheckout(env, fetcher, order.stripe_session, undefined, order);
-  return json({ status: updated?.status ?? order.status });
+  const canResume = await canCheckout(env, subject);
+  if (resume && !canResume) return json({ error: 'sales_unavailable' }, 503);
+  const result = order.stripe_session ? await onCheckout(env, fetcher, order.stripe_session, undefined, order) : null;
+  const resumeAvailable = Boolean(canResume && result?.resumeURL);
+  if (resume && resumeAvailable) return json({ checkout_url: result.resumeURL });
+  return json({ status: result?.status ?? order.status, resume_available: resumeAvailable });
 }
