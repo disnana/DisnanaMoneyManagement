@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/disnana/dmm/server/internal/credits"
 )
 
 type Config struct {
@@ -22,6 +24,7 @@ type Config struct {
 	WorkerProof                                     *WorkerProof
 	ScyllaStatus                                    *ScyllaStatus
 	CreditBalance                                   func(context.Context, string) (int64, error)
+	CreditDetails                                   func(context.Context, string) (credits.Snapshot, error)
 	Now                                             func() time.Time
 }
 
@@ -273,6 +276,15 @@ func (n *Node) credits(w http.ResponseWriter, r *http.Request) {
 	s, authErr := n.access(bearer(r))
 	if err != nil || len(raw) != 0 || authErr != nil || !n.accept(r, raw, s) {
 		reject(w, 401)
+		return
+	}
+	if n.cfg.CreditDetails != nil {
+		details, err := n.cfg.CreditDetails(r.Context(), s.subject)
+		if err != nil {
+			reject(w, 503)
+			return
+		}
+		jsonReply(w, 200, details)
 		return
 	}
 	if n.cfg.CreditBalance == nil {

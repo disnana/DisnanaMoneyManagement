@@ -15,8 +15,14 @@ import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
 
-function openLegalPage(page: 'terms' | 'privacy') {
-  void Linking.openURL(`https://dmm.disnana.com/${page}/`).catch(() => Alert.alert('ページを開けませんでした'));
+const officialURLs = {
+  terms: 'https://dmm.disnana.com/terms/',
+  privacy: 'https://dmm.disnana.com/privacy/',
+  support: 'mailto:support@disnana.com',
+};
+
+function openOfficialLink(page: keyof typeof officialURLs) {
+  void Linking.openURL(officialURLs[page]).catch(() => Alert.alert('リンクを開けませんでした'));
 }
 
 export default function Settings() {
@@ -122,9 +128,13 @@ export default function Settings() {
         <Group>
           <Row title="使い方" icon={{ ios: 'questionmark.circle', android: 'help_outline' }}
             subtitle="はじめてのガイドを見直す" chevron onPress={() => router.push('/settings/guide')} />
-          <Row title="利用規約" chevron onPress={() => openLegalPage('terms')} />
-          <Row title="プライバシーポリシー" chevron onPress={() => openLegalPage('privacy')} />
           <Row title="バージョン" right={Constants.expoConfig?.version ?? '-'} />
+        </Group>
+        <SectionTitle>公式情報</SectionTitle>
+        <Group>
+          <Row title="利用規約" chevron onPress={() => openOfficialLink('terms')} />
+          <Row title="プライバシーポリシー" chevron onPress={() => openOfficialLink('privacy')} />
+          <Row title="サポート" chevron onPress={() => openOfficialLink('support')} />
         </Group>
       </Screen>
     </>

@@ -19,6 +19,17 @@ type GoogleIDToken struct {
 }
 
 func (g GoogleIDToken) Subject(ctx context.Context, raw, fingerprint string) (string, error) {
+	return g.subject(ctx, raw, func(nonce string) bool {
+		suffix, ok := strings.CutPrefix(nonce, fingerprint+".")
+		return ok && len(suffix) == 32
+	})
+}
+
+func (g GoogleIDToken) WebSubject(ctx context.Context, raw, nonce string) (string, error) {
+	return g.subject(ctx, raw, func(claim string) bool { return len(nonce) == 43 && claim == nonce })
+}
+
+func (g GoogleIDToken) subject(ctx context.Context, raw string, verifyNonce func(string) bool) (string, error) {
 	if g.Audience == "" || g.Key == nil || len(raw) > 8192 {
 		return "", errAuth
 	}
@@ -41,7 +52,7 @@ func (g GoogleIDToken) Subject(ctx context.Context, raw, fingerprint string) (st
 		(claims.Issuer != "accounts.google.com" && claims.Issuer != "https://accounts.google.com") {
 		return "", errAuth
 	}
-	if suffix, ok := strings.CutPrefix(claims.Nonce, fingerprint+"."); !ok || len(suffix) != 32 {
+	if !verifyNonce(claims.Nonce) {
 		return "", errAuth
 	}
 	if len(claims.Audience) != 1 {

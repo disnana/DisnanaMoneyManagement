@@ -67,4 +67,18 @@ func TestScyllaWallet(t *testing.T) {
 	if err := b.Spend(ctx, subject, "insufficient", 5); !errors.Is(err, ErrInsufficient) {
 		t.Fatalf("overdraft = %v", err)
 	}
+	if err := a.GrantPurchase(ctx, subject, "purchase", 9, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	runConcurrently(func(w *Wallet) error { return w.ReversePurchase(ctx, subject, "purchase") })
+	if err := b.ReversePurchase(ctx, subject, "reversed-before-grant"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.GrantPurchase(ctx, subject, "reversed-before-grant", 9, time.Time{}); !errors.Is(err, ErrPurchaseReversed) {
+		t.Fatalf("late grant after reversal = %v", err)
+	}
+	snapshot, err := b.Snapshot(ctx, subject)
+	if err != nil || snapshot.Balance != 4 || len(snapshot.History) != 5 {
+		t.Fatalf("unexpected snapshot after reversal and retry: %+v, %v", snapshot, err)
+	}
 }

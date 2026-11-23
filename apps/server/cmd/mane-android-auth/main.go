@@ -18,6 +18,7 @@ import (
 
 	"github.com/disnana/dmm/server/internal/androidauth"
 	"github.com/disnana/dmm/server/internal/credits"
+	"github.com/disnana/dmm/server/internal/webshop"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
@@ -90,13 +91,15 @@ func run(checkConfig bool) error {
 	config.CreditBalance = func(_ context.Context, sub string) (int64, error) {
 		return entries[sub], nil
 	}
+	var wallet *credits.Wallet
 	if scyllaEnabled {
-		wallet, err := credits.OpenFromEnv()
+		wallet, err = credits.OpenFromEnv()
 		if err != nil {
 			return err
 		}
 		defer wallet.Close()
 		config.CreditBalance = wallet.Balance
+		config.CreditDetails = wallet.Snapshot
 	}
 	if publicKey := os.Getenv("MANE_WORKER_JWS_PUBLIC_KEY"); publicKey != "" {
 		proof, err := androidauth.NewWorkerProof(publicKey)
@@ -119,10 +122,24 @@ func run(checkConfig bool) error {
 	if err != nil {
 		return errors.New("invalid Android auth environment settings")
 	}
+	var handler http.Handler = node
+	if key := os.Getenv("MANE_WEB_WORKER_KEY"); key != "" {
+		if wallet == nil {
+			return errors.New("MANE_WEB_WORKER_KEY requires ScyllaDB")
+		}
+		web, err := webshop.New(wallet, key, googleID.WebSubject)
+		if err != nil {
+			return err
+		}
+		mux := http.NewServeMux()
+		mux.Handle(webshop.Prefix, web)
+		mux.Handle("/", node)
+		handler = mux
+	}
 	if checkConfig {
 		return nil
 	}
-	server := &http.Server{Addr: addresses, Handler: node, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 6 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 30 * time.Second}
+	server := &http.Server{Addr: addresses, Handler: handler, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 6 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 30 * time.Second}
 	go node.RunExpiry(ctx)
 	if config.ScyllaStatus != nil {
 		nodetool := os.Getenv("MANE_NODETOOL_PATH")

@@ -5,12 +5,13 @@ import { admissionHash, DeviceProofHTTPError, getAndroidDeviceProof, submitDevic
 
 type Settings = { entry: string; googleClientID: string; projectNumber: string };
 type Session = { issuer_node_id: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
-type State = { signedIn: boolean; credits: number | null; busy: boolean; message: string };
+type CreditActivity = { id: string; at_ms: number; operation: { kind: 'grant' | 'spend' | 'reverse'; amount: number } };
+type State = { signedIn: boolean; credits: number | null; history: CreditActivity[] | null; busy: boolean; message: string };
 const settings = Constants.expoConfig?.extra?.maneAuth as Settings | undefined;
 const device = Platform.OS === 'android' && settings ? getAndroidDeviceProof() : null;
 let session: Session | null = null;
 let loaded = false;
-let state: State = { signedIn: false, credits: null, busy: false, message: '' };
+let state: State = { signedIn: false, credits: null, history: null, busy: false, message: '' };
 const listeners = new Set<() => void>();
 
 export const accountAvailable = Boolean(device && settings);
@@ -46,7 +47,7 @@ function parseSession(value: unknown): Session {
 async function setSession(next: Session | null) {
   await device!.saveSession(next ? JSON.stringify(next) : null);
   session = next;
-  publish({ signedIn: Boolean(next), credits: null });
+  publish({ signedIn: Boolean(next), credits: null, history: null });
 }
 
 async function restore() {
@@ -103,13 +104,17 @@ async function authenticated(op: { method: 'GET'; path: '/v1/credits' } | { meth
 
 async function loadCredits() {
   if (!session) return;
-  publish({ credits: null });
+  publish({ credits: null, history: null });
   try {
     const response = await authenticated({ method: 'GET', path: '/v1/credits' });
-    const result = await response.json() as { available_credits?: unknown };
+    const result = await response.json() as { available_credits?: unknown; history?: unknown };
     const amount = result.available_credits;
     if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount < 0) throw new Error('Invalid balance');
-    publish({ credits: amount });
+    const history = Array.isArray(result.history) ? result.history.slice(0, 20).filter((item): item is CreditActivity =>
+      item && typeof item.id === 'string' && Number.isSafeInteger(item.at_ms) && item.at_ms >= 0 && item.at_ms <= 8.64e15 &&
+      ['grant', 'spend', 'reverse'].includes(item.operation?.kind) &&
+      Number.isSafeInteger(item.operation?.amount) && item.operation.amount >= 0) : null;
+    publish({ credits: amount, history });
   } catch {
     publish({ message: session ? '残高を取得できませんでした。再読み込みできます。' : 'セッションが切れました。もう一度ログインしてください。' });
   }

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>ショップ・クレジット管理 | マネーちゃん</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css">
+  <script src="/shop/shop.js" type="module"></script>
+</head>
+<body>
+  <header class="shell top">
+    <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="38" height="38">マネーちゃん</a>
+    <nav aria-label="主要ページ"><a href="/app/">Web版を開く</a></nav>
+  </header>
+  <main class="shell shop">
+    <h1>ショップ・クレジット管理</h1>
+    <p>AIレシートに使うクレジットを、Androidと同じGoogleアカウントで管理できます。</p>
+    <noscript><p>残高や購入状況の表示にはJavaScriptが必要です。</p></noscript>
+    <p id="status" class="status" role="status">読み込み中…</p>
+    <div class="actions">
+      <a id="login" class="button primary" href="/api/shop/auth/start" hidden>Googleでログイン</a>
+      <button id="refresh" class="button" hidden>表示を更新</button>
+      <button id="logout" class="button" hidden>ログアウト</button>
+    </div>
+    <section id="wallet" hidden aria-label="クレジット残高">
+      <h2>利用できるクレジット</h2>
+      <p class="amount" id="balance"></p>
+      <ul class="list" id="lots"></ul>
+    </section>
+    <section aria-labelledby="packs-heading">
+      <h2 id="packs-heading">クレジットパック</h2>
+      <p id="pack-note"></p>
+      <ul class="list" id="packs"></ul>
+    </section>
+    <section id="orders-section" hidden aria-labelledby="orders-heading">
+      <h2 id="orders-heading">購入履歴・領収書</h2>
+      <ul class="list" id="orders"></ul>
+    </section>
+    <section id="history-section" hidden aria-labelledby="history-heading">
+      <h2 id="history-heading">クレジット履歴</h2>
+      <ul class="list" id="history"></ul>
+    </section>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a><a href="mailto:support@disnana.com">購入・利用のお問い合わせ</a></nav></footer>
+</body>
+</html>

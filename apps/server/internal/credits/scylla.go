@@ -85,7 +85,22 @@ func (w *Wallet) Balance(ctx context.Context, subject string) (int64, error) {
 }
 
 func (w *Wallet) Grant(ctx context.Context, subject, id string, amount int64, expires time.Time) error {
-	op := operation{Kind: "grant", Amount: amount}
+	return w.grant(ctx, subject, id, amount, expires, "")
+}
+
+func (w *Wallet) GrantPurchase(ctx context.Context, subject, order string, amount int64, expires time.Time) error {
+	return w.grant(ctx, subject, "stripe-grant:"+order, amount, expires, order)
+}
+
+func (w *Wallet) ReversePurchase(ctx context.Context, subject, order string) error {
+	if order == "" {
+		return errors.New("missing credit order")
+	}
+	return w.mutate(ctx, subject, "stripe-reverse:"+order, operation{Kind: "reverse", Source: order})
+}
+
+func (w *Wallet) grant(ctx context.Context, subject, id string, amount int64, expires time.Time, source string) error {
+	op := operation{Kind: "grant", Amount: amount, Source: source}
 	if !expires.IsZero() {
 		op.Expires = expires.UnixMilli()
 		if op.Expires <= 0 {
@@ -100,7 +115,8 @@ func (w *Wallet) Spend(ctx context.Context, subject, id string, amount int64) er
 }
 
 func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) error {
-	if subject == "" || len(subject) > 256 || id == "" || len(id) > 128 || op.Amount <= 0 || op.Amount > maxBalance {
+	if subject == "" || len(subject) > 256 || id == "" || len(id) > 128 ||
+		(op.Kind != "reverse" && (op.Amount <= 0 || op.Amount > maxBalance)) {
 		return errors.New("invalid credit operation")
 	}
 	journalKey := "op:" + id
@@ -122,10 +138,20 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 		case !errors.Is(err, gocql.ErrNotFound):
 			return err
 		}
+		if op.Kind == "grant" && op.Source != "" {
+			err := w.session.Query("SELECT operation FROM credit_wallet_entries WHERE subject = ? AND entry = ?", subject, "op:stripe-reverse:"+op.Source).WithContext(ctx).Scan(&prior)
+			if err == nil {
+				return ErrPurchaseReversed
+			}
+			if !errors.Is(err, gocql.ErrNotFound) {
+				return err
+			}
+		}
 		if missing && op.Kind == "spend" {
 			return ErrInsufficient
 		}
-		next, err := apply(lots, op, time.Now())
+		at := time.Now()
+		next, err := apply(lots, op, at)
 		if err != nil {
 			return err
 		}
@@ -137,6 +163,15 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 			batch.Query("UPDATE credit_wallet_entries SET revision = ?, lots = ? WHERE subject = ? AND entry = 'wallet' IF revision = ?", revision+1, string(value), subject, revision)
 		}
 		batch.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?) IF NOT EXISTS", subject, journalKey, string(encoded))
+		record := historyEntry{Operation: op, ID: id, At: at.UnixMilli()}
+		if op.Kind == "reverse" {
+			before, _ := activeBalance(lots, record.At)
+			after, _ := activeBalance(next, record.At)
+			record.Operation.Amount = before - after
+		}
+		history, _ := json.Marshal(record)
+		batch.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)",
+			subject, fmt.Sprintf("history:%019d:%s", record.At, id), string(history))
 		applied, rows, err := w.session.MapExecuteBatchCAS(batch, make(map[string]interface{}))
 		if rows != nil {
 			err = errors.Join(err, rows.Close())
@@ -149,4 +184,48 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 		}
 	}
 	return errors.New("credit write contention; reuse the same operation ID")
+}
+
+type historyEntry struct {
+	ID        string    `json:"id"`
+	At        int64     `json:"at_ms"`
+	Operation operation `json:"operation"`
+}
+
+type Snapshot struct {
+	Balance int64          `json:"available_credits"`
+	Lots    []lot          `json:"lots"`
+	History []historyEntry `json:"history"`
+}
+
+func (w *Wallet) Snapshot(ctx context.Context, subject string) (Snapshot, error) {
+	snapshot := Snapshot{Lots: []lot{}, History: []historyEntry{}}
+	_, lots, err := w.read(ctx, subject)
+	if errors.Is(err, gocql.ErrNotFound) {
+		return snapshot, nil
+	}
+	if err != nil {
+		return Snapshot{}, err
+	}
+	now := time.Now().UnixMilli()
+	snapshot.Balance, err = activeBalance(lots, now)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	for _, item := range lots {
+		if item.Expires == 0 || item.Expires > now {
+			snapshot.Lots = append(snapshot.Lots, item)
+		}
+	}
+	rows := w.session.Query("SELECT operation FROM credit_wallet_entries WHERE subject = ? AND entry >= 'history:' AND entry < 'history;' ORDER BY entry DESC LIMIT 50", subject).WithContext(ctx).Iter()
+	var data string
+	for rows.Scan(&data) {
+		var entry historyEntry
+		if err := json.Unmarshal([]byte(data), &entry); err != nil {
+			_ = rows.Close()
+			return Snapshot{}, err
+		}
+		snapshot.History = append(snapshot.History, entry)
+	}
+	return snapshot, rows.Close()
 }

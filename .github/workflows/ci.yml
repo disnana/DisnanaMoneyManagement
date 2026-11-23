@@ -46,9 +46,46 @@ jobs:
       - name: Unit tests
         run: bun run test
       - name: Authentication Worker tests
-        run: node --test apps/auth-worker/index.test.mjs
+        run: node --test apps/auth-worker/index.test.mjs apps/shop-worker/index.test.mjs
       - name: Build
         run: bun run build
+      - name: Build official site for GitHub Pages
+        run: bun run build:portal
+
+  scylla:
+    name: ScyllaDB · credit ledger integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - name: Start isolated ScyllaDB and apply the schema
+        run: |
+          docker run -d --name dmm-scylla -p 127.0.0.1:9042:9042 scylladb/scylla:6.2.3 --smp 1 --memory 768M --overprovisioned 1
+          for attempt in {1..40}; do
+            if docker exec dmm-scylla cqlsh -e "CREATE KEYSPACE IF NOT EXISTS dmm_test WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1}"; then
+              docker exec -i dmm-scylla cqlsh -k dmm_test < internal/credits/schema.cql
+              exit 0
+            fi
+            sleep 3
+          done
+          docker logs dmm-scylla
+          exit 1
+      - name: Exercise writes, retries, and expiration against ScyllaDB
+        env:
+          MANE_TEST_SCYLLA: '1'
+          MANE_SCYLLA_HOSTS: '127.0.0.1'
+          MANE_SCYLLA_KEYSPACE: 'dmm_test'
+          MANE_SCYLLA_DATACENTER: 'datacenter1'
+        run: go test -count=1 -v ./internal/credits
 
   e2e:
     name: E2E · Playwright (mobile + desktop)

@@ -11,17 +11,20 @@ const maxBalance = 1<<53 - 1
 var (
 	ErrInsufficient      = errors.New("insufficient credits")
 	ErrOperationConflict = errors.New("credit operation ID already used for different parameters")
+	ErrPurchaseReversed  = errors.New("purchase has been reversed")
 )
 
 type lot struct {
-	Amount  int64 `json:"amount"`
-	Expires int64 `json:"expires_at_ms,omitempty"`
+	Amount  int64  `json:"amount"`
+	Expires int64  `json:"expires_at_ms,omitempty"`
+	Source  string `json:"source,omitempty"`
 }
 
 type operation struct {
 	Kind    string `json:"kind"`
 	Amount  int64  `json:"amount"`
 	Expires int64  `json:"expires_at_ms,omitempty"`
+	Source  string `json:"source,omitempty"`
 }
 
 func activeBalance(lots []lot, now int64) (int64, error) {
@@ -61,12 +64,20 @@ func apply(lots []lot, op operation, at time.Time) ([]lot, error) {
 			return nil, errors.New("credit balance exceeds limit")
 		}
 		for i := range active {
-			if active[i].Expires == op.Expires {
+			if active[i].Expires == op.Expires && active[i].Source == op.Source {
 				active[i].Amount += op.Amount
 				return active, nil
 			}
 		}
-		return append(active, lot{Amount: op.Amount, Expires: op.Expires}), nil
+		return append(active, lot{Amount: op.Amount, Expires: op.Expires, Source: op.Source}), nil
+	case "reverse":
+		result := active[:0]
+		for _, lot := range active {
+			if lot.Source != op.Source {
+				result = append(result, lot)
+			}
+		}
+		return result, nil
 	case "spend":
 		if op.Amount > balance {
 			return nil, ErrInsufficient

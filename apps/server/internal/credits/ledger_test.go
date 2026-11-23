@@ -9,9 +9,9 @@ import (
 
 func TestSpendEarliestExpiryFirst(t *testing.T) {
 	now := time.UnixMilli(1000)
-	lots := []lot{{5, 0}, {10, 3000}, {9, 1000}, {3, 2000}}
+	lots := []lot{{Amount: 5, Expires: 0}, {Amount: 10, Expires: 3000}, {Amount: 9, Expires: 1000}, {Amount: 3, Expires: 2000}}
 	next, err := apply(lots, operation{Kind: "spend", Amount: 6}, now)
-	if want := []lot{{7, 3000}, {5, 0}}; err != nil || !reflect.DeepEqual(next, want) {
+	if want := []lot{{Amount: 7, Expires: 3000}, {Amount: 5, Expires: 0}}; err != nil || !reflect.DeepEqual(next, want) {
 		t.Fatalf("spend = %v, %v; want %v", next, err, want)
 	}
 	for _, tc := range []struct{ now, want int64 }{{2999, 12}, {3000, 5}} {
@@ -26,7 +26,7 @@ func TestSpendEarliestExpiryFirst(t *testing.T) {
 
 func TestGrantLimitsAndExpiration(t *testing.T) {
 	now := time.UnixMilli(1000)
-	lots := []lot{{maxBalance - 1, 2000}}
+	lots := []lot{{Amount: maxBalance - 1, Expires: 2000}}
 	if _, err := apply(lots, operation{Kind: "grant", Amount: 2, Expires: 2000}, now); err == nil {
 		t.Fatal("grant beyond the balance limit succeeded")
 	}
@@ -34,7 +34,7 @@ func TestGrantLimitsAndExpiration(t *testing.T) {
 		t.Fatal("already expired grant succeeded")
 	}
 	next, err := apply(lots, operation{Kind: "grant", Amount: 1, Expires: 2000}, now)
-	if err != nil || !reflect.DeepEqual(next, []lot{{maxBalance, 2000}}) {
+	if err != nil || !reflect.DeepEqual(next, []lot{{Amount: maxBalance, Expires: 2000}}) {
 		t.Fatalf("grant = %v, %v", next, err)
 	}
 }

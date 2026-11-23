@@ -6,10 +6,11 @@ import { usePalette } from '@/lib/theme';
 import { Group, Row, Screen, SectionTitle } from '@/ui/kit';
 
 const mascot = require('../../../assets/launcher-icons/smile_mint.png');
+const activityLabels = { grant: '付与', spend: '消費', reverse: '返金に伴う調整' };
 
 export default function AccountSettings() {
   const p = usePalette();
-  const { signedIn, credits, busy, message } = useAndroidAccount();
+  const { signedIn, credits, history, busy, message } = useAndroidAccount();
   useFocusEffect(useCallback(() => {
     void refreshAndroidAccount();
   }, []));
@@ -32,6 +33,17 @@ export default function AccountSettings() {
               <Row title="クレジット残高" icon={{ ios: 'wallet.pass', android: 'account_balance_wallet' }}
                 right={busy ? '取得中…' : credits === null ? '取得できません' : `${credits.toLocaleString('ja-JP')} クレジット`} />
               <Row title="残高を再読み込み" onPress={busy ? undefined : refreshAndroidAccount} />
+            </Group>
+            <Text style={{ color: p.textSecondary }}>
+              販売時は、公式サイトで購入したクレジットが同じGoogleアカウントの残高に反映されます。
+            </Text>
+            <SectionTitle>クレジット履歴</SectionTitle>
+            <Group>
+              {history?.length ? history.map(item => (
+                <Row key={item.id} title={activityLabels[item.operation.kind]}
+                  subtitle={new Date(item.at_ms).toLocaleString('ja-JP')}
+                  right={`${item.operation.kind === 'grant' ? '+' : '−'}${item.operation.amount.toLocaleString('ja-JP')}`} />
+              )) : <Row title={busy ? '取得中…' : history === null ? '履歴を表示できません' : '利用履歴はありません'} />}
             </Group>
             <Group>
               <Row title="ログアウト" onPress={busy ? undefined : signOutAndroidAccount} />
