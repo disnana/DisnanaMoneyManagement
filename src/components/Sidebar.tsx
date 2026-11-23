@@ -14,6 +14,7 @@ import { formatJPY } from '../utils/format';
 import { PWAInstallButton } from './PWAInstallButton';
 import { ThemeSwitch } from './ThemeSwitch';
 import { LegalLinks } from './LegalLinks';
+import { OfficialSiteLinks } from './OfficialSiteLinks';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -88,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               );
             })}
           </nav>
+          <OfficialSiteLinks />
         </div>
 
         <div className="space-y-3 border-t border-slate-200 p-4">
