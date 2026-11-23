@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f5f9f6">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://node-a-stg.disnana.com https://node-b-stg.disnana.com; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>クレジットショップ | マネーちゃん</title>
   <meta name="description" content="AIレシート用のクレジットを購入し、残高・有効期限・購入履歴を確認できます。">
   <link rel="canonical" href="https://dmm.disnana.com/shop/">
@@ -28,9 +28,9 @@
   <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
   <link rel="stylesheet" href="/shop/shop.css?v=catalog-1">
   <script src="/shop/shop-nav.js" type="module"></script>
-  <script src="/shop/shop-store-v3.js" type="module"></script>
+  <script src="/shop/shop-store-v3.js?v=direct-1" type="module"></script>
 </head>
-<body class="shop-page">
+<body class="shop-page" data-shop-direct>
   <header class="shop-bar"><div class="shell top">
     <a class="brand" href="/shop/" aria-label="マネーちゃん ショップトップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
     <div class="shop-navigation">

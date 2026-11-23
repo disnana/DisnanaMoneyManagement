@@ -1,3 +1,4 @@
+import { readShop } from './shop-read.js';
 import { date, element, forgetCompletedOrders, label, number, openCheckout, request, rows, yen } from './shop-common.js';
 
 const orderStatus = {
@@ -123,7 +124,7 @@ async function readPage(target) {
   if (!legacyHistory && !cursor?.startsWith('recent:')) {
     const query = cursor ? '?' + new URLSearchParams({ cursor }) : '';
     try {
-      return await request('history/' + (purchases ? 'orders' : 'activity') + query);
+      return await readShop('history/' + (purchases ? 'orders' : 'activity') + query);
     } catch (error) {
       if (error.status === 404) legacyHistory = true;
       else if (error.status !== 503 || target !== 0) throw error;

@@ -6,15 +6,15 @@
   <meta name="theme-color" content="#f5f9f6">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://node-a-stg.disnana.com https://node-b-stg.disnana.com; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>クレジット履歴 | マネーちゃん</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
   <link rel="stylesheet" href="/shop/shop.css?v=store-1">
   <script src="/shop/shop-nav.js" type="module"></script>
-  <script src="/shop/history.js?v=history-fallback" type="module"></script>
+  <script src="/shop/history.js?v=direct-1" type="module"></script>
 </head>
-<body class="shop-page">
+<body class="shop-page" data-shop-direct>
   <header class="shop-bar"><div class="shell top">
     <a class="brand" href="/shop/" aria-label="マネーちゃん ショップトップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
     <div class="shop-navigation">
