@@ -184,6 +184,8 @@ async function buy(pack) {
 
 async function load() {
   element('refresh').disabled = true;
+  const note = element('pack-note');
+  const loading = note.textContent ? undefined : setTimeout(() => { note.textContent = '読み込み中…'; }, 300);
   try {
     const account = await request('summary').catch(error => {
       if (error.status === 404 || error.status === 503) return request('account');
@@ -208,6 +210,7 @@ async function load() {
     renderPacks([], false, false, null);
     element('pack-note').textContent = '';
   } finally {
+    clearTimeout(loading);
     element('refresh').hidden = false;
     element('refresh').disabled = false;
   }
