@@ -20,7 +20,7 @@ printf '\n'
 
 ## 2. 既存のGoノードを更新する
 
-各サーバーでGoの実行ユーザーとして `nodetool status` を実行し、一覧の **Host ID** とサーバーの対応を控える。Worker設定にはIPアドレスの代わりにHost IDを使う。Goのユーザーサービスから `nodetool` に届くよう、必要なら `MANE_NODETOOL_PATH` に実行ファイルの絶対パスを設定する。
+Goのユーザーサービスから `nodetool` に届くよう、必要なら `MANE_NODETOOL_PATH` に実行ファイルの絶対パスを設定する。
 
 ```bash
 cd ~/mane-auth
@@ -43,6 +43,24 @@ bash scripts/mane-android-auth.sh setup
 
 ## 3. Workerをデプロイする
 
+### Cloudflareの画面に貼り付ける
+
+両ノードの既存チェックアウトを更新する。JSONの生成だけならサービスの再起動は不要。
+
+```bash
+git -C ~/mane-auth pull --ff-only
+```
+
+Windows側でも `prototype/android-account-receipt` のチェックアウトを更新し、リポジトリのルートで次を実行する。`staging-a` と `staging-b` は、各サーバーにSSHで入るときの接続先に置き換える。
+
+```powershell
+.\scripts\mane-worker-nodes.ps1 -Nodes staging-a,staging-b -Copy
+```
+
+コピーしたJSONを **Settings → Variables and Secrets** の `MANE_AUTH_NODES`（Text）に貼り付ける。生成時はSSH先の既存の `android-auth.env` からノードIDと公開URLを読み取り、同じサーバーの `nodetool info` からローカルのHost IDを取得する。各サーバーで `bash ~/mane-auth/scripts/mane-android-auth.sh worker-node` を実行すると、そのノード単体のJSONを確認できる。
+
+### Wranglerでデプロイする
+
 Cloudflareを管理するPCで次を実行する。Cloudflareのアカウントで `disnana.com` を管理していることを確認する。
 
 ```bash
@@ -51,7 +69,7 @@ cp wrangler.example.toml wrangler.toml
 npx wrangler login
 ```
 
-`wrangler.toml` の `MANE_AUTH_NODES` で各ノードの `scyllaHostID` を追加する。IDとHTTPSオリジンは上のGo設定と一致させる。次のUUIDは例なので、実際の `nodetool status` の値に置き換える。
+`wrangler.toml` の `MANE_AUTH_NODES` に生成したJSONをシングルクォートで囲んで設定する。次は設定形式の例。
 
 ```toml
 [vars]

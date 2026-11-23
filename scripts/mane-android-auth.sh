@@ -7,20 +7,34 @@ usage() {
 Usage:
   bash scripts/mane-android-auth.sh setup [NODE_HTTPS_ORIGIN WEB_CLIENT_ID [ADC_JSON]]
   bash scripts/mane-android-auth.sh status
+  bash scripts/mane-android-auth.sh worker-node
   bash scripts/mane-android-auth.sh uninstall
 
 For a first install, supply the node's HTTPS origin and Web OAuth client ID.
 ADC_JSON defaults to play-integrity.json under the mane config directory.
 After the first install, run setup without arguments to rebuild and restart.
+worker-node prints this node's Cloudflare configuration as JSON.
 Uninstall stops the user service and removes its unit and binary.
 HELP
 }
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 
+print_worker_node() {
+  local id=${MANE_NODE_ID:-} origin=${MANE_NODE_ORIGIN:-}
+  local nodetool=${MANE_NODETOOL_PATH:-nodetool} info host_id
+  [[ $id =~ ^[a-zA-Z0-9_-]{1,64}$ ]] || fail 'Set a valid MANE_NODE_ID in android-auth.env.'
+  [[ $origin =~ ^https://[a-z0-9.-]+(:[0-9]+)?$ ]] || fail 'Set a lowercase HTTPS origin without a path in MANE_NODE_ORIGIN.'
+  info=$(timeout 10s "$nodetool" info) || fail 'Could not read local ScyllaDB information. Check nodetool info and MANE_NODETOOL_PATH.'
+  host_id=$(awk -F ':[[:space:]]*' '/^[[:space:]]*ID[[:space:]]*:/ {sub(/[[:space:]]+$/, "", $2); print tolower($2)}' <<< "$info")
+  [[ $host_id =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || fail 'Could not identify a unique ScyllaDB Host ID from nodetool info.'
+  printf '{"id":"%s","origin":"%s","scyllaHostID":"%s"}\n' "$id" "$origin" "$host_id"
+}
+
 case "${1:-}" in
   -h|--help|'') usage; exit 0 ;;
-  setup|status|uninstall) action=$1; shift ;;
+  setup|status|worker-node|uninstall) action=$1; shift ;;
+  --print-worker-node) print_worker_node; exit 0 ;;
   *) usage >&2; exit 2 ;;
 esac
 
@@ -39,6 +53,13 @@ unit_dir="$config_root/systemd/user"
 unit_name=mane-android-auth.service
 unit_file="$unit_dir/$unit_name"
 [[ $config_root == /* && $data_root == /* ]] || fail 'XDG config and data directories must use absolute paths.'
+if [[ $action == worker-node ]]; then
+  (( $# == 0 )) || fail 'worker-node takes no arguments.'
+  [[ -f $env_file && -r $env_file ]] || fail "Configuration is missing or unreadable: $env_file"
+  script=$(realpath -- "${BASH_SOURCE[0]}")
+  exec systemd-run --user --wait --pipe --quiet --property="EnvironmentFile=${env_file//%/%%}" \
+    "$BASH" "$script" --print-worker-node
+fi
 if [[ $action != status ]]; then
   command -v flock >/dev/null || fail 'flock is required.'
   mkdir -p -- "$config_dir"
