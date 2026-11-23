@@ -68,6 +68,9 @@ export function IconBadge({ name, color, size = 40, filledInDark = false }: {
 }) {
   const scheme = useColorScheme();
   const filled = filledInDark && scheme === 'dark';
+  const symbol = Platform.OS === 'web' && typeof name === 'object' && !name.web
+    ? { ...name, web: name.android }
+    : name;
   return (
     <View
       style={{
@@ -78,7 +81,7 @@ export function IconBadge({ name, color, size = 40, filledInDark = false }: {
         alignItems: 'center',
         justifyContent: 'center',
       }}>
-      <SymbolView name={name} size={size * 0.48} tintColor={filled ? iconOnColor(color) : color} />
+      <SymbolView name={symbol} size={size * 0.48} tintColor={filled ? iconOnColor(color) : color} />
     </View>
   );
 }
@@ -145,7 +148,7 @@ export function Row({
       {right ? (
         <Text style={{ color: rightColor ?? p.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{right}</Text>
       ) : null}
-      {chevron ? <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={14} tintColor={p.textSecondary} /> : null}
+      {chevron ? <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }} size={14} tintColor={p.textSecondary} /> : null}
     </Pressable>
   );
 }

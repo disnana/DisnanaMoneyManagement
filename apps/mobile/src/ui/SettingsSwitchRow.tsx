@@ -1,7 +1,10 @@
+import type { SymbolViewProps } from 'expo-symbols';
 import { Pressable, Text, View } from 'react-native';
 import { usePalette } from '@/lib/theme';
+import { IconBadge } from '@/ui/kit';
 
-export function SettingsSwitchRow({ title, subtitle, checked, onChange }: {
+export function SettingsSwitchRow({ icon, title, subtitle, checked, onChange }: {
+  icon?: SymbolViewProps['name'];
   title: string;
   subtitle?: string;
   checked: boolean;
@@ -17,6 +20,7 @@ export function SettingsSwitchRow({ title, subtitle, checked, onChange }: {
         flexDirection: 'row', alignItems: 'center', gap: 12,
         backgroundColor: pressed ? p.fill : 'transparent',
       })}>
+      {icon ? <IconBadge name={icon} color={p.tint} /> : null}
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>{title}</Text>
         {subtitle ? <Text style={{ color: p.textSecondary, fontSize: 13 }}>{subtitle}</Text> : null}
