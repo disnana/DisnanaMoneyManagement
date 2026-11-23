@@ -45,12 +45,12 @@
 | 250crすべて使用した場合 | 金額 |
 | --- | ---: |
 | 売上 | 100円 |
-| Stripe標準カード手数料（3.6%） | 3.60円 |
+| Stripe標準カード手数料（3.6%＋手数料にかかる消費税） | 3.96円 |
 | AI原価（0.10〜0.15円 × 250回） | 25.00〜37.50円 |
-| Worker固定費・税・運用を引く前の残額 | 58.90〜71.40円 |
-| 税込100円で税率10%と仮定した場合の残額 | 49.81〜62.31円 |
+| Worker固定費・税・運用を引く前の残額 | 58.54〜71.04円 |
+| 税込100円で税率10%と仮定した場合の残額 | 49.45〜61.95円 |
 
-最後の行は税の扱いを比較する試算。Cloudflare Workers Paidの基本料をすべてこの機能に配賦し、仮に月750円で計算すると、高原価かつ税込のケースでは約16パック/月で固定費を回収する。すでに契約中で無料枠・含有枠に収まる場合の追加費用は、実際のアカウント使用量から別に計算する。返金時にも元の決済手数料が残るため、返金率を計測する。未使用残高の失効は収支の前提に入れない。[Stripe料金](https://stripe.com/jp/pricing) · [Stripe返金時の手数料](https://support.stripe.com/questions/understanding-fees-for-refunded-payments?locale=ja-JP) · [Workers料金](https://developers.cloudflare.com/workers/platform/pricing/)
+決済手数料の消費税は控除を見込まない現金支出として計算した。最後の行は売上側の税の扱いを比較する試算。Cloudflare Workers Paidの基本料をすべてこの機能に配賦し、仮に月750円で計算すると、高原価かつ税込のケースでは約16パック/月で固定費を回収する。すでに契約中で無料枠・含有枠に収まる場合の追加費用は、実際のアカウント使用量から別に計算する。返金時にも元の決済手数料が残るため、返金率を計測する。未使用残高の失効は収支の前提に入れない。[Stripe料金](https://stripe.com/jp/pricing) · [Stripe手数料の消費税](https://support.stripe.com/questions/taxes-on-stripe-fees-for-businesses-in-japan?locale=ja-JP) · [Stripe返金時の手数料](https://support.stripe.com/questions/understanding-fees-for-refunded-payments?locale=ja-JP) · [Workers料金](https://developers.cloudflare.com/workers/platform/pricing/)
 
 1. **認証・残高**。WebとAndroidで同じ残高が読める、WebでAIを実行できない、Go再起動や別ノード経由でもWebログインが続く。
 2. **Stripeテスト購入**。Webhookと手動再確認を競合させ、付与が一度であることを確認する。全停止時の503、復旧後の同じ注文の再開、第三者の注文への拒否、全額返金も確認する。
