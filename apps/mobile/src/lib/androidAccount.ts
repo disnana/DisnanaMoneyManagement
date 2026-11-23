@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { admissionHash, DeviceProofHTTPError, getAndroidDeviceProof, submitDeviceProof } from './androidProof';
 
 type Settings = { entry: string; nodes: Record<string, string>; googleClientID: string; projectNumber: string };
-type Session = { session_id: string; access_token: string; refresh_token: string; expires_at: number };
+type Session = { issuer_node_id: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
 type State = { signedIn: boolean; credits: number | null; busy: boolean; message: string };
 const settings = Constants.expoConfig?.extra?.maneAuth as Settings | undefined;
 const device = Platform.OS === 'android' && settings ? getAndroidDeviceProof() : null;
@@ -37,7 +37,12 @@ function parseSession(value: unknown): Session {
     typeof session.expires_at !== 'number' || !Number.isSafeInteger(session.expires_at)) {
     throw new Error('Invalid account session');
   }
-  return session as Session;
+  const nodes = settings!.nodes;
+  const onlyNode = Object.keys(nodes);
+  const issuer = session.issuer_node_id ?? (onlyNode.length === 1 ? onlyNode[0] : undefined);
+  if (typeof issuer !== 'string' || !Object.hasOwn(nodes, issuer)) throw new Error('Unknown session issuer');
+  return { issuer_node_id: issuer, session_id: session.session_id, access_token: session.access_token,
+    refresh_token: session.refresh_token, expires_at: session.expires_at };
 }
 
 async function setSession(next: Session | null) {
@@ -63,7 +68,9 @@ async function request(op: Parameters<typeof submitDeviceProof>[2], credentials:
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 20_000);
   try {
-    const response = await submitDeviceProof(settings!.entry, settings!.nodes, op, credentials, device!, controller.signal);
+    const entry = op.path === '/auth/google' ? settings!.entry : settings!.nodes[session!.issuer_node_id];
+    const nodes = op.path === '/auth/google' ? settings!.nodes : { [session!.issuer_node_id]: entry };
+    const response = await submitDeviceProof(entry, nodes, op, credentials, device!, controller.signal);
     if (!response.ok) throw new DeviceProofHTTPError(response.status);
     return response;
   } finally {

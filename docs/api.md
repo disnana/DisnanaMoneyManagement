@@ -11,7 +11,7 @@ Android認証のHTTPハンドラは `apps/server/internal/androidauth`。本接�
 | 指定ノード | POST `/auth/refresh` | セッションIDと現在のRefreshを検証し、新しいAccess・Refreshを返す |
 | 指定ノード | POST `/auth/logout` | 発行済みのAccessを含め失効させ、204を返す |
 
-発行要求の `operation` は `method`、`path`、`body_sha256`。ログインの発行時は `device_public_key`、更新の発行時は `session_id`、本人情報・ログアウトの発行時はAuthorizationヘッダーを添える。ログイン本文は `id_token`、`integrity_token`、`device_public_key`。更新本文は `session_id` と `refresh_token`。本文のない操作のハッシュは空バイト列のSHA-256。対象パスにクエリは許可しない。セッション応答は `session_id`、`access_token`、`refresh_token`、`expires_at`（Unix秒）。
+発行要求の `operation` は `method`、`path`、`body_sha256`。ログインの発行時は `device_public_key`、更新の発行時は `session_id`、本人情報・ログアウトの発行時はAuthorizationヘッダーを添える。ログイン本文は `id_token`、`integrity_token`、`device_public_key`。更新本文は `session_id` と `refresh_token`。本文のない操作のハッシュは空バイト列のSHA-256。対象パスにクエリは許可しない。セッション応答は `issuer_node_id`、`session_id`、`access_token`、`refresh_token`、`expires_at`（Unix秒）。
 
 指定ノードへの要求には `X-Mane-Challenge`、`X-Mane-Request-Id`、`X-Mane-Device-Signature` を付ける。署名入力はUTF-8の `mane-device-proof-v1\n` とチャレンジ文字列の連結。公開鍵と署名はパディングなしbase64urlのDER。チャレンジはbase64urlのJSONとHMACをピリオドで結ぶ。認証情報を含む応答はキャッシュ禁止。400は入力不正、401は認証・期限・使用済み・宛先の不一致、503は発行枠の逼迫等。レスポンスにトークン検証の内部エラーを含めない。
 

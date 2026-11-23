@@ -19,6 +19,7 @@ type Config struct {
 	SigningKey                                      ed25519.PrivateKey
 	GoogleSubject                                   func(context.Context, string, string) (string, error)
 	DecodeIntegrity                                 func(context.Context, string) (IntegrityVerdict, error)
+	ScyllaStatus                                    *ScyllaStatus
 	CreditBalance                                   func(context.Context, string) (int64, error)
 	Now                                             func() time.Time
 }
@@ -54,6 +55,9 @@ func NewNode(cfg Config, sessions *MemorySessions) (*Node, error) {
 	n.mux.HandleFunc("POST /auth/logout", n.logout)
 	n.mux.HandleFunc("GET /v1/me", n.me)
 	n.mux.HandleFunc("GET /v1/credits", n.credits)
+	if cfg.ScyllaStatus != nil {
+		n.mux.Handle("GET /_internal/scylla-status", cfg.ScyllaStatus)
+	}
 	return n, nil
 }
 

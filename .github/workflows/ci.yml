@@ -45,6 +45,8 @@ jobs:
           bunx tsc --noEmit -p packages/core/tsconfig.json
       - name: Unit tests
         run: bun run test
+      - name: Authentication Worker tests
+        run: node --test apps/auth-worker/index.test.mjs
       - name: Build
         run: bun run build
 

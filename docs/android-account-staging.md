@@ -37,6 +37,8 @@ bash scripts/mane-android-auth.sh uninstall
 
 ## 試験先
 
+2台のGoから新規ログインの発行先を選ぶ場合は、[Cloudflare Workerの設定](android-auth-worker.md)を使う。
+
 `apps/server` で `go run ./cmd/mane-android-auth` を起動する。単一ノードのステージング専用で、セッションはプロセス再起動時に失効する。共通入口と指定ノードのHTTPSホストを同じGoプロセスへルーティングする。2つ以上のプロセスで共有するにはScyllaDBリポジトリが必要。
 
 | 環境変数 | 対象 | 値 |

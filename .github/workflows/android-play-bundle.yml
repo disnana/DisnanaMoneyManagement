@@ -16,6 +16,13 @@ jobs:
     name: Build unsigned Android App Bundle
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      MANE_AUTH_ENTRY: ${{ vars.MANE_AUTH_ENTRY }}
+      MANE_ANDROID_AUTH_NODES: ${{ vars.MANE_ANDROID_AUTH_NODES }}
+      MANE_NODE_ID: ${{ vars.MANE_NODE_ID }}
+      MANE_NODE_ORIGIN: ${{ vars.MANE_NODE_ORIGIN }}
+      MANE_GOOGLE_WEB_CLIENT_ID: ${{ vars.MANE_GOOGLE_WEB_CLIENT_ID }}
+      MANE_GOOGLE_PROJECT_NUMBER: ${{ vars.MANE_GOOGLE_PROJECT_NUMBER }}
     defaults:
       run:
         working-directory: apps/mobile

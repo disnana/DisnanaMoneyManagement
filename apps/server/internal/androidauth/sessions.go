@@ -16,10 +16,11 @@ type session struct {
 	refreshExpiry                    time.Time
 }
 type tokens struct {
-	Session string `json:"session_id"`
-	Access  string `json:"access_token"`
-	Refresh string `json:"refresh_token"`
-	Expires int64  `json:"expires_at"`
+	IssuerNodeID string `json:"issuer_node_id"`
+	Session      string `json:"session_id"`
+	Access       string `json:"access_token"`
+	Refresh      string `json:"refresh_token"`
+	Expires      int64  `json:"expires_at"`
 }
 
 // MemorySessions is shared by local test nodes in one process. It has no persistence.
@@ -39,7 +40,7 @@ func (n *Node) issue(s session, refresh string) (tokens, error) {
 	t := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	t.Header["kid"] = n.cfg.SigningKeyID
 	signed, err := t.SignedString(n.cfg.SigningKey)
-	return tokens{Session: s.id, Access: signed, Refresh: refresh, Expires: claims.ExpiresAt.Unix()}, err
+	return tokens{IssuerNodeID: n.cfg.NodeID, Session: s.id, Access: signed, Refresh: refresh, Expires: claims.ExpiresAt.Unix()}, err
 }
 
 type accessClaims struct {

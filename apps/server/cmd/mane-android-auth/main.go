@@ -82,6 +82,13 @@ func run(checkConfig bool) error {
 			return amount, nil
 		}
 	}
+	if token := os.Getenv("MANE_WORKER_HEALTH_TOKEN"); token != "" {
+		status, valid := androidauth.NewScyllaStatus(token)
+		if !valid {
+			return errors.New("MANE_WORKER_HEALTH_TOKEN must be at least 32 characters without whitespace")
+		}
+		config.ScyllaStatus = status
+	}
 	node, err := androidauth.NewNode(config, androidauth.NewMemorySessions())
 	if err != nil {
 		return errors.New("invalid Android auth environment settings")
@@ -91,6 +98,13 @@ func run(checkConfig bool) error {
 	}
 	server := &http.Server{Addr: addresses, Handler: node, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 6 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 30 * time.Second}
 	go node.RunExpiry(ctx)
+	if config.ScyllaStatus != nil {
+		nodetool := os.Getenv("MANE_NODETOOL_PATH")
+		if nodetool == "" {
+			nodetool = "nodetool"
+		}
+		go config.ScyllaStatus.Poll(ctx, nodetool)
+	}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
