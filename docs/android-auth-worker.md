@@ -93,7 +93,7 @@ GETで確かめられるのはWorkerの入口。発行先まで試すには、�
 
 ```bash
 mane_test_public_key=$(openssl ecparam -name prime256v1 -genkey -noout | \
-  openssl pkey -pubout -outform DER | openssl base64 -A | tr '+/' '_-' | tr -d '=')
+  openssl pkey -pubout -outform DER | openssl base64 -A | tr -- '+/' '-_' | tr -d '=')
 mane_test_hash=$(printf '' | openssl dgst -sha256 -r | cut -d ' ' -f 1)
 mane_test_body=$(printf '{"operation":{"method":"POST","path":"/auth/google","body_sha256":"%s"},"device_public_key":"%s"}' \
   "$mane_test_hash" "$mane_test_public_key")
