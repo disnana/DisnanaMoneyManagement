@@ -145,7 +145,7 @@ async function load() {
     const [{ packs, checkout_enabled: enabled, test_mode: testMode }, account] = await Promise.all([
       request('packs'),
       request('summary').catch(error => {
-        if (error.status === 404) return request('account');
+        if (error.status === 404 || error.status === 503) return request('account');
         throw error;
       }).catch(error => {
         if (error.status === 401) return null;

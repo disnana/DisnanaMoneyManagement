@@ -120,26 +120,27 @@ if (purchases && ['returned', 'canceled'].includes(returned)) {
 
 async function readPage(target) {
   const cursor = cursors[target];
-  if (!legacyHistory) {
+  if (!legacyHistory && !cursor?.startsWith('recent:')) {
     const query = cursor ? '?' + new URLSearchParams({ cursor }) : '';
     try {
       return await request('history/' + (purchases ? 'orders' : 'activity') + query);
     } catch (error) {
-      if (error.status !== 404) throw error;
-      legacyHistory = true;
+      if (error.status === 404) legacyHistory = true;
+      else if (error.status !== 503 || target !== 0) throw error;
     }
   }
-  // Keep the history usable while the previous Worker is deployed.
+  // Use the recent history when the paginated API is missing or unavailable.
+  // Keep later pages on the chosen source so a transient error cannot skip records.
   const account = await request('account');
   const all = purchases ? account.orders : account.wallet.history;
   const start = target * 20;
   const end = start + 20;
-  const packs = purchases && account.resume_supported ? await request('packs') : null;
+  const packs = purchases && account.resume_supported ? await request('packs').catch(() => null) : null;
   return {
     items: all.slice(start, end),
-    next_cursor: end < all.length ? String(end) : '',
+    next_cursor: end < all.length ? 'recent:' + end : '',
     resume_supported: Boolean(packs?.checkout_enabled),
-    legacy_limit: all.length === 50,
+    legacy_limit: true,
   };
 }
 
@@ -164,7 +165,7 @@ async function load(target = page) {
     if (nextCursor) cursors.push(nextCursor);
     pagination.hidden = page === 0 && !nextCursor;
     element('page-number').textContent = number.format(page + 1) + 'ページ目';
-    status.textContent = result.legacy_limit ? '現在は最新50件を表示しています。' : '';
+    status.textContent = result.legacy_limit ? '現在は最新50件まで表示しています。' : '';
     failedTarget = undefined;
     if (changed) heading.focus();
   } catch (error) {
