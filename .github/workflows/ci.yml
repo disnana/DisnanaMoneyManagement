@@ -70,8 +70,8 @@ jobs:
       - name: Start isolated ScyllaDB and apply the schema
         run: |
           docker run -d --name dmm-scylla -p 127.0.0.1:9042:9042 scylladb/scylla:6.2.3 --smp 1 --memory 768M --overprovisioned 1
-          for attempt in {1..40}; do
-            if docker exec dmm-scylla cqlsh -e "CREATE KEYSPACE IF NOT EXISTS dmm_test WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1}"; then
+          for _ in {1..40}; do
+            if docker exec dmm-scylla cqlsh -e "CREATE KEYSPACE IF NOT EXISTS dmm_test WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1} AND tablets = {'enabled': false}"; then
               docker exec -i dmm-scylla cqlsh -k dmm_test < internal/credits/schema.cql
               exit 0
             fi
@@ -279,7 +279,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [web, e2e, mobile, server, server-security, audit, secrets, workflows]
+    needs: [web, e2e, mobile, server, scylla, server-security, audit, secrets, workflows]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs succeeded

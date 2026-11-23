@@ -19,7 +19,15 @@
 
 ## ステージングのクレジット台帳
 
-隔離した試験用keyspaceに [schema.cql](../apps/server/internal/credits/schema.cql) を適用する。既存の認証設定に次の項目を加え、`MANE_STAGING_CREDITS_FILE` は削除する。試験残高を引き継ぐ場合は、必要な対象を付与コマンドで登録する。両方のGoノードで同じkeyspaceを使う。
+隔離した試験用keyspaceに [schema.cql](../apps/server/internal/credits/schema.cql) を適用する。台帳はLWTを使うため、LWTがtabletsに対応していないScyllaDBでは、次のようにtabletsを無効にした専用keyspaceを用意する。DC名とレプリケーション係数は対象クラスタに合わせる。例は3ノードの `datacenter1` 用。
+
+```cql
+CREATE KEYSPACE mane_staging
+WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 3}
+AND tablets = {'enabled': false};
+```
+
+既存の認証設定に次の項目を加え、`MANE_STAGING_CREDITS_FILE` は削除する。試験残高を引き継ぐ場合は、必要な対象を付与コマンドで登録する。両方のGoノードで同じkeyspaceを使う。
 
 | 環境変数 | 内容 |
 | --- | --- |
