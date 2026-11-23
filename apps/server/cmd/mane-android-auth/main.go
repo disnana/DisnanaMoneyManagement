@@ -68,19 +68,16 @@ func run(checkConfig bool) error {
 	config := androidauth.Config{NodeID: os.Getenv("MANE_NODE_ID"), PublicOrigin: os.Getenv("MANE_NODE_ORIGIN"),
 		PackageName: pkg, SigningKeyID: os.Getenv("MANE_JWT_KID"), ChallengeKey: challenge, SigningKey: ed25519.NewKeyFromSeed(seed),
 		GoogleSubject: googleID.Subject, DecodeIntegrity: androidauth.PlayIntegrityDecoder(client, source, pkg)}
+	entries := map[string]int64{}
 	if path := os.Getenv("MANE_STAGING_CREDITS_FILE"); path != "" {
 		data, err := os.ReadFile(path)
-		entries := map[string]int64{}
-		if err != nil || json.Unmarshal(data, &entries) != nil {
+		if err != nil || json.Unmarshal(data, &entries) != nil || entries == nil {
 			return errors.New("could not load MANE_STAGING_CREDITS_FILE")
 		}
-		config.CreditBalance = func(_ context.Context, sub string) (int64, error) {
-			amount, ok := entries[sub]
-			if !ok {
-				return 0, errors.New("balance has not been provisioned")
-			}
-			return amount, nil
-		}
+	}
+	// Staging accounts without an explicitly provisioned balance start at zero.
+	config.CreditBalance = func(_ context.Context, sub string) (int64, error) {
+		return entries[sub], nil
 	}
 	if publicKey := os.Getenv("MANE_WORKER_JWS_PUBLIC_KEY"); publicKey != "" {
 		proof, err := androidauth.NewWorkerProof(publicKey)
