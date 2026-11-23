@@ -15,6 +15,14 @@ const orderStatus = {
   review_required: '確認中',
 };
 const activity = { grant: '付与', spend: '消費', reverse: '返金に伴う引き戻し' };
+const orderFeedback = new Map();
+
+function validFor(seconds) {
+  if (seconds === null) return '無期限';
+  if (seconds % 86400 === 0) return number.format(seconds / 86400) + '日間有効';
+  if (seconds % 3600 === 0) return number.format(seconds / 3600) + '時間有効';
+  return number.format(seconds / 60) + '分間有効';
+}
 
 async function request(path, data) {
   const response = await fetch(api + path, {
@@ -64,16 +72,21 @@ function label(tag, text, className) {
   return node;
 }
 
-async function reconcile(button, order) {
+async function reconcile(button, order, feedback) {
   button.disabled = true;
+  feedback.textContent = '決済状況を確認しています…';
   try {
     const result = await request('orders/' + encodeURIComponent(order.id) + '/reconcile', {});
-    await load();
-    status.textContent = ['pending', 'fulfillment_pending', 'refund_pending'].includes(result.status)
+    const message = ['pending', 'fulfillment_pending', 'refund_pending'].includes(result.status)
       ? '決済結果を確認中です。時間をおいて購入履歴をご確認ください。'
       : '決済状況を更新しました。';
+    orderFeedback.set(order.id, message);
+    feedback.textContent = message;
+    await load();
+    const updated = document.getElementById('order-feedback-' + order.id);
+    if (updated !== feedback) updated?.focus({ preventScroll: true });
   } catch {
-    status.textContent = '決済結果を取得できませんでした。再購入せず、時間をおいて購入履歴をご確認ください。';
+    feedback.textContent = '決済結果を取得できませんでした。再購入せず、時間をおいて購入履歴をご確認ください。';
   } finally { button.disabled = false; }
 }
 
@@ -100,14 +113,19 @@ function showAccount(account) {
     value.append(label('span', orderStatus[order.status] ?? '確認中', 'muted'));
     row.append(title, value);
     const actions = label('div', '', 'record-actions');
+    const feedback = label('p', orderFeedback.get(order.id) ?? '', 'muted record-feedback');
+    feedback.id = 'order-feedback-' + order.id;
+    feedback.tabIndex = -1;
+    feedback.setAttribute('role', 'status');
     if (order.amount_refunded > 0) actions.append(label('span', '返金 ' + yen.format(order.amount_refunded), 'muted'));
     if (order.receipt_url) linkReceipt(actions, order.receipt_url);
     if (['pending', 'fulfillment_pending', 'refund_pending', 'review_required'].includes(order.status)) {
       const button = label('button', '決済状況を再確認', 'quiet');
-      button.addEventListener('click', () => void reconcile(button, order));
+      button.addEventListener('click', () => void reconcile(button, order, feedback));
       actions.append(button);
     }
     if (actions.childNodes.length) row.append(actions);
+    row.append(feedback);
   }, '購入履歴はありません。');
   rows('history', wallet.history, (row, item) => {
     const title = label('div', activity[item.operation.kind] ?? '確認中', 'record-title');
@@ -166,7 +184,7 @@ async function load() {
     rows('packs', packs, (row, pack) => {
       row.append(label('div', pack.title, 'pack-title'),
         label('div', number.format(pack.credits) + ' クレジット', 'pack-value'),
-        label('div', yen.format(pack.amount) + ' · ' + (pack.validity_seconds === null ? '無期限' : number.format(pack.validity_seconds / 3600) + ' 時間有効'), 'muted'));
+        label('div', yen.format(pack.amount) + ' · ' + validFor(pack.validity_seconds), 'muted'));
       if (!enabled || !account) return;
       const button = document.createElement('button');
       button.className = 'button primary';
@@ -196,6 +214,7 @@ element('logout').addEventListener('click', async () => {
     for (const key of Object.keys(sessionStorage)) {
       if (key.startsWith('mane-checkout:')) sessionStorage.removeItem(key);
     }
+    orderFeedback.clear();
     showAccount(null);
     await load();
   } catch {
