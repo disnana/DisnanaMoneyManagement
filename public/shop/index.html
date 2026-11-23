@@ -3,10 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#112c29">
+  <meta name="theme-color" content="#f5f9f6">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>クレジットショップ | マネーちゃん</title>
+  <meta name="description" content="AIレシート用のクレジットを購入し、残高・有効期限・購入履歴を確認できます。">
+  <link rel="canonical" href="https://dmm.disnana.com/shop/">
+  <meta property="og:title" content="クレジットショップ | マネーちゃん">
+  <meta property="og:description" content="AIレシート用のクレジットを購入し、残高・有効期限・購入履歴を確認できます。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://dmm.disnana.com/shop/">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:image" content="https://dmm.disnana.com/social/shop.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんのAIクレジットショップ">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="クレジットショップ | マネーちゃん">
+  <meta name="twitter:description" content="AIレシート用のクレジットを購入し、残高・有効期限・購入履歴を確認できます。">
+  <meta name="twitter:image" content="https://dmm.disnana.com/social/shop.png">
+  <meta name="twitter:image:alt" content="マネーちゃんのAIクレジットショップ">
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/portal/site.css">
   <link rel="stylesheet" href="/shop/shop.css">
@@ -15,40 +32,69 @@
 <body class="shop-page">
   <header class="shop-bar"><div class="shell top">
     <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
-    <nav aria-label="主要ページ"><a href="/app/">Web家計簿</a><button id="logout" class="quiet" hidden>ログアウト</button></nav>
+    <nav aria-label="主要ページ"><a href="/app/">Web家計簿</a><button id="logout" type="button" class="quiet" hidden>ログアウト</button></nav>
   </div></header>
   <main class="shell credit-shop">
     <header class="shop-intro">
       <h1>クレジットショップ</h1>
-      <p>AIレシート用のクレジットを購入・管理。</p>
+      <p>AIレシート用のクレジットを購入・管理できます。</p>
     </header>
     <noscript><p>残高や購入状況の表示にはJavaScriptが必要です。</p></noscript>
-    <section id="wallet" class="credit-balance" aria-labelledby="wallet-heading">
-      <div class="balance-content">
-        <h2 id="wallet-heading">利用可能なクレジット</h2>
-        <p class="balance-value" id="balance">—</p>
-        <ul class="expiry-list" id="lots" hidden></ul>
-        <p id="login-note">Androidと同じGoogleアカウントで残高を確認できます。</p>
-        <a id="login" class="button" href="/api/shop/auth/start">Googleでログイン</a>
+    <div class="shop-overview">
+      <div class="wallet-column">
+        <section id="wallet" class="credit-balance" aria-labelledby="wallet-heading">
+          <div class="balance-content">
+            <h2 id="wallet-heading">利用可能なクレジット</h2>
+            <p class="balance-value" id="balance">—</p>
+            <ul class="expiry-list" id="lots" hidden></ul>
+            <p id="login-note">Androidと同じGoogleアカウントで残高を確認できます。</p>
+            <a id="login" class="button" href="/api/shop/auth/start">Googleでログイン</a>
+          </div>
+          <img class="balance-art" src="/portal/mascot.png" alt="" width="72" height="72">
+        </section>
+        <div class="shop-feedback">
+          <p id="status" role="status"></p>
+          <button id="refresh" type="button" class="quiet" hidden>更新</button>
+        </div>
       </div>
-      <div class="balance-art"><img src="/portal/mascot.png" alt="" width="144" height="144"></div>
-    </section>
-    <div class="shop-feedback"><p id="status" role="status"></p><button id="refresh" class="quiet" hidden>表示を更新</button></div>
-    <section class="shop-section" aria-labelledby="packs-heading">
-      <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note" hidden></p></div>
-      <ul class="pack-list" id="packs"></ul>
-    </section>
+      <section class="shop-section packs-section" aria-labelledby="packs-heading">
+        <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note">読み込み中…</p></div>
+        <form id="checkout-form">
+          <fieldset class="pack-selector">
+            <legend class="sr-only">購入パック</legend>
+            <ul class="pack-list" id="packs"></ul>
+          </fieldset>
+          <div id="checkout-action" class="checkout-action" hidden>
+            <p id="checkout-status" class="checkout-status" role="status"></p>
+            <button id="checkout-button" type="submit" class="button primary">決済へ進む</button>
+          </div>
+        </form>
+      </section>
+    </div>
     <div id="account-history" hidden>
       <nav class="history-nav" aria-label="履歴の種類">
         <a href="#orders-section">購入履歴</a><a href="#history-section">利用履歴</a>
       </nav>
-      <section class="shop-section" id="orders-section" aria-labelledby="orders-heading">
-        <div class="section-heading"><h2 id="orders-heading">購入履歴</h2></div>
-        <ul class="records" id="orders"></ul>
-      </section>
-      <section class="shop-section" id="history-section" aria-labelledby="history-heading">
-        <div class="section-heading"><h2 id="history-heading">クレジット利用履歴</h2></div>
-        <ul class="records" id="history"></ul>
+      <div class="history-layout">
+        <section class="shop-section" id="orders-section" aria-labelledby="orders-heading">
+          <div class="section-heading"><h2 id="orders-heading">購入履歴</h2></div>
+          <ul class="records" id="orders"></ul>
+        </section>
+        <section class="shop-section" id="history-section" aria-labelledby="history-heading">
+          <div class="section-heading"><h2 id="history-heading">クレジット利用履歴</h2></div>
+          <ul class="records" id="history"></ul>
+        </section>
+      </div>
+      <section id="account-details" class="account-details" aria-labelledby="account-id-label" hidden>
+        <div>
+          <label id="account-id-label" for="account-id">アカウントID</label>
+          <p id="account-id-help" class="muted">お問い合わせ時にお伝えください。</p>
+        </div>
+        <div class="account-id-actions">
+          <input id="account-id" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="account-id-help">
+          <button id="copy-account-id" type="button" class="quiet">コピー</button>
+        </div>
+        <p id="copy-status" class="muted" role="status"></p>
       </section>
     </div>
   </main>
