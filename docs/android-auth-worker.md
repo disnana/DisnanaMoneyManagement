@@ -130,3 +130,14 @@ Workerはログイン用の `POST /auth/challenge` ごとに Ed25519（JWSヘッ
 新規ログインでは `UN` の候補を優先して順序をランダムに決める。新鮮な観測がすべて停止を示すノードは候補から外す。観測なしの場合と全候補が外れた場合は、設定済みのノードへの要求結果で判断する。現時点の試験値は追加要求まで200ms、1ノードの上限700ms、振り分け全体で1.5秒。最大2件を並行させ、通信障害や5xxでは次へ進む。最初の正しい発行応答を採用し、未採用の発行済みIDはGoで5秒後に失効する。
 
 発行したGoは端末署名を検証し、原子的にIDを消費する。Androidはすべての認証リクエストを共通のWorker URLに送り、Workerが発行元IDを `MANE_AUTH_NODES` で解決する。セッションがGoプロセスのメモリにある間、残高・トークン更新・ログアウトは発行元と同じノードで処理する。発行元が停止中は、そのセッションの操作は失敗する。別ノードで既存セッションを続けるには共有セッションストアが必要。実測では、チャレンジ応答の `Server-Timing: mane-route` と、Google・端末署名まで含むログイン時間を個別に記録する。
+
+## 認可後の直結をステージングで試す
+
+1. 共有ScyllaDBのステージングkeyspaceで [Androidセッションのスキーマ](../apps/server/internal/androidauth/session_schema.cql) を適用する。
+2. 両Goノードに同じ32バイトのBase64URL秘密値を `MANE_ANDROID_CLUSTER_JWT_SEED` として設定する。Webの読み取りも試す場合は両ノードに `MANE_WEB_DIRECT_SITE_ORIGIN=https://dmm.disnana.com` を設定する。既存のWorker署名公開鍵を引き継ぐ。Androidの旧メモリセッションからは一度ログインし直す。
+3. 両ノードのTunnelがAndroidの `/auth/challenge` と認可後のAPIおよびWebの `/v1/shop-read/*` に到達できることを確認する。WebのCSPが指定する `node-a-stg.disnana.com` と `node-b-stg.disnana.com` を使う。別のホスト名を使う場合はショップと履歴の両HTMLの `connect-src` も更新する。
+4. 対応版WorkerとWebページを配置し、Workerの `MANE_DIRECT_NODES_ENABLED=1` を設定する。Androidで試すには対応ビルドを使う。
+
+Androidはログイン後、応答の `origin` にチャレンジと操作を直接送る。読み取りの通信障害時は `POST /auth/node` で別ノードを取得し、同じセッションで新しいチャレンジを発行する。更新トークンのローテーション等が実行された可能性がある操作は自動再送を抑止する。更新成功後に応答を失った場合は、再ログインが必要になることがある。
+
+Webはログイン後に `GET /api/shop/node` で担当ノードと5分間有効な読み取り権限を受け取る。残高と履歴はGoへ直接送り、Goが読み取り権限とScyllaDBの親セッションを照合する。通信障害時は失敗したノードを割り当てから外して同じページを読み直す。GoogleログインとStripe決済・Webhookは既存Workerが処理する。

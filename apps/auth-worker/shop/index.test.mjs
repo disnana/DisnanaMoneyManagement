@@ -147,6 +147,43 @@ const post = (path, body, headers = {}) => new Request(site + '/api/shop/' + pat
 const payHeaders = { Origin: site, Cookie: '__Secure-mane-shop=' + accountCookie };
 const event = (kind, id, object) => ({ livemode: false, type: kind, id, data: { object } });
 
+test('node assignments preserve the parent session and exclude the failed node', async () => {
+  const env = { ...environment(), MANE_DIRECT_NODES_ENABLED: '1' };
+  const db = backendFixture();
+  const sessionHash = await hash(accountCookie);
+  db.sessions.set(sessionHash, { subject: 'same-google-sub' });
+  const calls = [];
+  const worker = createWorker({ random: () => 0.99, fetchNode: async (uri, options) => {
+    const url = new URL(uri);
+    const node = [nodeA, nodeB].find(item => item.origin === url.origin);
+    if (url.pathname === '/_internal/android-assignment') {
+      const [header, claims, signature] = options.headers['X-Mane-Worker-Proof'].split('.');
+      assert.ok(await crypto.subtle.verify('Ed25519', keys.publicKey, Buffer.from(signature, 'base64url'), encode(header + '.' + claims)));
+      assert.equal(JSON.parse(Buffer.from(claims, 'base64url')).aud, node.id);
+      calls.push(node.id);
+      return new Response(null, { status: 204 });
+    }
+    return db.dispatch(url, options, node);
+  } });
+  const assign = headers => publicFetch(worker, new Request(site + '/api/shop/node?exclude=' + nodeA.id, { headers }), env);
+  assert.equal((await assign()).status, 401);
+  const { direct } = await (await assign(payHeaders)).json();
+  assert.equal(direct.origin, nodeB.origin);
+  const [header, claims, signature] = direct.token.split('.');
+  assert.ok(await crypto.subtle.verify('Ed25519', keys.publicKey, Buffer.from(signature, 'base64url'), encode(header + '.' + claims)));
+  const data = JSON.parse(Buffer.from(claims, 'base64url'));
+  assert.equal(data.sub, sessionHash);
+  assert.equal(data.aud, 'mane-web-shop-read');
+  assert.equal(data.exp - data.iat, 300);
+  const android = new Request('https://auth.example.test/auth/node', {
+    method: 'POST', body: JSON.stringify({ exclude: nodeA.id, session_id: 'session', refresh_token: 'refresh' }),
+  });
+  assert.deepEqual(await (await publicFetch(worker, android, env)).json(), { id: nodeB.id, origin: nodeB.origin });
+  assert.deepEqual(calls, [nodeB.id]);
+  db.sessions.delete(sessionHash);
+  assert.equal((await assign(payHeaders)).status, 401);
+});
+
 test('valid signed Stripe events grant once, retry after a failed backend write, and reverse after full refund', async () => {
   const env = environment();
   env.MANE_SHOP_TEST_SUBJECT_HASHES = await hash('same-google-sub');

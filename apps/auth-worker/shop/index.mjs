@@ -6,7 +6,7 @@ const prefix = '/api/shop/';
 const routes = new Map([
   ['packs', 'GET'], ['auth/start', 'GET'], ['auth/callback', 'GET'], ['auth/logout', 'POST'],
   ['account', 'GET'], ['summary', 'GET'], ['history/orders', 'GET'], ['history/activity', 'GET'],
-  ['checkout', 'POST'], ['stripe/webhook', 'POST'],
+  ['checkout', 'POST'], ['stripe/webhook', 'POST'], ['node', 'GET'],
 ]);
 const orderRoute = /^orders\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/(reconcile|resume)$/;
 const historyRoutes = new Map([['history/orders', 'orders-page'], ['history/activity', 'activity-page']]);
@@ -25,8 +25,10 @@ export async function shopRequest(request, env, fetcher) {
   if (request.method !== method) return json({ error: 'method_not_allowed' }, 405);
   const history = historyRoutes.get(path);
   const cursor = url.searchParams.get('cursor');
+  const exclude = url.searchParams.get('exclude');
+  const validExclusion = path === 'node' && url.searchParams.size === 1 && /^[\w-]{1,64}$/.test(exclude ?? '');
   const cursorPattern = path === 'history/orders' ? /^[0-9]{1,19}:[0-9a-f-]{36}$/ : /^[A-Za-z0-9_-]{39,208}$/;
-  if (url.search && path !== 'auth/callback' &&
+  if (url.search && path !== 'auth/callback' && !validExclusion &&
       !(history && url.searchParams.size === 1 && cursorPattern.test(cursor ?? ''))) {
     return json({ error: 'invalid_request' }, 400);
   }
@@ -42,6 +44,7 @@ export async function shopRequest(request, env, fetcher) {
     return path === 'auth/start' ? startLogin(env) : finishLogin(request, env, fetcher);
   }
   if (path === 'auth/logout') return logout(request, env);
+  if (path === 'node' && !env.shopAssign) return json({ error: 'not_found' }, 404);
   const user = await session(request, env);
   if (!user) return json({ error: 'login_required' }, 401);
   const scope = match ? 'reconcile' : path;
@@ -59,6 +62,11 @@ export async function shopRequest(request, env, fetcher) {
     const wallet = await callBackend(env, 'wallet-summary', { subject: user.subject });
     if (!wallet) return json({ error: 'temporarily_unavailable' }, 503);
     return json({ account_id: user.subject, wallet, catalog: await storefrontCatalog(env, user.subject) });
+  }
+  if (path === 'node') {
+    const direct = await env.shopAssign(user.sessionHash, exclude);
+    if (!direct) return json({ error: 'temporarily_unavailable' }, 503);
+    return json({ direct: { ...direct, catalog: await storefrontCatalog(env, user.subject) } });
   }
   if (history) {
     const page = await callBackend(env, history, { subject: user.subject, cursor: cursor ?? '' });

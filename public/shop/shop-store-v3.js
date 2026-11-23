@@ -1,3 +1,4 @@
+import { clearShopAssignment, readShop } from './shop-read.js';
 import { date, element, forgetCompletedOrders, label, number, openCheckout, request, rows, yen } from './shop-common.js';
 
 const status = element('status');
@@ -185,7 +186,7 @@ async function buy(pack) {
 async function load() {
   element('refresh').disabled = true;
   try {
-    const account = await request('summary').catch(error => {
+    const account = await readShop('summary').catch(error => {
       if (error.status === 404 || error.status === 503) return request('account');
       throw error;
     }).catch(error => {
@@ -219,6 +220,7 @@ element('logout').addEventListener('click', async () => {
   button.disabled = true;
   try {
     await request('auth/logout', {});
+    clearShopAssignment();
     for (const key of Object.keys(sessionStorage)) {
       if (key.startsWith('mane-checkout:')) sessionStorage.removeItem(key);
     }

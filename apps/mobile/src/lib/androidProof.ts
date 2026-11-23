@@ -37,16 +37,21 @@ export async function submitDeviceProof(
   credentials: Credentials,
   device: DeviceProof,
   signal?: AbortSignal,
+  retry = true,
 ): ReturnType<typeof fetch> {
   try {
     return await send(entry, issuer, op, credentials, device, signal);
   } catch (error) {
-    if (!(error instanceof IssuerUnavailable) || op.method !== 'GET' || signal?.aborted) throw error;
+    if (!retry || !(error instanceof IssuerUnavailable) || op.method !== 'GET' || signal?.aborted) throw error;
     return send(entry, issuer, op, credentials, device, signal);
   }
 }
 
-class IssuerUnavailable extends Error {}
+export class IssuerUnavailable extends Error {
+  constructor(readonly mayHaveCommitted: boolean, cause?: unknown) {
+    super('Issuer unavailable', { cause });
+  }
+}
 
 export class DeviceProofHTTPError extends Error {
   constructor(readonly status: number) {
@@ -66,17 +71,26 @@ async function send(
   const entryOrigin = new URL(entry);
   if (entryOrigin.protocol !== 'https:' || entry !== entryOrigin.origin) throw new Error('Invalid auth entry');
   const authorization: Record<string, string> = credentials.accessToken ? { Authorization: `Bearer ${credentials.accessToken}` } : {};
+  const handshake = new AbortController();
+  const stopHandshake = () => handshake.abort();
+  if (signal?.aborted) stopHandshake();
+  signal?.addEventListener('abort', stopHandshake, { once: true });
+  const handshakeDeadline = setTimeout(stopHandshake, 4000);
   const response = await fetch(`${entry}/auth/challenge`, {
     method: 'POST',
     redirect: 'error',
-    signal,
+    signal: handshake.signal,
     headers: { 'Content-Type': 'application/json', ...authorization, ...(issuer ? { 'X-Mane-Issuer': issuer } : {}) },
     body: JSON.stringify({
       operation: { method: op.method, path: op.path, body_sha256: sha(body ?? '') },
       session_id: credentials.sessionId,
       device_public_key: credentials.publicKey,
     }),
+  }).catch(error => { throw new IssuerUnavailable(false, error); }).finally(() => {
+    clearTimeout(handshakeDeadline);
+    signal?.removeEventListener('abort', stopHandshake);
   });
+  if (response.status >= 500) throw new IssuerUnavailable(false);
   if (!response.ok) throw new DeviceProofHTTPError(response.status);
   const receivedAt = performance.now();
   const proof = await response.json() as Challenge;
@@ -87,7 +101,7 @@ async function send(
   }
   const signature = await device.signChallenge(proof.challenge);
   const timeLeft = proofWindowMs - (performance.now() - receivedAt);
-  if (timeLeft <= 0) throw new IssuerUnavailable('Challenge expired');
+  if (timeLeft <= 0) throw new IssuerUnavailable(false);
   if (!/^\/(auth\/(google|refresh|logout)|v1\/(me|credits))$/.test(op.path)) throw new Error('Unsupported operation');
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -109,16 +123,16 @@ async function send(
         'X-Mane-Device-Signature': signature,
       },
     });
-    if (result.status === 502 || result.status === 504) throw new Error('Issuer unavailable');
+    if (result.status >= 500) throw new Error('Issuer unavailable');
     return result;
   } catch (error) {
-    if (!signal?.aborted) {
+    if (!signal?.aborted && op.method === 'POST') {
       // The receipt time gives a conservative bound on expiry without comparing device and server clocks.
       const remaining = Math.max(0, proofWindowMs - (performance.now() - receivedAt));
       await new Promise<void>(resolve => setTimeout(resolve, remaining));
     }
     if (signal?.aborted) throw error;
-    throw new IssuerUnavailable('Issuer unavailable', { cause: error });
+    throw new IssuerUnavailable(op.method === 'POST', error);
   } finally {
     clearTimeout(deadline);
     signal?.removeEventListener('abort', cancel);

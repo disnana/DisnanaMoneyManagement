@@ -14,12 +14,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/disnana/dmm/server/internal/credits"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -41,6 +43,11 @@ type ticket struct {
 }
 
 func setup(t *testing.T) *fixture {
+	sessions := NewMemorySessions()
+	return setupWithSessions(t, func() SessionStore { return sessions }, false)
+}
+
+func setupWithSessions(t *testing.T, sessions func() SessionStore, direct bool) *fixture {
 	t.Helper()
 	google, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -66,10 +73,10 @@ func setup(t *testing.T) *fixture {
 		}
 		return &google.PublicKey, nil
 	}}
-	sessions := NewMemorySessions()
 	for _, label := range []string{"a", "b"} {
 		config := Config{NodeID: label, PublicOrigin: "https://node-" + label + ".example.test", PackageName: "com.disnana.mane_chan", SigningKeyID: "test",
-			ChallengeKey: []byte(strings.Repeat("a", 32)), SigningKey: signing, Now: f.now, GoogleSubject: verifier.Subject,
+			ChallengeKey: []byte(strings.Repeat(label, 32)), SigningKey: signing, Now: f.now, GoogleSubject: verifier.Subject,
+			DirectSessions: direct,
 			CreditBalance: func(_ context.Context, subject string) (int64, error) {
 				if subject != "google-account-sub" {
 					return 0, errAuth
@@ -80,7 +87,7 @@ func setup(t *testing.T) *fixture {
 				var v IntegrityVerdict
 				return v, json.Unmarshal([]byte(raw), &v)
 			}}
-		node, err := NewNode(config, sessions)
+		node, err := NewNode(config, sessions())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -273,7 +280,30 @@ func TestChallengeIsNodeLocalAndAcceptsOnlyOnce(t *testing.T) {
 }
 
 func TestFailoverAndSessionLifecycle(t *testing.T) {
-	f := setup(t)
+	checkFailover(t, setup(t))
+}
+
+func TestScyllaAndroidFailover(t *testing.T) {
+	if os.Getenv("MANE_TEST_SCYLLA") != "1" {
+		t.Skip("requires an isolated Scylla keyspace with the Android session schema")
+	}
+	f := setupWithSessions(t, func() SessionStore {
+		wallet, err := credits.OpenFromEnv()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(wallet.Close)
+		sessions, err := NewScyllaSessions(wallet.Session())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sessions
+	}, true)
+	checkFailover(t, f)
+}
+
+func checkFailover(t *testing.T, f *fixture) {
+	t.Helper()
 	s := f.login()
 	p := f.challenge(f.a.URL, "GET", "/v1/me", "", s.Access, "")
 	f.clock.Add(int64(5 * time.Second))

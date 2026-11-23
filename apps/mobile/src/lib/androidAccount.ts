@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { admissionHash, DeviceProofHTTPError, getAndroidDeviceProof, submitDeviceProof } from './androidProof';
+import { fetch } from 'expo/fetch';
+import { admissionHash, DeviceProofHTTPError, IssuerUnavailable, getAndroidDeviceProof, submitDeviceProof } from './androidProof';
 
 type Settings = { entry: string; googleClientID: string; projectNumber: string };
-type Session = { issuer_node_id: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
+type Session = { issuer_node_id: string; origin?: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
 type CreditActivity = { id: string; at_ms: number; operation: { kind: 'grant' | 'spend' | 'reverse'; amount: number } };
 type State = { signedIn: boolean; accountId: string | null; credits: number | null; history: CreditActivity[] | null; busy: boolean; message: string };
 const settings = Constants.expoConfig?.extra?.maneAuth as Settings | undefined;
@@ -30,6 +31,16 @@ export function useAndroidAccount() {
   return useSyncExternalStore(subscribe, () => state, () => state);
 }
 
+function nodeOrigin(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.origin === value ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseSession(value: unknown): Session {
   const session = value as Partial<Session> | null;
   if (!session || typeof session.session_id !== 'string' || !session.session_id ||
@@ -40,12 +51,12 @@ function parseSession(value: unknown): Session {
   }
   const issuer = session.issuer_node_id;
   if (typeof issuer !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(issuer)) throw new Error('Invalid session issuer');
-  return { issuer_node_id: issuer, session_id: session.session_id, access_token: session.access_token,
+  return { issuer_node_id: issuer, origin: nodeOrigin(session.origin), session_id: session.session_id, access_token: session.access_token,
     refresh_token: session.refresh_token, expires_at: session.expires_at };
 }
 
 async function setSession(next: Session | null) {
-  const sameSession = next !== null && next.issuer_node_id === session?.issuer_node_id && next.session_id === session?.session_id;
+  const sameSession = next !== null && next.session_id === session?.session_id;
   await device!.saveSession(next ? JSON.stringify(next) : null);
   session = next;
   if (!sameSession) publish({ signedIn: Boolean(next), accountId: null, credits: null, history: null });
@@ -68,8 +79,28 @@ async function request(op: Parameters<typeof submitDeviceProof>[2], credentials:
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 20_000);
   try {
-    const issuer = op.path === '/auth/google' ? undefined : session!.issuer_node_id;
-    const response = await submitDeviceProof(settings!.entry, issuer, op, credentials, device!, controller.signal);
+    const current = op.path === '/auth/google' ? null : session;
+    const send = (target: Session | null) => submitDeviceProof(target?.origin ?? settings!.entry,
+      target?.issuer_node_id, op, credentials, device!, controller.signal, !target?.origin);
+    let response;
+    try {
+      response = await send(current);
+    } catch (error) {
+      if (!current?.origin || !(error instanceof IssuerUnavailable) || error.mayHaveCommitted || controller.signal.aborted) throw error;
+      const assignment = await fetch(settings!.entry + '/auth/node', {
+        method: 'POST', redirect: 'error', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exclude: current.issuer_node_id, session_id: current.session_id, refresh_token: current.refresh_token }),
+      });
+      if (!assignment.ok) throw error;
+      const node = await assignment.json() as { id?: string; origin?: string };
+      const origin = nodeOrigin(node.origin);
+      if (!origin || origin === current.origin || typeof node.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(node.id) ||
+          node.id === current.issuer_node_id || session !== current) throw error;
+      const next = { ...current, issuer_node_id: node.id, origin };
+      response = await send(next);
+      if (response.ok && session === current && op.method === 'GET') await setSession(next);
+    }
     if (!response.ok) throw new DeviceProofHTTPError(response.status);
     return response;
   } finally {

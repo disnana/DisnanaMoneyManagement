@@ -88,8 +88,38 @@ func TestScyllaShop(t *testing.T) {
 	if result, err := b.sessions(ctx, "session-get", input{Key: sessionKey}); err != nil || result.(map[string]string)["subject"] != sub {
 		t.Fatalf("shared session = %+v, %v", result, err)
 	}
+	const site = "https://dmm.example.test"
+	direct, err := b.DirectReader(site, func(token string, _ time.Time) (string, bool) {
+		return sessionKey, token == "read-grant"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	readDirect := func(method, origin, path string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, DirectPrefix+path, nil)
+		r.Header.Set("Origin", origin)
+		r.Header.Set("Authorization", "Bearer read-grant")
+		w := httptest.NewRecorder()
+		direct.ServeHTTP(w, r)
+		return w
+	}
+	if w := readDirect("OPTIONS", site, "summary"); w.Code != 204 || w.Header().Get("Access-Control-Allow-Origin") != site {
+		t.Fatalf("preflight = %d, %v", w.Code, w.Header())
+	}
+	if w := readDirect("GET", site, "history/orders"); w.Code != 200 || !strings.Contains(w.Body.String(), id) {
+		t.Fatalf("direct history = %d, %s", w.Code, w.Body)
+	}
+	if w := readDirect("GET", "https://elsewhere.example.test", "summary"); w.Code != 404 {
+		t.Fatalf("other origin = %d", w.Code)
+	}
+	if w := readDirect("POST", site, "summary"); w.Code != 405 {
+		t.Fatalf("read grant with POST = %d", w.Code)
+	}
 	if _, err := b.sessions(ctx, "session-delete", input{Key: sessionKey}); err != nil {
 		t.Fatal(err)
+	}
+	if w := readDirect("GET", site, "summary"); w.Code != 401 {
+		t.Fatalf("revoked direct grant = %d", w.Code)
 	}
 	if _, err := a.sessions(ctx, "session-get", input{Key: sessionKey}); !errors.Is(err, gocql.ErrNotFound) {
 		t.Fatalf("logout = %v", err)

@@ -39,26 +39,17 @@ export default function Settings() {
   return (
     <>
       <Screen>
-        <SectionTitle>外観</SectionTitle>
-        <Segmented<ThemePref>
-          value={pref}
-          onChange={setPref}
-          options={[
-            { id: 'system', label: '自動' },
-            { id: 'light', label: 'ライト' },
-            { id: 'dark', label: 'ダーク' },
-          ]}
-        />
+        <SectionTitle>アカウント</SectionTitle>
+        <Group>
+          {Platform.OS === 'android' ? (
+            <Row title="Googleアカウント" right={signedIn ? 'ログイン済み' : '未ログイン'} chevron
+              icon={{ ios: 'person.crop.circle', android: 'account_circle' }}
+              onPress={() => router.push('/settings/account')} />
+          ) : <Row title="サインイン" right="未設定（この端末のみ）" />}
+        </Group>
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
-          「自動」は端末の設定に合わせます。
+          アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
         </Text>
-
-        {launcherIcons.length > 1 ? (
-          <Group>
-            <Row title="アプリアイコン" icon={{ ios: 'app', android: 'apps' }} chevron
-              onPress={() => router.push('/settings/app-icon')} />
-          </Group>
-        ) : null}
 
         <SectionTitle>操作</SectionTitle>
         <Group>
@@ -107,22 +98,31 @@ export default function Settings() {
           />
         </Group>
 
-        <SectionTitle>アカウント</SectionTitle>
-        <Group>
-          {Platform.OS === 'android' ? (
-            <Row title="Googleアカウント" right={signedIn ? 'ログイン済み' : '未ログイン'} chevron
-              icon={{ ios: 'person.crop.circle', android: 'account_circle' }}
-              onPress={() => router.push('/settings/account')} />
-          ) : <Row title="サインイン" right="未設定（この端末のみ）" />}
-        </Group>
-        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
-          アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
-        </Text>
-
         <Group>
           <Row title="データ管理" icon={{ ios: 'externaldrive', android: 'storage' }}
             subtitle="初期化・サンプルデータ" chevron onPress={() => router.push('/settings/data')} />
         </Group>
+
+        <SectionTitle>外観</SectionTitle>
+        <Segmented<ThemePref>
+          value={pref}
+          onChange={setPref}
+          options={[
+            { id: 'system', label: '自動' },
+            { id: 'light', label: 'ライト' },
+            { id: 'dark', label: 'ダーク' },
+          ]}
+        />
+        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
+          「自動」は端末の設定に合わせます。
+        </Text>
+
+        {launcherIcons.length > 1 ? (
+          <Group>
+            <Row title="アプリアイコン" icon={{ ios: 'app', android: 'apps' }} chevron
+              onPress={() => router.push('/settings/app-icon')} />
+          </Group>
+        ) : null}
 
         <SectionTitle>情報</SectionTitle>
         <Group>

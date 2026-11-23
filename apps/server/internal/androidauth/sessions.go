@@ -1,6 +1,7 @@
 package androidauth
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/hmac"
@@ -17,10 +18,18 @@ type session struct {
 }
 type tokens struct {
 	IssuerNodeID string `json:"issuer_node_id"`
+	Origin       string `json:"origin,omitempty"`
 	Session      string `json:"session_id"`
 	Access       string `json:"access_token"`
 	Refresh      string `json:"refresh_token"`
 	Expires      int64  `json:"expires_at"`
+}
+
+type SessionStore interface {
+	find(context.Context, string, time.Time) (session, error)
+	insert(context.Context, session) error
+	rotate(context.Context, session, string) error
+	remove(context.Context, string) error
 }
 
 // MemorySessions is shared by local test nodes in one process. It has no persistence.
@@ -40,7 +49,11 @@ func (n *Node) issue(s session, refresh string) (tokens, error) {
 	t := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	t.Header["kid"] = n.cfg.SigningKeyID
 	signed, err := t.SignedString(n.cfg.SigningKey)
-	return tokens{IssuerNodeID: n.cfg.NodeID, Session: s.id, Access: signed, Refresh: refresh, Expires: claims.ExpiresAt.Unix()}, err
+	result := tokens{IssuerNodeID: n.cfg.NodeID, Session: s.id, Access: signed, Refresh: refresh, Expires: claims.ExpiresAt.Unix()}
+	if n.cfg.DirectSessions {
+		result.Origin = n.cfg.PublicOrigin
+	}
+	return result, err
 }
 
 type accessClaims struct {
@@ -48,7 +61,7 @@ type accessClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (n *Node) access(raw string) (session, error) {
+func (n *Node) access(ctx context.Context, raw string) (session, error) {
 	claims := &accessClaims{}
 	parsed, err := jwt.ParseWithClaims(raw, claims, func(t *jwt.Token) (any, error) {
 		if t.Header["kid"] != n.cfg.SigningKeyID {
@@ -59,14 +72,17 @@ func (n *Node) access(raw string) (session, error) {
 	if err != nil || !parsed.Valid {
 		return session{}, errAuth
 	}
-	s, err := n.sessions.find(claims.ID, n.now())
-	if err != nil || claims.Subject != s.subject || claims.Device != s.device {
+	s, err := n.sessions.find(ctx, claims.ID, n.now())
+	if err != nil {
+		return session{}, err
+	}
+	if claims.Subject != s.subject || claims.Device != s.device {
 		return session{}, errAuth
 	}
 	return s, nil
 }
 
-func (m *MemorySessions) find(id string, now time.Time) (session, error) {
+func (m *MemorySessions) find(_ context.Context, id string, now time.Time) (session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.rows[id]
@@ -77,31 +93,55 @@ func (m *MemorySessions) find(id string, now time.Time) (session, error) {
 	return s, nil
 }
 
-func (n *Node) start(subject, device string, key *ecdsa.PublicKey) (tokens, error) {
-	refresh := randomID()
-	s := session{randomID(), subject, device, digest([]byte(refresh)), key, n.now().Add(14 * 24 * time.Hour)}
-	n.sessions.mu.Lock()
-	defer n.sessions.mu.Unlock()
-	result, err := n.issue(s, refresh)
-	if err == nil {
-		n.sessions.rows[s.id] = s
+func (m *MemorySessions) insert(_ context.Context, s session) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.rows[s.id]; exists {
+		return errAuth
 	}
-	return result, err
+	m.rows[s.id] = s
+	return nil
 }
 
-func (n *Node) renew(id, presented string) (tokens, error) {
-	n.sessions.mu.Lock()
-	defer n.sessions.mu.Unlock()
-	s, ok := n.sessions.rows[id]
-	if !ok || !n.now().Before(s.refreshExpiry) || !hmac.Equal([]byte(s.refreshHash), []byte(digest([]byte(presented)))) {
+func (m *MemorySessions) rotate(_ context.Context, s session, previous string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, ok := m.rows[s.id]
+	if !ok || current.refreshHash != previous {
+		return errAuth
+	}
+	m.rows[s.id] = s
+	return nil
+}
+
+func (m *MemorySessions) remove(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.rows, id)
+	return nil
+}
+
+func (n *Node) start(ctx context.Context, subject, device string, key *ecdsa.PublicKey) (tokens, error) {
+	refresh := randomID()
+	s := session{randomID(), subject, device, digest([]byte(refresh)), key, n.now().Add(14 * 24 * time.Hour)}
+	result, err := n.issue(s, refresh)
+	if err != nil {
+		return tokens{}, err
+	}
+	return result, n.sessions.insert(ctx, s)
+}
+
+func (n *Node) renew(ctx context.Context, s session, presented string) (tokens, error) {
+	previous := s.refreshHash
+	if !n.now().Before(s.refreshExpiry) || !hmac.Equal([]byte(previous), []byte(digest([]byte(presented)))) {
 		return tokens{}, errAuth
 	}
 	refresh := randomID()
 	s.refreshHash = digest([]byte(refresh))
 	s.refreshExpiry = n.now().Add(14 * 24 * time.Hour)
 	result, err := n.issue(s, refresh)
-	if err == nil {
-		n.sessions.rows[id] = s
+	if err != nil {
+		return tokens{}, err
 	}
-	return result, err
+	return result, n.sessions.rotate(ctx, s, previous)
 }

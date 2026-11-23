@@ -60,7 +60,9 @@ export async function finishLogin(request, env, fetcher) {
 export async function session(request, env) {
   const token = getCookie(request, sessionCookie);
   if (!token) return null;
-  return callBackend(env, 'session-get', { key: await hash(token) });
+  const key = await hash(token);
+  const user = await callBackend(env, 'session-get', { key });
+  return user ? { ...user, sessionHash: key } : null;
 }
 export async function logout(request, env) {
   const token = getCookie(request, sessionCookie);

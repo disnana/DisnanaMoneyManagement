@@ -82,9 +82,13 @@ const textBytes = new TextEncoder();
 
 async function signRequest(key, node, bodyHash, now, path = challengePath) {
   const iat = Math.floor(now() / 1000);
-  const header = base64url(textBytes.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT', kid: 'mane-worker-v1' })));
   const claims = { iss: 'mane-auth-staging', aud: node.id, iat, exp: iat + 5, jti: crypto.randomUUID(),
     method: 'POST', path, body_sha256: bodyHash };
+  return signClaims(key, 'mane-worker-v1', claims);
+}
+
+async function signClaims(key, kid, claims) {
+  const header = base64url(textBytes.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT', kid })));
   const input = header + '.' + base64url(textBytes.encode(JSON.stringify(claims)));
   const signature = await crypto.subtle.sign('Ed25519', key, textBytes.encode(input));
   return input + '.' + base64url(signature);
@@ -252,6 +256,35 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
     return signer;
   }
 
+  async function assignAndroid(request, env, ctx) {
+    if (request.method !== 'POST' || new URL(request.url).search) return reply(400, 'invalid request');
+    let input;
+    try { input = await readJSON(request, 512); } catch { return reply(400, 'invalid request'); }
+    if (!input || ![input.exclude, input.session_id, input.refresh_token].every(value => typeof value === 'string' && /^[\w-]{1,64}$/.test(value))) {
+      return reply(400, 'invalid request');
+    }
+    try {
+      const nodes = candidates(configuredNodes(env.MANE_AUTH_NODES, new URL(request.url).origin), env, ctx);
+      const key = await workerSigner(env);
+      const { session_id, refresh_token } = input;
+      const body = JSON.stringify({ session_id, refresh_token });
+      const hash = base64url(await crypto.subtle.digest('SHA-256', textBytes.encode(body)));
+      const path = '/_internal/android-assignment';
+      for (const node of nodes) {
+        if (node.id === input.exclude) continue;
+        try {
+          const response = await fetchNode(node.origin + path, {
+            method: 'POST', body, redirect: 'manual', signal: AbortSignal.timeout(1000),
+            headers: { 'Content-Type': 'application/json', 'X-Mane-Worker-Proof': await signRequest(key, node, hash, now, path) },
+          });
+          void response.body?.cancel().catch(() => {});
+          if (response.status === 204) return Response.json({ id: node.id, origin: node.origin }, { headers: { 'Cache-Control': 'no-store' } });
+        } catch { /* Try another eligible node. */ }
+      }
+    } catch { /* A partial configuration or unavailable node leaves the session intact. */ }
+    return reply(503, 'issuer unavailable');
+  }
+
   async function shopBackend(nodes, env, operation, data, trace) {
     const accessID = env.MANE_SHOP_ACCESS_CLIENT_ID?.trim();
     const accessSecret = env.MANE_SHOP_ACCESS_CLIENT_SECRET?.trim();
@@ -310,6 +343,9 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
       const path = url.pathname;
+      if (path === '/auth/node' && env.MANE_DIRECT_NODES_ENABLED === '1' && url.origin !== env.SITE_ORIGIN) {
+        return assignAndroid(request, env, ctx);
+      }
       if (path.startsWith('/api/shop/')) {
         if (env.MANE_WEB_SHOP_ENABLED !== '1' || url.origin !== env.SITE_ORIGIN) return reply(404, 'not found');
         const trace = crypto.randomUUID();
@@ -317,7 +353,16 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
           const nodes = configuredNodes(env.MANE_AUTH_NODES, url.origin);
           const preferred = candidates(nodes, env, ctx);
           const shopRPC = (operation, data) => shopBackend(preferred, env, operation, data, trace);
-          const response = await shopRequest(request, { ...env, shopRPC }, fetchNode);
+          const shopAssign = env.MANE_DIRECT_NODES_ENABLED === '1' ? async (sessionHash, excluded) => {
+            const node = preferred.find(item => item.id !== excluded);
+            if (!node) return undefined;
+            const iat = Math.floor(now() / 1000);
+            const token = await signClaims(await workerSigner(env), 'mane-web-read-v1', {
+              iss: 'mane-auth-staging', aud: 'mane-web-shop-read', sub: sessionHash, iat, exp: iat + 300,
+            });
+            return { id: node.id, origin: node.origin, token, expires_at: iat + 300 };
+          } : undefined;
+          const response = await shopRequest(request, { ...env, shopRPC, shopAssign }, fetchNode);
           if (response.status !== 503) return response;
           return reply(503, 'temporarily_unavailable', { 'Retry-After': '15' });
         } catch (error) {
