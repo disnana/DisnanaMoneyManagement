@@ -25,14 +25,14 @@
   <meta name="twitter:image" content="https://dmm.disnana.com/social/shop.png">
   <meta name="twitter:image:alt" content="マネーちゃんのAIクレジットショップ">
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/portal/site.css">
-  <link rel="stylesheet" href="/shop/shop.css?v=menu-1">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/shop/shop.css?v=store-1">
   <script src="/shop/shop-nav.js" type="module"></script>
-  <script src="/shop/shop.js?v=history-fallback" type="module"></script>
+  <script src="/shop/shop.js?v=store-1" type="module"></script>
 </head>
 <body class="shop-page">
   <header class="shop-bar"><div class="shell top">
-    <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <a class="brand" href="/shop/" aria-label="マネーちゃん ショップトップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
     <div class="shop-navigation">
       <button type="button" class="shop-menu-toggle" aria-expanded="false" aria-controls="shop-menu">
         <span class="shop-menu-icon" aria-hidden="true"></span>メニュー
@@ -42,11 +42,12 @@
         <a href="/shop/history/">購入履歴</a>
         <a href="/shop/history/?type=activity">利用履歴</a>
         <a href="/app/" class="shop-menu-secondary">Web家計簿</a>
+        <a href="/" class="shop-menu-secondary">公式トップ</a>
         <button id="logout" type="button" class="quiet" hidden>ログアウト</button>
       </nav>
     </div>
   </div></header>
-  <main class="shell credit-shop">
+  <main class="shell credit-shop shop-store">
     <header class="shop-intro">
       <h1>クレジットショップ</h1>
       <p>AIレシート用のクレジットを購入・管理できます。</p>
@@ -54,46 +55,55 @@
     <noscript><p>残高や購入状況の表示にはJavaScriptが必要です。</p></noscript>
     <div class="shop-overview">
       <div class="wallet-column">
-        <section id="wallet" class="credit-balance" aria-labelledby="wallet-heading">
-          <div class="balance-content">
-            <h2 id="wallet-heading">利用可能なクレジット</h2>
-            <p class="balance-value" id="balance">—</p>
-            <ul class="expiry-list" id="lots" hidden></ul>
-            <p id="login-note">Androidと同じGoogleアカウントで残高を確認できます。</p>
-            <a id="login" class="button" href="/api/shop/auth/start">Googleでログイン</a>
+        <section id="wallet" class="wallet-panel" aria-labelledby="wallet-heading">
+          <div class="credit-balance">
+            <div class="balance-head">
+              <h2 id="wallet-heading">利用可能なクレジット</h2>
+              <button id="refresh" type="button" class="quiet balance-refresh" hidden>更新</button>
+            </div>
+            <div class="balance-content">
+              <p class="balance-value" id="balance">—</p>
+              <p id="login-note">Androidと同じGoogleアカウントで残高を確認できます。</p>
+              <a id="login" class="button" href="/api/shop/auth/start">Googleでログイン</a>
+            </div>
+            <img class="balance-art" src="/portal/mascot.png" alt="" width="72" height="72">
           </div>
-          <img class="balance-art" src="/portal/mascot.png" alt="" width="72" height="72">
+          <div id="wallet-expiry" class="wallet-expiry" hidden>
+            <h3>有効期限</h3>
+            <ul class="expiry-list" id="lots"></ul>
+          </div>
         </section>
-        <div class="shop-feedback">
-          <p id="status" role="status"></p>
-          <button id="refresh" type="button" class="quiet" hidden>更新</button>
-        </div>
+        <p id="status" class="wallet-status" role="status"></p>
       </div>
-      <section class="shop-section packs-section" aria-labelledby="packs-heading">
+      <section class="packs-section" aria-labelledby="packs-heading">
         <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note">読み込み中…</p></div>
         <form id="checkout-form">
           <fieldset class="pack-selector">
             <legend class="sr-only">購入パック</legend>
             <ul class="pack-list" id="packs"></ul>
+            <details id="test-packs" class="test-packs" hidden>
+              <summary>失効テスト用パック</summary>
+              <ul class="pack-list" id="expiry-test-packs"></ul>
+            </details>
           </fieldset>
           <div id="checkout-action" class="checkout-action" hidden>
-            <p id="checkout-status" class="checkout-status" role="status"></p>
+            <p id="checkout-selection" class="checkout-selection"></p>
             <button id="checkout-button" type="submit" class="button primary">決済へ進む</button>
+            <p id="checkout-status" class="checkout-status" role="status"></p>
           </div>
         </form>
       </section>
-    </div>
-    <section id="account-details" class="account-details" aria-labelledby="account-id-label" hidden>
-      <div>
-        <label id="account-id-label" for="account-id">アカウントID</label>
+      <details id="account-details" class="account-details" hidden>
+        <summary>アカウントID</summary>
         <p id="account-id-help" class="muted">お問い合わせ時にお伝えください。</p>
-      </div>
-      <div class="account-id-actions">
-        <input id="account-id" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="account-id-help">
-        <button id="copy-account-id" type="button" class="quiet">コピー</button>
-      </div>
-      <p id="copy-status" class="muted" role="status"></p>
-    </section>
+        <div class="account-id-actions">
+          <label for="account-id" class="sr-only">アカウントID</label>
+          <input id="account-id" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="account-id-help">
+          <button id="copy-account-id" type="button" class="quiet">コピー</button>
+        </div>
+        <p id="copy-status" class="muted" role="status"></p>
+      </details>
+    </div>
   </main>
   <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a><a href="mailto:support@disnana.com">お問い合わせ</a></nav></footer>
 </body>

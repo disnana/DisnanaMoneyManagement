@@ -26,13 +26,17 @@ function validFor(seconds) {
 function showAccountID(value) {
   const accountID = typeof value === 'string' && value.length <= 255 ? value : '';
   const input = element('account-id');
-  if (accountID !== input.value) element('copy-status').textContent = '';
+  const details = element('account-details');
+  if (accountID !== input.value) {
+    element('copy-status').textContent = '';
+    details.open = false;
+  }
   input.value = accountID;
-  element('account-details').hidden = !accountID;
+  details.hidden = !accountID;
 }
 
 function showAccount(account) {
-  for (const id of ['lots', 'logout']) element(id).hidden = !account;
+  for (const id of ['wallet-expiry', 'logout']) element(id).hidden = !account;
   for (const id of ['login', 'login-note']) element(id).hidden = Boolean(account);
   showAccountID(account?.account_id);
   const balance = element('balance');
@@ -70,6 +74,7 @@ function updateCheckoutButton() {
   const selected = offeredPacks.find(pack => pack.id === selectedPackID);
   button.disabled = !checkoutEnabled || !selected || checkoutInProgress;
   button.textContent = selected ? yen.format(selected.amount) + 'の決済へ進む' : '決済へ進む';
+  element('checkout-selection').textContent = selected ? selected.title + ' · ' + number.format(selected.credits) + ' cr' : '';
 }
 
 function resetCheckout() {
@@ -82,11 +87,15 @@ function renderPacks(packs, testMode, enabled, account) {
   offeredPacks = packs;
   checkoutEnabled = Boolean(enabled && account && packs.length);
   const regular = packs.filter(pack => !expiryTestPack(pack, testMode));
+  const expiryTests = packs.filter(pack => expiryTestPack(pack, testMode));
   const cheapest = regular.reduce((lowest, pack) => !lowest || pack.amount < lowest.amount ? pack : lowest, null);
   if (!packs.some(pack => pack.id === selectedPackID)) selectedPackID = (cheapest ?? packs[0])?.id ?? '';
   element('checkout-action').hidden = !checkoutEnabled;
-  element('pack-note').textContent = checkoutEnabled ? (testMode ? 'Stripeテスト決済' : '') : '販売準備中';
-  rows('packs', packs, (row, pack) => {
+  element('pack-note').textContent = checkoutEnabled ? (testMode ? 'テスト決済' : '') : '販売準備中';
+  const testPacks = element('test-packs');
+  testPacks.hidden = !expiryTests.length;
+  if (expiryTests.some(pack => pack.id === selectedPackID)) testPacks.open = true;
+  const renderPack = (row, pack) => {
     const option = label(checkoutEnabled ? 'label' : 'div', '', 'pack-option');
     if (checkoutEnabled) {
       const input = document.createElement('input');
@@ -102,19 +111,22 @@ function renderPacks(packs, testMode, enabled, account) {
       });
       option.append(input);
     }
-    const top = label('span', '', 'pack-top');
-    top.append(label('span', pack.title, 'pack-title'), label('span', yen.format(pack.amount), 'pack-price'));
+    const description = label('span', '', 'pack-description');
+    const meta = label('span', '', 'pack-meta');
+    meta.append(label('span', validFor(pack.validity_seconds), 'pack-duration'));
+    description.append(label('span', pack.title, 'pack-title'), meta);
     const value = label('span', number.format(pack.credits), 'pack-value');
     value.append(label('small', 'cr', ''));
-    option.append(top, value, label('span', validFor(pack.validity_seconds), 'pack-duration'));
-    if (expiryTestPack(pack, testMode)) {
-      option.append(label('span', '失効確認用', 'pack-saving'));
-    } else if (cheapest && pack.id !== cheapest.id) {
+    option.append(description, value, label('span', yen.format(pack.amount), 'pack-price'));
+    if (cheapest && pack.id !== cheapest.id && !expiryTestPack(pack, testMode)) {
       const savings = Math.round((1 - (pack.amount / pack.credits) / (cheapest.amount / cheapest.credits)) * 1000) / 10;
-      if (savings > 0) option.append(label('span', '約' + number.format(savings) + '%お得', 'pack-saving'));
+      if (savings > 0) meta.append(label('span', '約' + number.format(savings) + '%お得', 'pack-saving'));
     }
     row.append(option);
-  }, '現在表示できるパックはありません。');
+  };
+  element('packs').hidden = Boolean(!regular.length && expiryTests.length);
+  rows('packs', regular, renderPack, '現在表示できるパックはありません。');
+  rows('expiry-test-packs', expiryTests, renderPack, '');
   updateCheckoutButton();
 }
 
@@ -155,8 +167,7 @@ async function load() {
     showAccount(account);
     if (account?.orders) forgetCompletedOrders(account.orders);
     renderPacks(packs, testMode, enabled, account);
-    status.textContent = loginFailed ? 'ログインを完了できませんでした。再試行してください。' :
-      account ? '' : '残高を表示するにはログインしてください。';
+    status.textContent = loginFailed ? 'ログインを完了できませんでした。再試行してください。' : '';
   } catch {
     status.textContent = '現在ショップに接続できません。時間をおいて再試行してください。';
     showAccount(null);
