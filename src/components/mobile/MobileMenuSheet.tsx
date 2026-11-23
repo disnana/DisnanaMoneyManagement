@@ -6,6 +6,7 @@ import { ResponsiveSheet } from '../ResponsiveSheet';
 import { PWAInstallButton } from '../PWAInstallButton';
 import { ThemeSwitch } from '../ThemeSwitch';
 import { LegalLinks } from '../LegalLinks';
+import { OfficialSiteLinks } from '../OfficialSiteLinks';
 
 interface Props {
   open: boolean;
@@ -78,6 +79,8 @@ export const MobileMenuSheet: React.FC<Props> = ({
           }}
         />
       </div>
+
+      <OfficialSiteLinks />
 
       <div>
         <div className="mb-1.5 px-1 text-xs font-semibold text-slate-500">外観</div>
