@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Linking, Platform, Text } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
+import { refreshAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
 import { useMotionPreference } from '@/lib/motionPref';
 import { useFinance } from '@/lib/store';
 import Constants from 'expo-constants';
@@ -14,12 +15,20 @@ import { getHapticsEnabled, setHapticsEnabled } from '@/lib/haptics';
 import { SettingsSwitchRow } from '@/ui/SettingsSwitchRow';
 import { canAuthenticate, setLockEnabled, useLockEnabled } from '@/lib/appLock';
 
-function openLegalPage(page: 'terms' | 'privacy') {
-  void Linking.openURL(`https://dmm.disnana.com/${page}/`).catch(() => Alert.alert('ページを開けませんでした'));
+const officialURLs = {
+  terms: 'https://dmm.disnana.com/terms/',
+  privacy: 'https://dmm.disnana.com/privacy/',
+  support: 'mailto:support@disnana.com',
+};
+
+function openOfficialLink(page: keyof typeof officialURLs) {
+  void Linking.openURL(officialURLs[page]).catch(() => Alert.alert('リンクを開けませんでした'));
 }
 
 export default function Settings() {
   const p = usePalette();
+  const { signedIn } = useAndroidAccount();
+  useFocusEffect(useCallback(() => { void refreshAndroidAccount(); }, []));
   const [pref, setPref] = useThemePref();
   const [reduceMotion, setReduceMotion] = useMotionPreference();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
@@ -30,26 +39,17 @@ export default function Settings() {
   return (
     <>
       <Screen>
-        <SectionTitle>外観</SectionTitle>
-        <Segmented<ThemePref>
-          value={pref}
-          onChange={setPref}
-          options={[
-            { id: 'system', label: '自動' },
-            { id: 'light', label: 'ライト' },
-            { id: 'dark', label: 'ダーク' },
-          ]}
-        />
+        <SectionTitle>アカウント</SectionTitle>
+        <Group>
+          {Platform.OS === 'android' ? (
+            <Row title="Googleアカウント" right={signedIn ? 'ログイン済み' : '未ログイン'} chevron
+              icon={{ ios: 'person.crop.circle', android: 'account_circle' }}
+              onPress={() => router.push('/settings/account')} />
+          ) : <Row title="サインイン" right="未設定（この端末のみ）" />}
+        </Group>
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
-          「自動」は端末の設定に合わせます。
+          アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
         </Text>
-
-        {launcherIcons.length > 1 ? (
-          <Group>
-            <Row title="アプリアイコン" icon={{ ios: 'app', android: 'apps' }} chevron
-              onPress={() => router.push('/settings/app-icon')} />
-          </Group>
-        ) : null}
 
         <SectionTitle>操作</SectionTitle>
         <Group>
@@ -100,24 +100,41 @@ export default function Settings() {
           />
         </Group>
 
-        <SectionTitle>アカウント</SectionTitle>
-        <Group>
-          <Row title="サインイン" right="未設定（この端末のみ）" />
-        </Group>
-        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
-          アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
-        </Text>
-
         <Group>
           <Row title="データ管理" icon={{ ios: 'externaldrive', android: 'storage' }}
             subtitle="初期化・サンプルデータ" chevron onPress={() => router.push('/settings/data')} />
         </Group>
 
+        <SectionTitle>外観</SectionTitle>
+        <Segmented<ThemePref>
+          value={pref}
+          onChange={setPref}
+          options={[
+            { id: 'system', label: '自動' },
+            { id: 'light', label: 'ライト' },
+            { id: 'dark', label: 'ダーク' },
+          ]}
+        />
+        <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
+          「自動」は端末の設定に合わせます。
+        </Text>
+
+        {launcherIcons.length > 1 ? (
+          <Group>
+            <Row title="アプリアイコン" icon={{ ios: 'app', android: 'apps' }} chevron
+              onPress={() => router.push('/settings/app-icon')} />
+          </Group>
+        ) : null}
+
         <SectionTitle>情報</SectionTitle>
         <Group>
-          <Row title="利用規約" chevron onPress={() => openLegalPage('terms')} />
-          <Row title="プライバシーポリシー" chevron onPress={() => openLegalPage('privacy')} />
           <Row title="バージョン" right={Constants.expoConfig?.version ?? '-'} />
+        </Group>
+        <SectionTitle>公式情報</SectionTitle>
+        <Group>
+          <Row title="利用規約" chevron onPress={() => openOfficialLink('terms')} />
+          <Row title="プライバシーポリシー" chevron onPress={() => openOfficialLink('privacy')} />
+          <Row title="サポート" chevron onPress={() => openOfficialLink('support')} />
         </Group>
       </Screen>
     </>

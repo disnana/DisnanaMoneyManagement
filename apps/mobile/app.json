@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.disnana.mane_chan",
-      "versionCode": 4,
+      "versionCode": 6,
       "adaptiveIcon": {
         "backgroundColor": "#0F766E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

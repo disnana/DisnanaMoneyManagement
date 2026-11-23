@@ -1,0 +1,18 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.deviceproof'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.deviceproof"
+}
+
+dependencies {
+  implementation 'androidx.credentials:credentials:1.5.0'
+  implementation 'androidx.credentials:credentials-play-services-auth:1.5.0'
+  implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
+  implementation 'com.google.android.play:integrity:1.5.0'
+}

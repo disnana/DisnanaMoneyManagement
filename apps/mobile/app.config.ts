@@ -9,11 +9,21 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
   const projectId: string | undefined = process.env.EXPO_PROJECT_ID?.trim() || config.extra?.eas?.projectId;
-  const base = { ...config, runtimeVersion: { policy: 'sdkVersion' as const } } as ExpoConfig;
+  const entry = process.env.MANE_AUTH_ENTRY?.trim();
+  const googleClientID = process.env.MANE_GOOGLE_WEB_CLIENT_ID?.trim();
+  const projectNumber = process.env.MANE_GOOGLE_PROJECT_NUMBER?.trim();
+  if (entry && (!entry.startsWith('https://') || new URL(entry).origin !== entry)) {
+    throw new Error('Invalid Android authentication entry');
+  }
+  const maneAuth = entry && googleClientID && projectNumber
+    ? { entry, googleClientID, projectNumber }
+    : undefined;
+  const base = { ...config, runtimeVersion: { policy: 'sdkVersion' },
+    extra: { ...config.extra, maneAuth } } as ExpoConfig;
   if (!projectId) return base;
   return {
     ...base,
     updates: { ...config.updates, url: `https://u.expo.dev/${projectId}` },
-    extra: { ...config.extra, eas: { ...config.extra?.eas, projectId } },
+    extra: { ...base.extra, eas: { ...config.extra?.eas, projectId } },
   };
 };
