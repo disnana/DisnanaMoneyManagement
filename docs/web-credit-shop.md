@@ -17,7 +17,7 @@
 ## ステージング反映
 
 1. 両ノードの接続先とkeyspaceを揃える。既存の [credit schema](../apps/server/internal/credits/schema.cql) が適用されたステージングkeyspaceに、[ショップ用CQL](../apps/server/internal/webshop/schema.cql) を一度適用する。両Goノードを更新し、既存の `MANE_WORKER_JWS_PUBLIC_KEY` と接続設定に加えて `MANE_WEB_SHOP_ENABLED=1` を設定する。再起動後に既存Androidセッションは再ログインが必要になる。
-2. Cloudflare Accessで各ノードの `/_internal/web-shop/*` を **Service Auth** に限定する。Goの接続は既存Tunnel経由。既存Workerに `MANE_SHOP_ACCESS_CLIENT_ID`、`MANE_SHOP_ACCESS_CLIENT_SECRET` をSecretとして登録する。Goは正しいEd25519署名がないリクエストを404で拒否する。署名対象は既存と同じく短い有効期限、宛先、メソッド、パス、本文。Androidが使うルートへのAccessポリシー追加は今回不要。
+2. Goへの接続は既存Tunnelを使う。Goは短い有効期限、宛先、メソッド、パス、本文のハッシュを含むEd25519署名を検証し、不正なリクエストを404で拒否する。Accessを併用する環境では、各ノードの `/_internal/web-shop/*` に対するService Authポリシーを設定し、`MANE_SHOP_ACCESS_CLIENT_ID` と `MANE_SHOP_ACCESS_CLIENT_SECRET` の両方を既存WorkerへSecretとして登録する。
 3. [既存Worker](../apps/auth-worker/index.mjs) の新しい版をデプロイし、[設定例](../apps/auth-worker/wrangler.example.toml) に従って `dmm.disnana.com/api/shop/*` を追加する。このルートからショップのAPIを公開する。GitHub Pagesにショップ画面を配信する。最初は `MANE_SHOP_TEST_MODE=0` のままにする。
 4. Google Cloudの既存Web OAuthクライアントに `https://dmm.disnana.com/api/shop/auth/callback` を登録し、Workerに `GOOGLE_WEB_CLIENT_ID` と `GOOGLE_WEB_CLIENT_SECRET` を設定する。WebとAndroidで同じGoogleアカウントの残高を確認し、別ノード経由やGo再起動後でもWebのログインが使えるか試す。Webセッションの権限はショップAPIに限定される。
 5. Stripeのテスト環境から `STRIPE_SECRET_KEY` と `STRIPE_WEBHOOK_SECRET` をWorkerに登録する。Webhook URLは `/api/shop/stripe/webhook`。対象は `checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、`charge.dispute.updated`、`charge.dispute.closed`。

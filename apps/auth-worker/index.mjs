@@ -253,9 +253,15 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
   }
 
   async function shopBackend(nodes, env, operation, data, trace) {
-    if (!env.MANE_SHOP_ACCESS_CLIENT_ID || !env.MANE_SHOP_ACCESS_CLIENT_SECRET) {
-      throw new Error('shop origin authentication missing');
+    const accessID = env.MANE_SHOP_ACCESS_CLIENT_ID?.trim();
+    const accessSecret = env.MANE_SHOP_ACCESS_CLIENT_SECRET?.trim();
+    if (Boolean(accessID) !== Boolean(accessSecret)) {
+      throw new Error('incomplete shop Access credentials');
     }
+    const accessHeaders = accessID ? {
+      'CF-Access-Client-Id': accessID,
+      'CF-Access-Client-Secret': accessSecret,
+    } : {};
     const key = await workerSigner(env);
     const path = '/_internal/web-shop/' + operation;
     const body = JSON.stringify(data);
@@ -271,8 +277,7 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
           method: 'POST', body, redirect: 'manual', signal: AbortSignal.timeout(Math.min(remaining, 3000)),
           headers: {
             'Content-Type': 'application/json', 'X-Mane-Worker-Proof': proof,
-            'CF-Access-Client-Id': env.MANE_SHOP_ACCESS_CLIENT_ID,
-            'CF-Access-Client-Secret': env.MANE_SHOP_ACCESS_CLIENT_SECRET,
+            ...accessHeaders,
           },
         });
         if (!response.headers.get('content-type')?.startsWith('application/json') || response.status >= 500 || response.status === 403) {

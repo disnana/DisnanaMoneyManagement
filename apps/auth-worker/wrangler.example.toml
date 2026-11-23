@@ -11,11 +11,11 @@ routes = [
 [vars]
 MANE_AUTH_NODES = '[{"id":"staging-a","origin":"https://node-a-stg.disnana.com"},{"id":"staging-b","origin":"https://node-b-stg.disnana.com"}]'
 
-# Set to 1 only after the Go nodes and Access Service Auth are ready.
+# Set to 1 only after the Go nodes are ready.
 MANE_WEB_SHOP_ENABLED = "0"
 SITE_ORIGIN = "https://dmm.disnana.com"
 MANE_SHOP_TEST_MODE = "0"
 MANE_SHOP_PACKS = "[]"
-# Worker secrets also used by the shop: MANE_SHOP_ACCESS_CLIENT_ID,
-# MANE_SHOP_ACCESS_CLIENT_SECRET, GOOGLE_WEB_CLIENT_SECRET,
-# STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
+# Shop secrets: GOOGLE_WEB_CLIENT_SECRET, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
+# Optional for tunnels protected by Access: set both MANE_SHOP_ACCESS_CLIENT_ID
+# and MANE_SHOP_ACCESS_CLIENT_SECRET as Worker secrets.

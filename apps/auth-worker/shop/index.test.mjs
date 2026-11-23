@@ -23,8 +23,8 @@ const backendFixture = () => {
       assert.equal(claims.aud, node.id);
       assert.equal(claims.path, url.pathname);
       assert.equal(claims.body_sha256, Buffer.from(await crypto.subtle.digest('SHA-256', encode(options.body))).toString('base64url'));
-      assert.equal(options.headers['CF-Access-Client-Id'], 'access-id-fixture');
-      assert.equal(options.headers['CF-Access-Client-Secret'], 'access-secret-fixture');
+      assert.equal(options.headers['CF-Access-Client-Id'], undefined);
+      assert.equal(options.headers['CF-Access-Client-Secret'], undefined);
       const input = JSON.parse(options.body);
       const order = orders.get(input.order?.id);
       const found = data => data ? Response.json(data) : Response.json({}, { status:404 });
@@ -89,8 +89,7 @@ const signed = async (event, secret) => {
 function environment() {
   return {
     SITE_ORIGIN: site, MANE_WEB_SHOP_ENABLED: '1', MANE_AUTH_NODES: JSON.stringify([nodeA,nodeB]),
-    MANE_WORKER_JWS_PRIVATE_KEY: privateKey, MANE_SHOP_ACCESS_CLIENT_ID: 'access-id-fixture',
-    MANE_SHOP_ACCESS_CLIENT_SECRET: 'access-secret-fixture',
+    MANE_WORKER_JWS_PRIVATE_KEY: privateKey,
     GOOGLE_WEB_CLIENT_ID: 'fixture.apps.googleusercontent.com', GOOGLE_WEB_CLIENT_SECRET: 'fixture',
     STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_WEBHOOK_SECRET: 'whsec_fixture',
     MANE_SHOP_TEST_MODE: '1', MANE_SHOP_PACKS: JSON.stringify([pack]),
@@ -233,4 +232,22 @@ test('an accidental live Stripe key cannot enable purchases', async () => {
   }});
   const result = await publicFetch(worker, new Request(site + '/api/shop/packs', { headers: payHeaders }), env).then(r => r.json());
   assert.equal(result.checkout_enabled, false);
+});
+
+test('Access headers are sent only when both optional credentials are configured', async () => {
+  const env = { ...environment(), MANE_SHOP_ACCESS_CLIENT_ID: 'access-id-fixture' };
+  let calls = 0;
+  const worker = createWorker({ fetchNode: async (_url, { headers }) => {
+    calls++;
+    assert.equal(headers['CF-Access-Client-Id'], 'access-id-fixture');
+    assert.equal(headers['CF-Access-Client-Secret'], 'access-secret-fixture');
+    assert.match(headers['X-Mane-Worker-Proof'], /^[\w-]+\.[\w-]+\.[\w-]+$/);
+    return Response.json({}, { status: 404 });
+  } });
+  const request = () => new Request(site + '/api/shop/account', { headers: payHeaders });
+  assert.equal((await publicFetch(worker, request(), env)).status, 503);
+  assert.equal(calls, 0);
+  env.MANE_SHOP_ACCESS_CLIENT_SECRET = 'access-secret-fixture';
+  assert.equal((await publicFetch(worker, request(), env)).status, 401);
+  assert.equal(calls, 1);
 });
