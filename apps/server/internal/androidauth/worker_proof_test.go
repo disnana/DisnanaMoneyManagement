@@ -5,11 +5,40 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+func TestWebReadGrantIsBoundToAssignedNode(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier := &WorkerProof{key: public}
+	now := time.Now().Truncate(time.Second)
+	sid := strings.Repeat("a", 64)
+	signed := jwt.NewWithClaims(jwt.SigningMethodEdDSA, jwt.MapClaims{
+		"iss": "mane-auth-staging", "aud": "mane-web-shop-read", "node": "staging-b",
+		"sub": sid, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
+	})
+	signed.Header["kid"] = "mane-web-read-v1"
+	token, err := signed.SignedString(private)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key, ok := verifier.WebReadSession(token, "staging-b", now); !ok || key != sid {
+		t.Fatal("assigned node rejected the grant")
+	}
+	if _, ok := verifier.WebReadSession(token, "staging-a", now); ok {
+		t.Fatal("accepted a grant for a different node")
+	}
+	if _, ok := verifier.WebReadSession(token, "staging-b", now.Add(5*time.Minute)); ok {
+		t.Fatal("accepted an expired grant")
+	}
+}
 
 func TestWorkerProofAllowsOnlyItsOwnFreshRequestOnce(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)

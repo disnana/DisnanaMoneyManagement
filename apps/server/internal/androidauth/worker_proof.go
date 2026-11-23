@@ -15,11 +15,14 @@ import (
 )
 
 // WebReadSession verifies a short-lived read grant and returns its parent Web session hash.
-func (w *WorkerProof) WebReadSession(token string, now time.Time) (string, bool) {
+func (w *WorkerProof) WebReadSession(token, node string, now time.Time) (string, bool) {
 	if len(token) > 2048 {
 		return "", false
 	}
-	claims := &jwt.RegisteredClaims{}
+	claims := &struct {
+		Node string `json:"node"`
+		jwt.RegisteredClaims
+	}{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		if t.Header["kid"] != "mane-web-read-v1" {
 			return nil, errAuth
@@ -27,7 +30,7 @@ func (w *WorkerProof) WebReadSession(token string, now time.Time) (string, bool)
 		return w.key, nil
 	}, jwt.WithValidMethods([]string{"EdDSA"}), jwt.WithIssuer("mane-auth-staging"),
 		jwt.WithAudience("mane-web-shop-read"), jwt.WithExpirationRequired(), jwt.WithTimeFunc(func() time.Time { return now }))
-	if err != nil || !parsed.Valid || claims.IssuedAt == nil || claims.IssuedAt.After(now.Add(time.Second)) ||
+	if err != nil || !parsed.Valid || claims.Node != node || claims.IssuedAt == nil || claims.IssuedAt.After(now.Add(time.Second)) ||
 		claims.ExpiresAt.Sub(claims.IssuedAt.Time) != 5*time.Minute || len(claims.Subject) != 64 {
 		return "", false
 	}

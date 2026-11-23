@@ -54,14 +54,9 @@ func run(checkConfig bool) error {
 	if err != nil || len(challenge) < 32 {
 		return errors.New("MANE_CHALLENGE_KEY requires 32 or more bytes in unpadded base64url")
 	}
-	clusterSeed := os.Getenv("MANE_ANDROID_CLUSTER_JWT_SEED")
-	seedSetting := os.Getenv("MANE_JWT_SEED")
-	if clusterSeed != "" {
-		seedSetting = clusterSeed
-	}
-	seed, err := base64.RawURLEncoding.DecodeString(seedSetting)
+	seed, err := base64.RawURLEncoding.DecodeString(os.Getenv("MANE_JWT_SEED"))
 	if err != nil || len(seed) != ed25519.SeedSize {
-		return errors.New("Android JWT signing requires a 32-byte seed in unpadded base64url")
+		return errors.New("MANE_JWT_SEED requires a 32-byte seed in unpadded base64url")
 	}
 	addresses := os.Getenv("MANE_AUTH_LISTEN")
 	if addresses == "" {
@@ -124,7 +119,7 @@ func run(checkConfig bool) error {
 		config.ScyllaStatus = status
 	}
 	var sessions androidauth.SessionStore = androidauth.NewMemorySessions()
-	if clusterSeed != "" {
+	if os.Getenv("MANE_ANDROID_SHARED_SESSIONS") == "1" {
 		if wallet == nil || config.WorkerProof == nil {
 			return errors.New("Android node reassignment requires ScyllaDB and Worker proof")
 		}
@@ -133,7 +128,6 @@ func run(checkConfig bool) error {
 			return err
 		}
 		config.DirectSessions = true
-		config.SigningKeyID = "mane-android-cluster-v1"
 	}
 	node, err := androidauth.NewNode(config, sessions)
 	if err != nil {
@@ -152,7 +146,9 @@ func run(checkConfig bool) error {
 		mux := http.NewServeMux()
 		mux.Handle(webshop.Prefix, web)
 		if origin := os.Getenv("MANE_WEB_DIRECT_SITE_ORIGIN"); origin != "" {
-			direct, err := web.DirectReader(origin, config.WorkerProof.WebReadSession)
+			direct, err := web.DirectReader(origin, func(token string, now time.Time) (string, bool) {
+				return config.WorkerProof.WebReadSession(token, config.NodeID, now)
+			})
 			if err != nil {
 				return err
 			}

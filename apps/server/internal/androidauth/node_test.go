@@ -74,8 +74,15 @@ func setupWithSessions(t *testing.T, sessions func() SessionStore, direct bool) 
 		return &google.PublicKey, nil
 	}}
 	for _, label := range []string{"a", "b"} {
+		nodeSigning := signing
+		if direct {
+			_, nodeSigning, err = ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 		config := Config{NodeID: label, PublicOrigin: "https://node-" + label + ".example.test", PackageName: "com.disnana.mane_chan", SigningKeyID: "test",
-			ChallengeKey: []byte(strings.Repeat(label, 32)), SigningKey: signing, Now: f.now, GoogleSubject: verifier.Subject,
+			ChallengeKey: []byte(strings.Repeat(label, 32)), SigningKey: nodeSigning, Now: f.now, GoogleSubject: verifier.Subject,
 			DirectSessions: direct,
 			CreditBalance: func(_ context.Context, subject string) (int64, error) {
 				if subject != "google-account-sub" {
@@ -280,7 +287,7 @@ func TestChallengeIsNodeLocalAndAcceptsOnlyOnce(t *testing.T) {
 }
 
 func TestFailoverAndSessionLifecycle(t *testing.T) {
-	checkFailover(t, setup(t))
+	checkFailover(t, setup(t), false)
 }
 
 func TestScyllaAndroidFailover(t *testing.T) {
@@ -299,10 +306,10 @@ func TestScyllaAndroidFailover(t *testing.T) {
 		}
 		return sessions
 	}, true)
-	checkFailover(t, f)
+	checkFailover(t, f, true)
 }
 
-func checkFailover(t *testing.T, f *fixture) {
+func checkFailover(t *testing.T, f *fixture, direct bool) {
 	t.Helper()
 	s := f.login()
 	p := f.challenge(f.a.URL, "GET", "/v1/me", "", s.Access, "")
@@ -315,6 +322,18 @@ func checkFailover(t *testing.T, f *fixture) {
 	}
 	f.clock.Add(int64(5 * time.Second))
 	f.want(f.b.URL, "GET", "/v1/me", "", s.Access, p, f.device, 401)
+	if direct {
+		f.want(f.b.URL, "POST", "/auth/challenge", encode(t, issueRequest{Operation: operation{"GET", "/v1/me", digest(nil)}}), s.Access, ticket{}, nil, 401)
+		body := fmt.Sprintf(`{"session_id":%q,"refresh_token":%q}`, s.Session, s.Refresh)
+		proof := f.challenge(f.b.URL, "POST", "/auth/refresh", body, "", s.Session)
+		data := f.want(f.b.URL, "POST", "/auth/refresh", body, "", proof, f.device, 200)
+		var assigned tokens
+		if json.Unmarshal(data, &assigned) != nil || assigned.Session != s.Session || assigned.Access == s.Access ||
+			assigned.IssuerNodeID != "b" || assigned.Origin != "https://node-b.example.test" {
+			t.Fatal("new node did not reissue authorization for the same session")
+		}
+		s = assigned
+	}
 	p = f.challenge(f.b.URL, "GET", "/v1/me", "", s.Access, "")
 	f.want(f.b.URL, "GET", "/v1/me", "", s.Access, p, f.device, 200)
 	f.clock.Add(int64(10 * time.Minute))

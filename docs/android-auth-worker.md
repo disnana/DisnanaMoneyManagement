@@ -134,10 +134,10 @@ Workerはログイン用の `POST /auth/challenge` ごとに Ed25519（JWSヘッ
 ## 認可後の直結をステージングで試す
 
 1. 共有ScyllaDBのステージングkeyspaceで [Androidセッションのスキーマ](../apps/server/internal/androidauth/session_schema.cql) を適用する。
-2. 両Goノードに同じ32バイトのBase64URL秘密値を `MANE_ANDROID_CLUSTER_JWT_SEED` として設定する。Webの読み取りも試す場合は両ノードに `MANE_WEB_DIRECT_SITE_ORIGIN=https://dmm.disnana.com` を設定する。既存のWorker署名公開鍵を引き継ぐ。Androidの旧メモリセッションからは一度ログインし直す。
+2. 両Goノードに `MANE_ANDROID_SHARED_SESSIONS=1` を設定する。Androidの署名鍵はノードごとに管理する。Webの読み取りも試す場合は両ノードに `MANE_WEB_DIRECT_SITE_ORIGIN=https://dmm.disnana.com` を設定する。既存のWorker署名公開鍵を引き継ぐ。Androidの旧メモリセッションからは一度ログインし直す。
 3. 両ノードのTunnelがAndroidの `/auth/challenge` と認可後のAPIおよびWebの `/v1/shop-read/*` に到達できることを確認する。WebのCSPが指定する `node-a-stg.disnana.com` と `node-b-stg.disnana.com` を使う。別のホスト名を使う場合はショップと履歴の両HTMLの `connect-src` も更新する。
 4. 対応版WorkerとWebページを配置し、Workerの `MANE_DIRECT_NODES_ENABLED=1` を設定する。Androidで試すには対応ビルドを使う。
 
-Androidはログイン後、応答の `origin` にチャレンジと操作を直接送る。読み取りの通信障害時は `POST /auth/node` で別ノードを取得し、同じセッションで新しいチャレンジを発行する。更新トークンのローテーション等が実行された可能性がある操作は自動再送を抑止する。更新成功後に応答を失った場合は、再ログインが必要になることがある。
+Androidはログイン後、応答の `origin` にチャレンジと操作を直接送る。読み取りの通信障害時は `POST /auth/node` で別ノードを取得し、そのノードでScyllaDBのセッションと端末署名を照合してAPI用トークンを更新する。新旧のトークンはそれぞれ担当ノードでのみ受理される。更新トークンのローテーション等が実行された可能性がある操作は自動再送を抑止する。更新成功後に応答を失った場合は、再ログインが必要になることがある。
 
-Webはログイン後に `GET /api/shop/node` で担当ノードと5分間有効な読み取り権限を受け取る。残高と履歴はGoへ直接送り、Goが読み取り権限とScyllaDBの親セッションを照合する。通信障害時は失敗したノードを割り当てから外して同じページを読み直す。GoogleログインとStripe決済・Webhookは既存Workerが処理する。
+Webはログイン後に `GET /api/shop/node` で担当ノードとそのノードで5分間有効な読み取り権限を受け取る。残高と履歴はGoへ直接送り、Goが読み取り権限とScyllaDBの親セッションを照合する。通信障害時は失敗したノードを割り当てから外して同じページを読み直す。GoogleログインとStripe決済・Webhookは既存Workerが処理する。

@@ -358,7 +358,7 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
             if (!node) return undefined;
             const iat = Math.floor(now() / 1000);
             const token = await signClaims(await workerSigner(env), 'mane-web-read-v1', {
-              iss: 'mane-auth-staging', aud: 'mane-web-shop-read', sub: sessionHash, iat, exp: iat + 300,
+              iss: 'mane-auth-staging', aud: 'mane-web-shop-read', node: node.id, sub: sessionHash, iat, exp: iat + 300,
             });
             return { id: node.id, origin: node.origin, token, expires_at: iat + 300 };
           } : undefined;

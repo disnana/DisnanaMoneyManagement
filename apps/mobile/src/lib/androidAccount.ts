@@ -77,11 +77,11 @@ async function restore() {
 
 async function request(op: Parameters<typeof submitDeviceProof>[2], credentials: Parameters<typeof submitDeviceProof>[3]) {
   const controller = new AbortController();
-  const deadline = setTimeout(() => controller.abort(), 20_000);
+  const deadline = setTimeout(() => controller.abort(), 25_000);
   try {
     const current = op.path === '/auth/google' ? null : session;
-    const send = (target: Session | null) => submitDeviceProof(target?.origin ?? settings!.entry,
-      target?.issuer_node_id, op, credentials, device!, controller.signal, !target?.origin);
+    const send = (target: Session | null, authorization = credentials) => submitDeviceProof(target?.origin ?? settings!.entry,
+      target?.issuer_node_id, op, authorization, device!, controller.signal, !target?.origin);
     let response;
     try {
       response = await send(current);
@@ -98,8 +98,19 @@ async function request(op: Parameters<typeof submitDeviceProof>[2], credentials:
       if (!origin || origin === current.origin || typeof node.id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(node.id) ||
           node.id === current.issuer_node_id || session !== current) throw error;
       const next = { ...current, issuer_node_id: node.id, origin };
-      response = await send(next);
-      if (response.ok && session === current && op.method === 'GET') await setSession(next);
+      if (op.path === '/auth/refresh') {
+        response = await send(next);
+      } else {
+        const { session_id, refresh_token } = current;
+        const renewed = await submitDeviceProof(origin, node.id, {
+          path: '/auth/refresh', method: 'POST', body: JSON.stringify({ session_id, refresh_token }),
+        }, { sessionId: session_id }, device!, controller.signal, false);
+        if (!renewed.ok) throw new DeviceProofHTTPError(renewed.status);
+        const assigned = parseSession(await renewed.json());
+        if (assigned.session_id !== session_id || assigned.issuer_node_id !== node.id || assigned.origin !== origin || session !== current) throw error;
+        await setSession(assigned);
+        response = await send(assigned, { ...credentials, accessToken: assigned.access_token });
+      }
     }
     if (!response.ok) throw new DeviceProofHTTPError(response.status);
     return response;

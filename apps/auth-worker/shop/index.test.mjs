@@ -174,6 +174,7 @@ test('node assignments preserve the parent session and exclude the failed node',
   const data = JSON.parse(Buffer.from(claims, 'base64url'));
   assert.equal(data.sub, sessionHash);
   assert.equal(data.aud, 'mane-web-shop-read');
+  assert.equal(data.node, nodeB.id);
   assert.equal(data.exp - data.iat, 300);
   const android = new Request('https://auth.example.test/auth/node', {
     method: 'POST', body: JSON.stringify({ exclude: nodeA.id, session_id: 'session', refresh_token: 'refresh' }),

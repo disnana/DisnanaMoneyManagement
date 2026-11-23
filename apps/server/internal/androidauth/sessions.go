@@ -46,6 +46,9 @@ func (n *Node) issue(s session, refresh string) (tokens, error) {
 		ID: s.id, Subject: s.subject, Issuer: "mane-android-poc", Audience: jwt.ClaimStrings{"mane-android-api"},
 		IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
 	}}
+	if n.cfg.DirectSessions {
+		claims.Node = n.cfg.NodeID
+	}
 	t := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	t.Header["kid"] = n.cfg.SigningKeyID
 	signed, err := t.SignedString(n.cfg.SigningKey)
@@ -58,6 +61,7 @@ func (n *Node) issue(s session, refresh string) (tokens, error) {
 
 type accessClaims struct {
 	Device string `json:"device"`
+	Node   string `json:"node,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -69,7 +73,7 @@ func (n *Node) access(ctx context.Context, raw string) (session, error) {
 		}
 		return n.cfg.SigningKey.Public().(ed25519.PublicKey), nil
 	}, jwt.WithValidMethods([]string{"EdDSA"}), jwt.WithAudience("mane-android-api"), jwt.WithIssuer("mane-android-poc"), jwt.WithExpirationRequired(), jwt.WithTimeFunc(n.now))
-	if err != nil || !parsed.Valid {
+	if err != nil || !parsed.Valid || n.cfg.DirectSessions && claims.Node != n.cfg.NodeID {
 		return session{}, errAuth
 	}
 	s, err := n.sessions.find(ctx, claims.ID, n.now())
