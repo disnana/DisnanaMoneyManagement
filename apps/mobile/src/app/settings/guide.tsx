@@ -14,7 +14,7 @@ export default function Guide() {
   const guide = <GettingStarted review onClose={closeGuide} />;
   return (
     <>
-      <Stack.Screen options={{ headerShown: false }} />
+      {Platform.OS !== 'ios' ? <Stack.Screen options={{ headerShown: false }} /> : null}
       {Platform.OS === 'android' ? (
         <Modal visible presentationStyle="fullScreen" hardwareAccelerated statusBarTranslucent navigationBarTranslucent
           animationType={reduceMotion ? 'none' : 'fade'} onRequestClose={closeGuide}>
