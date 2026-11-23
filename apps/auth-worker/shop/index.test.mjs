@@ -231,9 +231,8 @@ test('Google OAuth callback consumes state once and browser session cookie is se
   assert.equal(exchanges, 1);
 });
 
-test('an accidental live Stripe key cannot enable purchases', async () => {
-  const env = { ...environment(), STRIPE_SECRET_KEY: 'sk_live_fixture' };
-  env.MANE_SHOP_TEST_SUBJECT_HASHES = await hash('same-google-sub');
+test('the authenticated test audience requires a login, test credentials, and the test switch', async () => {
+  const env = { ...environment(), MANE_SHOP_TEST_AUDIENCE: 'authenticated' };
   const db = backendFixture();
   db.sessions.set(await hash(accountCookie), {subject:'same-google-sub'});
   const worker = createWorker({random:() => 0.9, fetchNode:async (uri, options) => {
@@ -241,8 +240,15 @@ test('an accidental live Stripe key cannot enable purchases', async () => {
     assert.equal(url.origin, nodeA.origin);
     return db.dispatch(url, options, nodeA);
   }});
-  const result = await publicFetch(worker, new Request(site + '/api/shop/packs', { headers: payHeaders }), env).then(r => r.json());
-  assert.equal(result.checkout_enabled, false);
+  const enabled = async (config, headers) => {
+    const request = new Request(site + '/api/shop/packs', { headers });
+    const response = await publicFetch(worker, request, config);
+    return (await response.json()).checkout_enabled;
+  };
+  assert.equal(await enabled(env, payHeaders), true);
+  assert.equal(await enabled(env), false);
+  assert.equal(await enabled({ ...env, MANE_SHOP_TEST_MODE: '0' }, payHeaders), false);
+  assert.equal(await enabled({ ...env, STRIPE_SECRET_KEY: 'sk_live_fixture' }, payHeaders), false);
 });
 
 test('Access headers are sent only when both optional credentials are configured', async () => {

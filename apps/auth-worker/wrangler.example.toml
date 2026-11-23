@@ -15,6 +15,7 @@ routes = [
 MANE_WEB_SHOP_ENABLED = "1"
 SITE_ORIGIN = "https://dmm.disnana.com"
 MANE_SHOP_TEST_MODE = "0"
+# MANE_SHOP_TEST_AUDIENCE = "authenticated" # Optional for a shared test.
 # Shop secrets: GOOGLE_WEB_CLIENT_SECRET, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
 # Optional for tunnels protected by Access: set both MANE_SHOP_ACCESS_CLIENT_ID
 # and MANE_SHOP_ACCESS_CLIENT_SECRET as Worker secrets.

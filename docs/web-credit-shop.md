@@ -21,7 +21,7 @@
 3. [既存Worker](../apps/auth-worker/index.mjs) の新しい版をデプロイし、[設定例](../apps/auth-worker/wrangler.example.toml) に従って `dmm.disnana.com/api/shop/*` を追加する。このルートからショップのAPIを公開する。GitHub Pagesにショップ画面を配信する。最初は `MANE_SHOP_TEST_MODE=0` のままにする。設定例の `keep_vars = true` で、Dashboardに設定した `MANE_AUTH_NODES` など、このファイルに宣言していない変数を引き継ぐ。
 4. Google Cloudの既存Web OAuthクライアントに `https://dmm.disnana.com/api/shop/auth/callback` を登録し、Workerに `GOOGLE_WEB_CLIENT_ID` と `GOOGLE_WEB_CLIENT_SECRET` を設定する。WebとAndroidで同じGoogleアカウントの残高を確認し、別ノード経由やGo再起動後でもWebのログインが使えるか試す。Webセッションの権限はショップAPIに限定される。
 5. Stripeのテスト環境から `STRIPE_SECRET_KEY` と `STRIPE_WEBHOOK_SECRET` をWorkerに登録する。Webhook URLは `/api/shop/stripe/webhook`。対象は `checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、`charge.dispute.updated`、`charge.dispute.closed`。
-6. 購入を許可するGoogle `sub` のSHA-256（小文字16進数、複数はカンマ区切り）を `MANE_SHOP_TEST_SUBJECT_HASHES` に指定する。試験パックは `MANE_SHOP_PACKS` にJSON配列で設定する。項目は `id`、`title`、JPYの整数 `amount`、整数 `credits`、有効秒数または `null` の `validity_seconds`。動作確認後に `MANE_SHOP_TEST_MODE=1`。テスト鍵と対象アカウントの両方が必要。
+6. テスト購入をログイン済みユーザーに開く場合は `MANE_SHOP_TEST_AUDIENCE=authenticated`。個別に許可する場合は対象のGoogle `sub` のSHA-256（小文字16進数、複数はカンマ区切り）を `MANE_SHOP_TEST_SUBJECT_HASHES` に指定する。パックは `MANE_SHOP_PACKS` にJSON配列で設定する。項目は `id`、`title`、JPYの整数 `amount`、整数 `credits`、有効秒数または `null` の `validity_seconds`。失効を短時間で確認する追加パックは `test-expiry-1h` のように識別し、`validity_seconds` を3600にする。動作確認後に `MANE_SHOP_TEST_MODE=1`。どちらの設定でもログインとStripeテスト鍵が必要。
 
 ## 決済と復旧
 

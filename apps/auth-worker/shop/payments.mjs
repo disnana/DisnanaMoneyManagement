@@ -193,6 +193,7 @@ export function catalog(env) {
 }
 export async function canCheckout(env, subject) {
   if (env.MANE_SHOP_TEST_MODE !== '1' || !stripeTestAvailable(env) || !subject) return false;
+  if (env.MANE_SHOP_TEST_AUDIENCE === 'authenticated') return true;
   const subjectHash = await hash(subject);
   return (env.MANE_SHOP_TEST_SUBJECT_HASHES ?? '').split(',').map(x => x.trim()).includes(subjectHash);
 }
