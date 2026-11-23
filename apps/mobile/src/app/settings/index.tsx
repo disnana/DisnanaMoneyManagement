@@ -68,6 +68,8 @@ export default function Settings() {
                 await setLockEnabled(enabled);
               }} />
           ) : null}
+          <Row title="使い方" icon={{ ios: 'questionmark.circle', android: 'help_outline' }}
+            subtitle="目的から機能の場所を探す" chevron onPress={() => router.push('/settings/guide')} />
         </Group>
 
         <SectionTitle>事業・精算</SectionTitle>
@@ -113,8 +115,6 @@ export default function Settings() {
 
         <SectionTitle>情報</SectionTitle>
         <Group>
-          <Row title="使い方" icon={{ ios: 'questionmark.circle', android: 'help_outline' }}
-            subtitle="はじめてのガイドを見直す" chevron onPress={() => router.push('/settings/guide')} />
           <Row title="利用規約" chevron onPress={() => openLegalPage('terms')} />
           <Row title="プライバシーポリシー" chevron onPress={() => openLegalPage('privacy')} />
           <Row title="バージョン" right={Constants.expoConfig?.version ?? '-'} />
