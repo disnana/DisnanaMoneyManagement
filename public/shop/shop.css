@@ -89,8 +89,19 @@ label.pack-option:has(input:focus-visible) { outline: 3px solid var(--accent); o
 .checkout-status { color: var(--muted); font-size: .875rem; }
 .checkout-status:empty, #copy-status:empty, .record-feedback:empty { display: none; }
 
-.history-nav { display: flex; gap: 18px; align-items: center; min-height: 45px; margin-top: 12px; }
-.history-nav a { padding: 9px 0; font-size: .9rem; color: var(--accent); font-weight: 650; }
+.shop-history-links, .history-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.shop-history-links a, .history-nav a { display: grid; align-content: center; min-height: 44px; padding: 7px 8px; text-align: center; color: var(--accent); font-size: .9rem; font-weight: 650; }
+.shop-history-links { border-block: 1px solid var(--line); }
+.shop-history-links a + a { border-inline-start: 1px solid var(--line); }
+.shop-page .history-page { max-inline-size: 680px; }
+.history-nav { border-bottom: 1px solid var(--line); }
+.history-nav a { border-bottom: 3px solid transparent; color: var(--muted); }
+.history-nav [aria-current="page"] { border-bottom-color: var(--accent); color: var(--accent); }
+.history-notice { margin-top: 16px; color: var(--muted); font-size: .875rem; }
+.pagination { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding-block: 12px; border-top: 1px solid var(--line); }
+.pagination .button { min-height: 44px; }
+.pagination .button:disabled { cursor: default; }
+#page-number { text-align: center; color: var(--muted); font-size: .875rem; }
 .records li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: start; padding: 11px 0; border-top: 1px solid var(--line); }
 .record-title { font-weight: 700; overflow-wrap: anywhere; }
 .record-meta { display: block; }
@@ -120,9 +131,6 @@ label.pack-option:has(input:focus-visible) { outline: 3px solid var(--accent); o
 @media (min-width: 740px) {
   .shop-overview { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: start; column-gap: 28px; }
   .packs-section { padding-top: 1px; }
-  .history-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-  .account-details { grid-template-columns: minmax(0, 1fr) minmax(230px, 1fr); align-items: center; }
-  #copy-status { grid-column: 2; }
 }
 
 @media (max-width: 560px) {
