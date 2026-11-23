@@ -9,8 +9,7 @@ type GuidePage = {
   title: string;
   detail: string;
   paths: readonly string[];
-  illustration?: { image: number; darkImage: number; height: number };
-  settingsLocation?: boolean;
+  illustration: { image: number; darkImage: number; height: number };
 };
 
 const introduction: readonly GuidePage[] = [
@@ -24,7 +23,7 @@ const introduction: readonly GuidePage[] = [
     title: '設定を開く・振動を止める',
     detail: '記録したときやボタンを押したときの振動は、「操作時の振動」をオフにすると止められます。',
     paths: ['ホーム右上の歯車 → 設定 → 操作 → 操作時の振動', '口座右上の歯車 → 設定'],
-    settingsLocation: true,
+    illustration: { image: require('../../assets/start-guide/settings-haptics.jpg'), darkImage: require('../../assets/start-guide/settings-haptics-dark.jpg'), height: 174 },
   },
   {
     title: '何にいくら使ったか確認',
@@ -52,21 +51,25 @@ const topics: readonly GuidePage[] = [
     title: '過去の取引を探す',
     detail: '取引の検索を開いて、キーワードや条件を指定できます。',
     paths: ['画面下の取引 → 右上の虫眼鏡'],
+    illustration: { image: require('../../assets/start-guide/transaction-search.jpg'), darkImage: require('../../assets/start-guide/transaction-search-dark.jpg'), height: 88 },
   },
   {
     title: '予算や買い物を計画する',
     detail: 'カテゴリごとの予算や、買い物にかかる費用を確認できます。',
     paths: ['ホーム右上の「予算・計画」 → 予算・買い物試算'],
+    illustration: { image: require('../../assets/start-guide/planning.jpg'), darkImage: require('../../assets/start-guide/planning-dark.jpg'), height: 155 },
   },
   {
     title: 'カテゴリ・家計グループを変える',
     detail: 'カテゴリの名前や色を変えたり、家庭や事業の記録を分けたりできます。',
     paths: ['ホーム右上の歯車 → 設定 → 事業・精算 → カテゴリ・家計グループ'],
+    illustration: { image: require('../../assets/start-guide/categories-ledgers.jpg'), darkImage: require('../../assets/start-guide/categories-ledgers-dark.jpg'), height: 158 },
   },
   {
     title: 'バックアップ・CSV取り込み',
     detail: '家計データの書き出し・復元や、対応するCSVの取り込みができます。',
     paths: ['ホーム右上の歯車 → 設定 → データ管理'],
+    illustration: { image: require('../../assets/start-guide/data-management.jpg'), darkImage: require('../../assets/start-guide/data-management-dark.jpg'), height: 169 },
   },
 ];
 
@@ -76,8 +79,7 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
   const [index, setIndex] = useState<number | null>(review ? null : 0);
   const pages = review ? topics : introduction;
   const page = index === null ? undefined : pages[index];
-  const illustration = page?.illustration;
-  const imageSource = isDark ? illustration?.darkImage : illustration?.image;
+  const imageSource = isDark ? page?.illustration.darkImage : page?.illustration.image;
   const last = index === pages.length - 1;
 
   return (
@@ -97,19 +99,15 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
               <Text accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
                 {page.title}
               </Text>
-              {illustration ? <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{
+              <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{
                 backgroundColor: p.fill, borderRadius: 24, padding: 10, overflow: 'hidden',
               }}>
                 <Image source={imageSource} recyclingKey={Platform.OS === 'android' ? String(imageSource) : undefined}
-                  contentFit="contain" style={{ height: illustration.height, width: '100%' }} />
-              </View> : null}
+                  contentFit="contain" style={{ height: page.illustration.height, width: '100%' }} />
+              </View>
               <Text style={{ color: p.textSecondary, fontSize: 16, lineHeight: 24 }}>{page.detail}</Text>
               <View style={{ backgroundColor: p.fill, borderRadius: metrics.cardRadius, padding: 14, gap: 6 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {page.settingsLocation ? <SymbolView name={{ ios: 'gearshape.fill', android: 'settings' }}
-                    size={19} tintColor={p.tint} accessible={false} /> : null}
-                  <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>場所</Text>
-                </View>
+                <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>場所</Text>
                 {page.paths.map((path) => <Text key={path} style={{ color: p.text, fontSize: 15, lineHeight: 23 }}>{path}</Text>)}
               </View>
             </ScrollView>
