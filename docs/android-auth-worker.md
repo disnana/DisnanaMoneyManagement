@@ -69,6 +69,24 @@ curl -i https://mane-auth-stg.disnana.com/auth/challenge
 
 監視用シークレットの入力時にGoと同じ値を入れる。署名用シークレットは鍵ファイルからWranglerへ直接渡す。疎通確認のGETは `405` と `Allow: POST` が正常。WorkerのCustom Domainは `mane-auth-stg.disnana.com`。この名前に既存のCNAMEがある場合は、既存の用途を確認してから別の空いている名前を選べる。ノードのTunnel公開ホストは別の名前として運用する。[Workerのカスタムドメイン](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)・[Workerのシークレット](https://developers.cloudflare.com/workers/configuration/secrets/)
 
+### WorkerからGoまで確認する
+
+GETで確かめられるのはWorkerの入口。発行先まで試すには、使い捨ての端末公開鍵でチャレンジを要求する。Googleログインやセッション作成は発生しない。
+
+```bash
+mane_test_public_key=$(openssl ecparam -name prime256v1 -genkey -noout | \
+  openssl pkey -pubout -outform DER | openssl base64 -A | tr '+/' '_-' | tr -d '=')
+mane_test_hash=$(printf '' | openssl dgst -sha256 -r | cut -d ' ' -f 1)
+mane_test_body=$(printf '{"operation":{"method":"POST","path":"/auth/google","body_sha256":"%s"},"device_public_key":"%s"}' \
+  "$mane_test_hash" "$mane_test_public_key")
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' --data "$mane_test_body" \
+  https://mane-auth-stg.disnana.com/auth/challenge
+curl -sS -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' --data "$mane_test_body" \
+  https://node-a-stg.disnana.com/auth/challenge
+```
+
+Worker経由は `200`、署名を付けずにnode-aへ送った依頼は `403` が期待値。node-bへの直接依頼も同様に `403` を確認できる。
+
 ## 4. AndroidのAABに接続先を入れる
 
 GitHubのリポジトリ設定で **Secrets and variables → Actions → Variables** を開き、次の公開値を追加する。AABワークフローは、これらをExpoのビルドに渡す。ローカルビルドであれば、同じ名前を環境変数に設定する。
