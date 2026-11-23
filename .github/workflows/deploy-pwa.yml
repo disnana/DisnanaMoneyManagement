@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -34,7 +34,7 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Cache Bun global install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-cache-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
@@ -43,7 +43,7 @@ jobs:
 
       - name: Cache node_modules
         id: cache-node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules
           key: ${{ runner.os }}-node-modules-${{ hashFiles('bun.lock', 'bun.lockb', 'package.json') }}
@@ -51,7 +51,7 @@ jobs:
             ${{ runner.os }}-node-modules-
 
       - name: Cache TypeScript & Vite build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .cache
@@ -71,7 +71,7 @@ jobs:
 
       - name: Setup Pages
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Resolve GitHub Pages base path
         id: base_path
@@ -132,7 +132,7 @@ jobs:
           fi
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./dist
 
@@ -145,4 +145,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
