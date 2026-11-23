@@ -60,17 +60,37 @@ function timer(ms, value) {
   return { promise, cancel: () => clearTimeout(id) };
 }
 
+function base64url(value) {
+  return btoa(String.fromCharCode(...new Uint8Array(value))).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+}
+const textBytes = new TextEncoder();
+
+async function signRequest(key, node, bodyHash, now) {
+  const iat = Math.floor(now() / 1000);
+  const header = base64url(textBytes.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT', kid: 'mane-worker-v1' })));
+  const claims = { iss: 'mane-auth-staging', aud: node.id, iat, exp: iat + 5, jti: crypto.randomUUID(),
+    method: 'POST', path: challengePath, body_sha256: bodyHash };
+  const input = header + '.' + base64url(textBytes.encode(JSON.stringify(claims)));
+  const signature = await crypto.subtle.sign('Ed25519', key, textBytes.encode(input));
+  return input + '.' + base64url(signature);
+}
+
 export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.random,
   hedgeMs = 200, budgetMs = 1_500, nodeTimeoutMs = 700 } = {}) {
   let cached;
   let statusRefresh;
   let nextPoll = 0;
   let poolKey;
+  let signerConfig;
+  let signer;
 
-  async function ask(node, body, signal) {
+  async function ask(node, body, signal, key, bodyHash) {
     try {
       const answer = await fetchNode(node.origin + challengePath, {
-        method: 'POST', body, redirect: 'manual', signal, headers: { 'Content-Type': 'application/json' },
+        method: 'POST', body, redirect: 'manual', signal, headers: {
+          'Content-Type': 'application/json',
+          'X-Mane-Worker-Proof': await signRequest(key, node, bodyHash, now),
+        },
       });
       if ([400, 401, 403].includes(answer.status) && answer.headers.get('content-type')?.includes('application/json')) {
         void answer.body?.cancel().catch(() => {});
@@ -91,7 +111,8 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
     }
   }
 
-  async function route(nodes, body) {
+  async function route(nodes, body, key) {
+    const bodyHash = base64url(await crypto.subtle.digest('SHA-256', textBytes.encode(body)));
     const attempts = new Map();
     const end = timer(budgetMs, 'deadline');
     let next = 0;
@@ -101,7 +122,7 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
       const controller = new AbortController();
       const cutoff = timer(nodeTimeoutMs, transient);
       hedgeAt = now() + hedgeMs;
-      const result = Promise.race([ask(node, body, controller.signal), cutoff.promise])
+      const result = Promise.race([ask(node, body, controller.signal, key, bodyHash), cutoff.promise])
         .then(response => ({ id: node.id, response }));
       attempts.set(node.id, { result, abort() { controller.abort(); cutoff.cancel(); } });
     }
@@ -187,7 +208,21 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
       }
       const eligible = [...shuffled(up, random), ...shuffled(unknown, random)];
       const started = now();
-      const response = await route(eligible.length ? eligible : shuffled(nodes, random), body);
+      let key;
+      try {
+        const configuredKey = env.MANE_WORKER_JWS_PRIVATE_KEY?.trim();
+        if (!configuredKey) return reply(503, 'challenge unavailable');
+        if (signerConfig !== configuredKey) {
+          const der = Uint8Array.from(atob(configuredKey), c => c.charCodeAt(0));
+          const nextSigner = await crypto.subtle.importKey('pkcs8', der, 'Ed25519', false, ['sign']);
+          signer = nextSigner;
+          signerConfig = configuredKey;
+        }
+        key = signer;
+      } catch {
+        return reply(503, 'challenge unavailable');
+      }
+      const response = await route(eligible.length ? eligible : shuffled(nodes, random), body, key);
       response.headers.set('Server-Timing', `mane-route;dur=${Math.max(0, now() - started)}`);
       return response;
     },

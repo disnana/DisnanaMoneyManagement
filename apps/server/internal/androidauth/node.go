@@ -19,6 +19,7 @@ type Config struct {
 	SigningKey                                      ed25519.PrivateKey
 	GoogleSubject                                   func(context.Context, string, string) (string, error)
 	DecodeIntegrity                                 func(context.Context, string) (IntegrityVerdict, error)
+	WorkerProof                                     *WorkerProof
 	ScyllaStatus                                    *ScyllaStatus
 	CreditBalance                                   func(context.Context, string) (int64, error)
 	Now                                             func() time.Time
@@ -123,6 +124,10 @@ func (n *Node) createChallenge(w http.ResponseWriter, r *http.Request) {
 	var binding string
 	switch in.Operation.Path {
 	case "/auth/google":
+		if n.cfg.WorkerProof != nil && !n.cfg.WorkerProof.accepts(r.Header.Get("X-Mane-Worker-Proof"), n.cfg.NodeID, r.Method, r.URL.Path, raw, n.now()) {
+			reject(w, 403)
+			return
+		}
 		if in.Session != "" {
 			reject(w, 400)
 			return

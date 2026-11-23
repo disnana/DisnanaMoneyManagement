@@ -2,7 +2,23 @@
 
 Worker名は **`mane-auth-staging`**。共通入口は **`mane-auth-stg.disnana.com`**。既存の `node-a-stg.disnana.com` と `node-b-stg.disnana.com` は、それぞれのGoノードへのTunnelホストとして使う。
 
-## 1. 既存のGoノードを更新する
+## 1. Workerの署名鍵を作る
+
+Cloudflareを管理するPCで Ed25519 の鍵を生成する。既存の鍵を再利用する場合は生成コマンドを省く。
+
+```bash
+mkdir -p "$HOME/.config/mane-worker"
+chmod 700 "$HOME/.config/mane-worker"
+umask 077
+mane_worker_key="$HOME/.config/mane-worker/worker-ed25519.pem"
+test -e "$mane_worker_key" || openssl genpkey -algorithm ED25519 -out "$mane_worker_key"
+openssl pkey -in "$mane_worker_key" -pubout -outform DER | openssl base64 -A
+printf '\n'
+```
+
+最後の出力は公開鍵。node-aとnode-bの `MANE_WORKER_JWS_PUBLIC_KEY` にこの値を入れる。秘密鍵PEMはシークレットの登録に使う。[WorkersのEd25519対応](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/#supported-algorithms)
+
+## 2. 既存のGoノードを更新する
 
 各サーバーでGoの実行ユーザーとして `nodetool status` を実行し、一覧の **Host ID** とサーバーの対応を控える。Worker設定にはIPアドレスの代わりにHost IDを使う。Goのユーザーサービスから `nodetool` に届くよう、必要なら `MANE_NODETOOL_PATH` に実行ファイルの絶対パスを設定する。
 
@@ -19,12 +35,13 @@ bash scripts/mane-android-auth.sh setup
 | --- | --- | --- |
 | `MANE_NODE_ID` | `staging-a` | `staging-b` |
 | `MANE_NODE_ORIGIN` | `https://node-a-stg.disnana.com` | `https://node-b-stg.disnana.com` |
+| `MANE_WORKER_JWS_PUBLIC_KEY` | 手順1の公開鍵 | node-aと同じ公開鍵 |
 | `MANE_WORKER_HEALTH_TOKEN` | 自分で生成した32文字以上のランダム値 | node-aと同じ値 |
 | `MANE_NODETOOL_PATH` | 必要なら `command -v nodetool` で得たパス | 各サーバーのパス |
 
 監視用の値は `openssl rand -hex 32` で作れる。Goの環境ファイルとWorkerのシークレットに保存する。`/_internal/scylla-status` はこの値を設定したGoで有効になる。更新後にメモリ上のセッションが失効するため、試験端末はGoogleログインから始める。
 
-## 2. Workerをデプロイする
+## 3. Workerをデプロイする
 
 Cloudflareを管理するPCで次を実行する。Cloudflareのアカウントで `disnana.com` を管理していることを確認する。
 
@@ -43,13 +60,16 @@ MANE_AUTH_NODES = '[{"id":"staging-a","origin":"https://node-a-stg.disnana.com",
 
 ```bash
 npx wrangler deploy
+mane_worker_key="$HOME/.config/mane-worker/worker-ed25519.pem"
+openssl pkcs8 -topk8 -nocrypt -in "$mane_worker_key" -outform DER | openssl base64 -A | \
+  npx wrangler secret put MANE_WORKER_JWS_PRIVATE_KEY
 npx wrangler secret put MANE_WORKER_HEALTH_TOKEN
 curl -i https://mane-auth-stg.disnana.com/auth/challenge
 ```
 
-シークレットの入力時にGoと同じ値を入れる。疎通確認のGETは `405` と `Allow: POST` が正常。WorkerのCustom Domainは `mane-auth-stg.disnana.com`。この名前に既存のCNAMEがある場合は、既存の用途を確認してから別の空いている名前を選べる。ノードのTunnel公開ホストは別の名前として運用する。[Workerのカスタムドメイン](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)・[Workerのシークレット](https://developers.cloudflare.com/workers/configuration/secrets/)
+監視用シークレットの入力時にGoと同じ値を入れる。署名用シークレットは鍵ファイルからWranglerへ直接渡す。疎通確認のGETは `405` と `Allow: POST` が正常。WorkerのCustom Domainは `mane-auth-stg.disnana.com`。この名前に既存のCNAMEがある場合は、既存の用途を確認してから別の空いている名前を選べる。ノードのTunnel公開ホストは別の名前として運用する。[Workerのカスタムドメイン](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)・[Workerのシークレット](https://developers.cloudflare.com/workers/configuration/secrets/)
 
-## 3. AndroidのAABに接続先を入れる
+## 4. AndroidのAABに接続先を入れる
 
 GitHubのリポジトリ設定で **Secrets and variables → Actions → Variables** を開き、次の公開値を追加する。AABワークフローは、これらをExpoのビルドに渡す。ローカルビルドであれば、同じ名前を環境変数に設定する。
 
@@ -61,6 +81,12 @@ GitHubのリポジトリ設定で **Secrets and variables → Actions → Variab
 | `MANE_GOOGLE_PROJECT_NUMBER` | `433981502913` |
 
 Actionsの **Android Play bundle** をこのブランチで実行する。Playに上げるバージョンコードを確認し、アップロード鍵で署名したAABを内部テストに配布する。GoogleのADC、Worker監視トークン、Goの署名鍵はAndroidのビルド設定と別に管理する。[Androidでの認証試験](android-account-staging.md)
+
+## WorkerからGoへの署名
+
+Workerはログイン用の `POST /auth/challenge` ごとに Ed25519（JWSヘッダーは `alg=EdDSA`）で署名する。JWSには対象ノード、HTTPメソッドとパス、本文のSHA-256、5秒の有効期限、使い捨てIDを含める。Goで公開鍵を設定すると、未署名や誤った署名によるログイン用の発行依頼を403で拒否する。再利用の判定は各Goプロセスのメモリで行う。
+
+この鍵は、Goが端末向けのチャレンジを認証する鍵、Access JWTの鍵、ScyllaDBステータスの監視用トークンと独立している。Goが保持するWorker用鍵は公開鍵。新しい鍵に交換する場合はステージングのWorkerと両Goを同じ切替作業で更新する。
 
 ## 振り分けとタイムアウト
 

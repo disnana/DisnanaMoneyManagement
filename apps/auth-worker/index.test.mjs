@@ -6,7 +6,11 @@ const nodeA = { id: 'staging-a', origin: 'https://a.example.test', scyllaHostID:
 const nodeB = { id: 'staging-b', origin: 'https://b.example.test', scyllaHostID: 'c268fb05-e07f-4d36-b906-a65bdf96bb1d' };
 const endpoint = 'https://router.example.test/auth/challenge';
 const input = { operation: { method: 'POST', path: '/auth/google', body_sha256: 'a'.repeat(64) }, device_public_key: 'fixture' };
-const env = { MANE_AUTH_NODES: JSON.stringify([nodeA, nodeB]) };
+const jwsKeys = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
+const env = {
+  MANE_AUTH_NODES: JSON.stringify([nodeA, nodeB]),
+  MANE_WORKER_JWS_PRIVATE_KEY: Buffer.from(await crypto.subtle.exportKey('pkcs8', jwsKeys.privateKey)).toString('base64'),
+};
 
 function ticket(node) {
   return Response.json({ issuer_node_id: node.id, origin: node.origin, challenge: 'abc.xyz', request_id: 'a'.repeat(32), expires_in_ms: 5000 });
@@ -26,6 +30,13 @@ test('fast first node receives the only request', async () => {
     calls.push(url);
     assert.deepEqual(JSON.parse(options.body), input);
     assert.equal(options.redirect, 'manual');
+    const [head, body, sig] = options.headers['X-Mane-Worker-Proof'].split('.');
+    const claims = JSON.parse(Buffer.from(body, 'base64url').toString());
+    assert.equal(JSON.parse(Buffer.from(head, 'base64url').toString()).alg, 'EdDSA');
+    assert.equal(claims.aud, nodeA.id);
+    assert.equal(claims.exp - claims.iat, 5);
+    assert.equal(claims.body_sha256, Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(options.body))).toString('base64url'));
+    assert.ok(await crypto.subtle.verify('Ed25519', jwsKeys.publicKey, Buffer.from(sig, 'base64url'), new TextEncoder().encode(head + '.' + body)));
     return ticket(nodeA);
   });
   const response = await worker.fetch(incoming(), env);
@@ -75,6 +86,7 @@ test('Go input errors stop retries, and the Worker only routes login and allowed
   assert.equal((await worker.fetch(incoming({ ...input, operation: { ...input.operation, path: '/auth/refresh' } }), env)).status, 400);
   assert.equal((await worker.fetch(new Request(endpoint), env)).status, 405);
   assert.equal((await worker.fetch(incoming(), { MANE_AUTH_NODES: '[{"id":"loop","origin":"https://router.example.test"}]' })).status, 503);
+  assert.equal((await worker.fetch(incoming(), { MANE_AUTH_NODES: env.MANE_AUTH_NODES })).status, 503);
   assert.equal(calls, 1);
 });
 

@@ -82,7 +82,17 @@ func run(checkConfig bool) error {
 			return amount, nil
 		}
 	}
+	if publicKey := os.Getenv("MANE_WORKER_JWS_PUBLIC_KEY"); publicKey != "" {
+		proof, err := androidauth.NewWorkerProof(publicKey)
+		if err != nil {
+			return err
+		}
+		config.WorkerProof = proof
+	}
 	if token := os.Getenv("MANE_WORKER_HEALTH_TOKEN"); token != "" {
+		if config.WorkerProof == nil {
+			return errors.New("MANE_WORKER_JWS_PUBLIC_KEY is required when Worker health sampling is enabled")
+		}
 		status, valid := androidauth.NewScyllaStatus(token)
 		if !valid {
 			return errors.New("MANE_WORKER_HEALTH_TOKEN must be at least 32 characters without whitespace")
