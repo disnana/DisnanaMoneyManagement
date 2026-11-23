@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      MANE_AUTH_ENTRY: ${{ vars.MANE_AUTH_ENTRY }}
-      MANE_GOOGLE_WEB_CLIENT_ID: ${{ vars.MANE_GOOGLE_WEB_CLIENT_ID }}
-      MANE_GOOGLE_PROJECT_NUMBER: ${{ vars.MANE_GOOGLE_PROJECT_NUMBER }}
+      MANE_AUTH_ENTRY: ${{ github.ref_name == 'prototype/android-account-receipt' && 'https://mane-auth-stg.disnana.com' || vars.MANE_AUTH_ENTRY }}
+      MANE_GOOGLE_WEB_CLIENT_ID: ${{ github.ref_name == 'prototype/android-account-receipt' && '433981502913-fuq95bpmu1tf6sfir5ui28b0vrnk7npb.apps.googleusercontent.com' || vars.MANE_GOOGLE_WEB_CLIENT_ID }}
+      MANE_GOOGLE_PROJECT_NUMBER: ${{ github.ref_name == 'prototype/android-account-receipt' && '433981502913' || vars.MANE_GOOGLE_PROJECT_NUMBER }}
     defaults:
       run:
         working-directory: apps/mobile
