@@ -169,6 +169,18 @@ h1,h2,p {
   border-color: var(--accent);
 }
 
+.shop-entry {
+  background: var(--soft);
+  color: var(--accent);
+}
+
+@media (min-width: 1500px) {
+  .portal-page, .shop-page { --wide-shell: clamp(1120px, 61vw, 1360px); }
+  .portal-page .shell { width: min(100% - 80px, var(--wide-shell)); }
+  .portal-page .hero { min-height: clamp(440px, 28vw, 540px); }
+  .portal-page .art img { width: min(clamp(300px, 17vw, 360px), 100%); }
+}
+
 .features {
   display: grid;
   grid-template-columns: repeat(3,1fr);

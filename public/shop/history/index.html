@@ -9,14 +9,14 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>クレジット履歴 | マネーちゃん</title>
   <link rel="icon" href="/favicon.ico">
-  <link rel="stylesheet" href="/portal/site.css">
-  <link rel="stylesheet" href="/shop/shop.css?v=menu-1">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/shop/shop.css?v=store-1">
   <script src="/shop/shop-nav.js" type="module"></script>
   <script src="/shop/history.js?v=history-fallback" type="module"></script>
 </head>
 <body class="shop-page">
   <header class="shop-bar"><div class="shell top">
-    <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <a class="brand" href="/shop/" aria-label="マネーちゃん ショップトップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
     <div class="shop-navigation">
       <button type="button" class="shop-menu-toggle" aria-expanded="false" aria-controls="shop-menu">
         <span class="shop-menu-icon" aria-hidden="true"></span>メニュー
@@ -26,6 +26,7 @@
         <a href="/shop/history/">購入履歴</a>
         <a href="/shop/history/?type=activity">利用履歴</a>
         <a href="/app/" class="shop-menu-secondary">Web家計簿</a>
+        <a href="/" class="shop-menu-secondary">公式トップ</a>
       </nav>
     </div>
   </div></header>
