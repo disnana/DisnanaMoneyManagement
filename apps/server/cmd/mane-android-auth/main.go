@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"flag"
 	"log"
 	"net"
 	"net/http"
@@ -21,12 +22,17 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	check := flag.Bool("check-config", false, "validate configuration without listening")
+	flag.Parse()
+	if flag.NArg() != 0 {
+		log.Fatal("unexpected positional arguments")
+	}
+	if err := run(*check); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() error {
+func run(checkConfig bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if os.Getenv("MANE_AUTH_STAGING") != "1" {
@@ -79,6 +85,9 @@ func run() error {
 	node, err := androidauth.NewNode(config, androidauth.NewMemorySessions())
 	if err != nil {
 		return errors.New("invalid Android auth environment settings")
+	}
+	if checkConfig {
+		return nil
 	}
 	server := &http.Server{Addr: addresses, Handler: node, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 6 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 30 * time.Second}
 	go node.RunExpiry(ctx)

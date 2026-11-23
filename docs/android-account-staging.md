@@ -2,6 +2,39 @@
 
 Androidの設定に「Googleアカウント」を追加した。ログインすると「AIレシート」のクレジット残高、再読み込み、ログアウトを使える。GoogleログインはCredential Manager、アプリと端末の判定はPlay Integrity。セッションは端末のKeystoreで暗号化し、バックアップ対象外の領域に保存する。ログアウトはサーバー側で失効した後、端末からセッションを削除する。
 
+## Linuxサーバーでのセットアップと削除
+
+systemdを使うLinuxで、サービスを動かすユーザーとして実行する。Git、`apps/server/go.mod` に記載のGo、OpenSSLが必要。GoogleサービスアカウントのJSONは、そのユーザーが読めるアクセス権で事前に配置する。
+
+```bash
+git clone --branch prototype/android-account-receipt --single-branch \
+  https://github.com/disnana/DisnanaMoneyManagement.git mane-auth
+cd mane-auth
+bash scripts/mane-android-auth.sh setup \
+  https://node-a-stg.example.com "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com" \
+  "$HOME/.config/mane/play-integrity.json"
+```
+
+実際のノード用HTTPSオリジンとウェブOAuthクライアントIDに置き換える。JSONは絶対パスで指定する。既定位置に置いた場合は第三引数を省略できる。初回に生成する署名鍵と設定は `~/.config/mane/android-auth.env` に保存する。XDG設定を指定している場合はそのディレクトリを使う。ノードIDは `staging-a`、待ち受けは `127.0.0.1:8081`。HTTPSホストは既存のTunnelでこの待ち受けにルーティングする。
+
+```bash
+bash scripts/mane-android-auth.sh status
+journalctl --user -u mane-android-auth.service -n 30 --no-pager
+```
+
+更新とアンインストールは同じcheckoutから実行する。
+
+```bash
+git pull --ff-only
+bash scripts/mane-android-auth.sh setup
+```
+
+```bash
+bash scripts/mane-android-auth.sh uninstall
+```
+
+更新では設定と署名鍵を引き継ぐ。セッションはGoプロセスのメモリにあるため、再起動後はAndroidから再ログインする。アンインストールはユーザーサービスを停止・無効化し、ユニットとバイナリを削除する。設定、GoogleのJSON、Git checkoutは再セットアップに使える。SSHからログアウトした後も稼働させるには、サーバー管理者が実行ユーザーのsystemd lingerを有効にする。
+
 ## 試験先
 
 `apps/server` で `go run ./cmd/mane-android-auth` を起動する。単一ノードのステージング専用で、セッションはプロセス再起動時に失効する。共通入口と指定ノードのHTTPSホストを同じGoプロセスへルーティングする。2つ以上のプロセスで共有するにはScyllaDBリポジトリが必要。
