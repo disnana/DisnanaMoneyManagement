@@ -1,6 +1,6 @@
 # Androidのアカウント・AI基盤
 
-対象は `main` の `79759a6` から切った `prototype/android-account-receipt`。この変更は設計と最初のローカル認証PoC。依存は現行のExpo SDK 58、Expoローカルモジュール、既存GoモジュールにあるJWTライブラリ。
+対象は `main` の `79759a6` から切った `prototype/android-account-receipt`。Android設定と、単一ノードのステージングでGoogleログインを検証できる構成を追加した。依存は現行のExpo SDK 58、Expoローカルモジュール、端末用Googleライブラリ、GoのJWTとOAuth2。
 
 ## 現行コードで確認したこと
 
@@ -18,9 +18,9 @@ Androidは共通HTTPS入口にチャレンジを要求する。Cloudflare WAFと
 
 ## 実装段階
 
-1. このブランチでPoC。GoのHTTPハンドラ、鍵登録・署名のAndroidローカルモジュール、テスト内のGoogle署名検証とIntegrityモック。
-2. Scyllaの隔離環境でCQL・リポジトリ・LWTを検証。JWT公開鍵とセッションの失効を両ノードで照合。Credential Manager、Google公開鍵取得と更新、実Play Integrityを専用Androidビルドで接続する。
+1. ローカルPoCからAndroid設定とGoのステージングサーバーまで接続。認証先を設定したPlay配布の端末で、実アカウントのログイン、残高、ログアウトを結合確認する。
+2. Scyllaの隔離環境でCQL・リポジトリ・LWTを検証。JWT公開鍵とセッションの失効を両ノードで照合。複数ノードでのCredential Manager、Google公開鍵取得、Play Integrityの動作を専用Androidビルドで確認する。
 3. 複数画像モック解析と試算・予約・精算を結合。見直し画面を既存の支出入力へつなぎ、正式登録は利用者が確定する。
 4. 初回クローズドテストの範囲にPlayのテスト購入、AdMobテスト広告のSSV、残高・費用明細・割引表示、利用者自身が選んで送る意見導線を含める。実価格・割引率・再視聴ルール、実販売と広告配信の承認は別途必要。
 
-[認証PoCと試験方法](auth-security.md)・[API](api.md)・[ScyllaDB設計](scylladb.md)・[料金・購入・広告](credits-billing-ads.md)
+[Androidステージング手順](android-account-staging.md)・[認証方式](auth-security.md)・[API](api.md)・[ScyllaDB設計](scylladb.md)・[料金・購入・広告](credits-billing-ads.md)

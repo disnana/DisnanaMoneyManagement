@@ -44,7 +44,7 @@ class DeviceProofModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("DeviceProof")
 
-    AsyncFunction("getPublicIdentity") {
+    AsyncFunction("getPublicIdentity") { ->
       synchronized(keyLock) {
         val store = keyStore()
         if (!store.containsAlias(alias)) {
@@ -90,7 +90,7 @@ class DeviceProofModule : Module() {
       provider.request(StandardIntegrityTokenRequest.builder().setRequestHash(requestHash).build()).awaitResult().token()
     }
 
-    AsyncFunction("loadSession") { synchronized(keyLock) { SavedSession(context).read() } }
+    AsyncFunction("loadSession") { -> synchronized(keyLock) { SavedSession(context).read() } }
     AsyncFunction("saveSession") { value: String? -> synchronized(keyLock) { SavedSession(context).write(value) } }
 
     AsyncFunction("clearGoogleState") Coroutine { ->
