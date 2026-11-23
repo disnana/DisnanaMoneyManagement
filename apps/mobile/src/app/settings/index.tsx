@@ -45,7 +45,7 @@ export default function Settings() {
             <Row title="Googleアカウント" right={signedIn ? 'ログイン済み' : '未ログイン'} chevron
               icon={{ ios: 'person.crop.circle', android: 'account_circle' }}
               onPress={() => router.push('/settings/account')} />
-          ) : <Row title="サインイン" icon={{ ios: 'person.crop.circle', android: 'account_circle' }} right="未設定（この端末のみ）" />}
+          ) : <Row title="サインイン" right="未設定（この端末のみ）" />}
         </Group>
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           アカウントは任意です。サインインしなくても、データはこの端末に保存されます。
@@ -53,13 +53,13 @@ export default function Settings() {
 
         <SectionTitle>操作</SectionTitle>
         <Group>
-          <SettingsSwitchRow title="モーションを抑える" icon={{ ios: 'figure.walk.motion', android: 'animation' }} subtitle={Platform.OS === 'android' ? 'タップや画面切り替えの動きを減らす' : 'タップや画面切り替え、月送りの動きを減らす'}
+          <SettingsSwitchRow title="モーションを抑える" subtitle={Platform.OS === 'android' ? 'タップや画面切り替えの動きを減らす' : 'タップや画面切り替え、月送りの動きを減らす'}
             checked={reduceMotion} onChange={setReduceMotion} />
-          <SettingsSwitchRow title="操作時の振動" icon={{ ios: 'waveform', android: 'vibration' }} checked={haptics} onChange={(enabled) => {
+          <SettingsSwitchRow title="操作時の振動" checked={haptics} onChange={(enabled) => {
             if (setHapticsEnabled(enabled)) setHaptics(enabled);
           }} />
           {Platform.OS !== 'web' ? (
-            <SettingsSwitchRow title="アプリのロック" icon={{ ios: 'lock', android: 'lock' }} subtitle="起動時に顔認証・パスコードで開く"
+            <SettingsSwitchRow title="アプリのロック" subtitle="起動時に顔認証・パスコードで開く"
               checked={lockOn} onChange={async (enabled) => {
                 if (enabled && !(await canAuthenticate())) {
                   Alert.alert('ロックを使えません', 'この端末で顔認証・指紋認証・パスコードのいずれかを設定してください。');
@@ -132,9 +132,9 @@ export default function Settings() {
         </Group>
         <SectionTitle>公式情報</SectionTitle>
         <Group>
-          <Row title="利用規約" icon={{ ios: 'doc.text', android: 'description' }} chevron onPress={() => openOfficialLink('terms')} />
-          <Row title="プライバシーポリシー" icon={{ ios: 'hand.raised', android: 'privacy_tip' }} chevron onPress={() => openOfficialLink('privacy')} />
-          <Row title="サポート" icon={{ ios: 'envelope', android: 'mail' }} chevron onPress={() => openOfficialLink('support')} />
+          <Row title="利用規約" chevron onPress={() => openOfficialLink('terms')} />
+          <Row title="プライバシーポリシー" chevron onPress={() => openOfficialLink('privacy')} />
+          <Row title="サポート" chevron onPress={() => openOfficialLink('support')} />
         </Group>
       </Screen>
     </>

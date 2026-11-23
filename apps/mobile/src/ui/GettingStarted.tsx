@@ -103,7 +103,7 @@ const topics = {
       screenshot: { image: require('../../assets/start-guide/data-management.jpg'), darkImage: require('../../assets/start-guide/data-management-dark.jpg') },
     }],
   },
-} satisfies Record<string, GuidePage & { listTitle: string; icon: SymbolViewProps['name'] }>;
+} satisfies Record<string, GuidePage & { listTitle: string; icon: Pick<Extract<SymbolViewProps['name'], object>, 'ios' | 'android'> }>;
 
 const introduction: readonly GuidePage[] = [topics.record, topics.vibration, topics.analysis, topics.card, topics.savings];
 export type GuideTopic = keyof typeof topics;
@@ -248,7 +248,7 @@ export function GettingStarted({ onClose, review = false, reviewRoute }: {
                     const topic = topics[topicId];
                     return (
                       <Row key={topicId} title={topic.listTitle}
-                        icon={topic.icon}
+                        icon={{ ...topic.icon, web: topic.icon.android }}
                         compact chevron onPress={() => openTopic(topicId)} />
                     );
                   })}
