@@ -1,6 +1,15 @@
 // Go still issues the signed challenge and verifies the device response.
 const challengePath = '/auth/challenge';
 const statusPath = '/_internal/scylla-status';
+const issuerHeader = 'X-Mane-Issuer';
+const accountRoutes = new Map([
+  [challengePath, ['POST', 4096]],
+  ['/auth/google', ['POST', 32768]],
+  ['/auth/refresh', ['POST', 2048]],
+  ['/auth/logout', ['POST', 0]],
+  ['/v1/me', ['GET', 0]],
+  ['/v1/credits', ['GET', 0]],
+]);
 const transient = Symbol('transient');
 const staleAfter = 30_000;
 
@@ -8,15 +17,15 @@ function reply(status, error, extra = {}) {
   return Response.json({ error }, { status, headers: { 'Cache-Control': 'no-store', ...extra } });
 }
 
-async function readJSON(message, limit) {
+async function readBody(message, limit) {
   const reader = message.body?.getReader();
-  if (!reader) throw new Error('missing body');
+  if (!reader) return undefined;
   const data = new Uint8Array(limit);
   let length = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) return JSON.parse(new TextDecoder().decode(data.subarray(0, length)));
+      if (done) return data.subarray(0, length);
       if (length + value.length > limit) throw new Error('body too large');
       data.set(value, length);
       length += value.length;
@@ -24,6 +33,10 @@ async function readJSON(message, limit) {
   } finally {
     void reader.cancel().catch(() => {});
   }
+}
+
+async function readJSON(message, limit) {
+  return JSON.parse(new TextDecoder().decode(await readBody(message, limit)));
 }
 
 function configuredNodes(value, incomingOrigin) {
@@ -83,6 +96,42 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
   let poolKey;
   let signerConfig;
   let signer;
+
+  async function proxyAccount(request, node, path, limit) {
+    let body;
+    try {
+      body = await readBody(request, limit);
+      if (path === challengePath) {
+        const input = JSON.parse(new TextDecoder().decode(body));
+        const route = accountRoutes.get(input?.operation?.path);
+        if (!route || [challengePath, '/auth/google'].includes(input.operation.path) || route[0] !== input.operation.method) {
+          return reply(400, 'invalid session challenge request');
+        }
+      }
+    } catch {
+      return reply(400, 'invalid account request');
+    }
+    const headers = new Headers();
+    for (const name of ['Content-Type', 'Authorization', 'X-Mane-Challenge', 'X-Mane-Request-Id', 'X-Mane-Device-Signature']) {
+      const value = request.headers.get(name);
+      if (value !== null) headers.set(name, value);
+    }
+    try {
+      const upstream = await fetchNode(node.origin + path, {
+        method: request.method, body, headers, redirect: 'manual', signal: AbortSignal.timeout(10_000),
+      });
+      if ((upstream.status >= 300 && upstream.status < 400) || upstream.status >= 500) {
+        void upstream.body?.cancel().catch(() => {});
+        return reply(502, 'issuer unavailable');
+      }
+      const responseHeaders = new Headers({ 'Cache-Control': 'no-store' });
+      const contentType = upstream.headers.get('Content-Type');
+      if (contentType) responseHeaders.set('Content-Type', contentType);
+      return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
+    } catch {
+      return reply(502, 'issuer unavailable');
+    }
+  }
 
   async function ask(node, body, signal, key, bodyHash) {
     try {
@@ -175,8 +224,23 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
   return {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
-      if (url.pathname !== challengePath || url.search) return reply(404, 'not found');
-      if (request.method !== 'POST') return reply(405, 'method not allowed', { Allow: 'POST' });
+      const path = url.pathname;
+      const accountRoute = accountRoutes.get(path);
+      if (!accountRoute || url.search || request.url.includes('?')) return reply(404, 'not found');
+      const [method, limit] = accountRoute;
+      if (request.method !== method) return reply(405, 'method not allowed', { Allow: method });
+      const issuer = request.headers.get(issuerHeader);
+      if (issuer !== null || path !== challengePath) {
+        if (!issuer || !/^[a-zA-Z0-9_-]{1,64}$/.test(issuer)) return reply(400, 'invalid issuer');
+        let nodes;
+        try {
+          nodes = configuredNodes(env.MANE_AUTH_NODES, url.origin);
+        } catch {
+          return reply(503, 'issuer unavailable');
+        }
+        const node = nodes.find(candidate => candidate.id === issuer);
+        return node ? proxyAccount(request, node, path, limit) : reply(401, 'unknown issuer');
+      }
       let body;
       try {
         const input = await readJSON(request, 4096);

@@ -15,7 +15,7 @@ export type DeviceProof = {
 
 type Operation = { method: 'GET'; path: '/v1/me' | '/v1/credits' } | { method: 'POST'; path: '/auth/google' | '/auth/refresh' | '/auth/logout'; body?: string };
 type Credentials = { accessToken?: string; sessionId?: string; publicKey?: string };
-type Challenge = { challenge: string; request_id: string; issuer_node_id: string; origin: string; expires_in_ms: number };
+type Challenge = { challenge: string; request_id: string; issuer_node_id: string; expires_in_ms: number };
 const proofWindowMs = 5000;
 
 function sha(input: string) {
@@ -32,17 +32,17 @@ export function admissionHash(idToken: string, publicKeyDigest: string) {
 
 export async function submitDeviceProof(
   entry: string,
-  nodes: Readonly<Record<string, string>>,
+  issuer: string | undefined,
   op: Operation,
   credentials: Credentials,
   device: DeviceProof,
   signal?: AbortSignal,
 ): ReturnType<typeof fetch> {
   try {
-    return await send(entry, nodes, op, credentials, device, signal);
+    return await send(entry, issuer, op, credentials, device, signal);
   } catch (error) {
     if (!(error instanceof IssuerUnavailable) || op.method !== 'GET' || signal?.aborted) throw error;
-    return send(entry, nodes, op, credentials, device, signal);
+    return send(entry, issuer, op, credentials, device, signal);
   }
 }
 
@@ -56,7 +56,7 @@ export class DeviceProofHTTPError extends Error {
 
 async function send(
   entry: string,
-  nodes: Readonly<Record<string, string>>,
+  issuer: string | undefined,
   op: Operation,
   credentials: Credentials,
   device: DeviceProof,
@@ -70,7 +70,7 @@ async function send(
     method: 'POST',
     redirect: 'error',
     signal,
-    headers: { 'Content-Type': 'application/json', ...authorization },
+    headers: { 'Content-Type': 'application/json', ...authorization, ...(issuer ? { 'X-Mane-Issuer': issuer } : {}) },
     body: JSON.stringify({
       operation: { method: op.method, path: op.path, body_sha256: sha(body ?? '') },
       session_id: credentials.sessionId,
@@ -80,9 +80,8 @@ async function send(
   if (!response.ok) throw new DeviceProofHTTPError(response.status);
   const receivedAt = performance.now();
   const proof = await response.json() as Challenge;
-  const expected = Object.hasOwn(nodes, proof.issuer_node_id) ? nodes[proof.issuer_node_id] : undefined;
-  if (!expected || proof.origin !== expected || new URL(expected).origin !== expected ||
-    new URL(expected).protocol !== 'https:' || proof.expires_in_ms !== proofWindowMs ||
+  if (typeof proof.issuer_node_id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(proof.issuer_node_id) ||
+    (issuer !== undefined && proof.issuer_node_id !== issuer) || proof.expires_in_ms !== proofWindowMs ||
     typeof proof.challenge !== 'string' || typeof proof.request_id !== 'string') {
     throw new Error('Unexpected challenge response');
   }
@@ -96,7 +95,7 @@ async function send(
   signal?.addEventListener('abort', cancel, { once: true });
   const deadline = setTimeout(cancel, timeLeft);
   try {
-    const result = await fetch(`${expected}${op.path}`, {
+    const result = await fetch(`${entry}${op.path}`, {
       method: op.method,
       body,
       redirect: 'error',
@@ -104,6 +103,7 @@ async function send(
       headers: {
         'Content-Type': 'application/json',
         ...authorization,
+        'X-Mane-Issuer': proof.issuer_node_id,
         'X-Mane-Challenge': proof.challenge,
         'X-Mane-Request-Id': proof.request_id,
         'X-Mane-Device-Signature': signature,

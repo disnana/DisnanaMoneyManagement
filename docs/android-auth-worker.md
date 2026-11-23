@@ -112,11 +112,10 @@ GitHubのリポジトリ設定で **Secrets and variables → Actions → Variab
 | 変数 | 値 |
 | --- | --- |
 | `MANE_AUTH_ENTRY` | `https://mane-auth-stg.disnana.com` |
-| `MANE_ANDROID_AUTH_NODES` | `{"staging-a":"https://node-a-stg.disnana.com","staging-b":"https://node-b-stg.disnana.com"}` |
 | `MANE_GOOGLE_WEB_CLIENT_ID` | `433981502913-fuq95bpmu1tf6sfir5ui28b0vrnk7npb.apps.googleusercontent.com` |
 | `MANE_GOOGLE_PROJECT_NUMBER` | `433981502913` |
 
-Actionsの **Android Play bundle** をこのブランチで実行する。Playに上げるバージョンコードを確認し、アップロード鍵で署名したAABを内部テストに配布する。GoogleのADC、Worker監視トークン、Goの署名鍵はAndroidのビルド設定と別に管理する。[Androidでの認証試験](android-account-staging.md)
+最新の `apps/auth-worker/index.mjs` をCloudflareへデプロイしてから、Actionsの **Android Play bundle** をこのブランチで実行する。端末の接続先は `MANE_AUTH_ENTRY` の1件。Goノードの一覧はWorkerの `MANE_AUTH_NODES` に設定する。Playに上げるバージョンコードを確認し、アップロード鍵で署名したAABを内部テストに配布する。GoogleのADC、Worker監視トークン、Goの署名鍵はAndroidのビルド設定と別に管理する。[Androidでの認証試験](android-account-staging.md)
 
 ## WorkerからGoへの署名
 
@@ -130,4 +129,4 @@ Workerはログイン用の `POST /auth/challenge` ごとに Ed25519（JWSヘッ
 
 新規ログインでは `UN` の候補を優先して順序をランダムに決める。新鮮な観測がすべて停止を示すノードは候補から外す。観測なしの場合と全候補が外れた場合は、設定済みのノードへの要求結果で判断する。現時点の試験値は追加要求まで200ms、1ノードの上限700ms、振り分け全体で1.5秒。最大2件を並行させ、通信障害や5xxでは次へ進む。最初の正しい発行応答を採用し、未採用の発行済みIDはGoで5秒後に失効する。
 
-発行したGoは端末署名を検証し、原子的にIDを消費する。単一Goプロセスのメモリにセッションを保存している間は、発行元のノードIDを端末に保存し、残高・トークン更新・ログアウトを同じノードで扱う。別ノードで既存セッションを続けるには共有セッションストアが必要。発行後のGo停止はチャレンジの5秒窓を過ぎてから再ログインする。実測では、チャレンジ応答の `Server-Timing: mane-route` と、Google・端末署名まで含むログイン時間を個別に記録する。
+発行したGoは端末署名を検証し、原子的にIDを消費する。Androidはすべての認証リクエストを共通のWorker URLに送り、Workerが発行元IDを `MANE_AUTH_NODES` で解決する。セッションがGoプロセスのメモリにある間、残高・トークン更新・ログアウトは発行元と同じノードで処理する。発行元が停止中は、そのセッションの操作は失敗する。別ノードで既存セッションを続けるには共有セッションストアが必要。実測では、チャレンジ応答の `Server-Timing: mane-route` と、Google・端末署名まで含むログイン時間を個別に記録する。

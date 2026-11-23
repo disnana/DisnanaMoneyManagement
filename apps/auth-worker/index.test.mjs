@@ -79,7 +79,7 @@ test('the whole request stops even if an upstream ignores cancellation', async (
   assert.equal((await worker.fetch(incoming(), env)).status, 503);
 });
 
-test('Go input errors stop retries, and the Worker only routes login and allowed origins', async () => {
+test('Go input errors stop retries, and initial challenges require a valid login and configured signer', async () => {
   let calls = 0;
   const worker = stage(async () => { calls++; return Response.json({ error: 'Bad Request' }, { status: 400 }); });
   assert.equal((await worker.fetch(incoming(), env)).status, 400);
@@ -88,6 +88,54 @@ test('Go input errors stop retries, and the Worker only routes login and allowed
   assert.equal((await worker.fetch(incoming(), { MANE_AUTH_NODES: '[{"id":"loop","origin":"https://router.example.test"}]' })).status, 503);
   assert.equal((await worker.fetch(incoming(), { MANE_AUTH_NODES: env.MANE_AUTH_NODES })).status, 503);
   assert.equal(calls, 1);
+});
+
+test('account requests stay with their issuer and forward only the operation headers', async () => {
+  const paths = [];
+  const body = '{"session_id":"session","refresh_token":"fixture"}';
+  const worker = stage(async (url, options) => {
+    const path = new URL(url).pathname;
+    paths.push(path);
+    assert.equal(new URL(url).origin, nodeB.origin);
+    assert.equal(options.redirect, 'manual');
+    assert.equal(options.headers.get('Authorization'), 'Bearer fixture');
+    assert.equal(options.headers.get('X-Mane-Issuer'), null);
+    assert.equal(options.headers.get('Cookie'), null);
+    assert.equal(options.headers.get('X-Mane-Worker-Proof'), null);
+    if (path === '/auth/refresh') {
+      assert.equal(new TextDecoder().decode(options.body), body);
+      assert.equal(options.headers.get('X-Mane-Device-Signature'), 'fixture');
+    }
+    return Response.json({}, { headers: { 'Set-Cookie': 'test=1' } });
+  });
+  const headers = { Authorization: 'Bearer fixture', 'X-Mane-Issuer': nodeB.id,
+    Cookie: 'test=1', 'X-Mane-Worker-Proof': 'untrusted', 'X-Mane-Device-Signature': 'fixture' };
+  const base = new URL(endpoint).origin;
+  const request = (path, method, body) => new Request(base + path, { headers, method, body });
+  const challenge = JSON.stringify({ operation: { ...input.operation, path: '/auth/refresh' }, session_id: 'session' });
+  assert.equal((await worker.fetch(request('/auth/challenge', 'POST', challenge), env)).status, 200);
+  assert.equal((await worker.fetch(request('/auth/refresh', 'POST', body), env)).status, 200);
+  const credits = await worker.fetch(request('/v1/credits', 'GET'), env);
+  assert.equal(credits.status, 200);
+  assert.equal(credits.headers.get('Set-Cookie'), null);
+  assert.equal((await worker.fetch(request('/auth/challenge', 'POST', JSON.stringify(input)), env)).status, 400);
+  assert.equal((await worker.fetch(request('/_internal/scylla-status', 'GET'), env)).status, 404);
+  assert.equal((await worker.fetch(request('/auth/refresh', 'POST', 'x'.repeat(2049)), env)).status, 400);
+  assert.deepEqual(paths, ['/auth/challenge', '/auth/refresh', '/v1/credits']);
+});
+
+test('unknown issuers and upstream redirects never route credentials to a different node', async () => {
+  const calls = [];
+  const worker = stage(async url => {
+    calls.push(url);
+    return Response.redirect('https://other.example.test/v1/credits');
+  });
+  const credits = issuer => new Request(new URL('/v1/credits', endpoint), { headers: { 'X-Mane-Issuer': issuer } });
+  assert.equal((await worker.fetch(credits('unknown'), env)).status, 401);
+  const response = await worker.fetch(credits(nodeA.id), env);
+  assert.equal(response.status, 502);
+  assert.equal(response.headers.get('location'), null);
+  assert.deepEqual(calls, [nodeA.origin + '/v1/credits']);
 });
 
 test('cached nodetool views skip DN, expire, and rely on routing when views are unavailable', async () => {

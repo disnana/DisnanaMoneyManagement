@@ -45,8 +45,8 @@ bash scripts/mane-android-auth.sh uninstall
 | --- | --- | --- |
 | `MANE_AUTH_STAGING` | Go | `1` |
 | `MANE_AUTH_LISTEN` | Go | 省略時 `127.0.0.1:8081`。ローカルのHTTPSプロキシまたはTunnelから接続 |
-| `MANE_NODE_ID` / `MANE_NODE_ORIGIN` | Go、Expo | ノード名と公開HTTPSオリジン。パスや末尾スラッシュを含めない |
-| `MANE_AUTH_ENTRY` | Expo | チャレンジ発行用の共通HTTPSオリジン |
+| `MANE_NODE_ID` / `MANE_NODE_ORIGIN` | Go | ノード名と公開HTTPSオリジン。パスや末尾スラッシュを含めない |
+| `MANE_AUTH_ENTRY` | Expo | 認証・残高取得に使う共通WorkerのHTTPSオリジン |
 | `MANE_GOOGLE_WEB_CLIENT_ID` | Go、Expo | アプリからGoogleへ指定するOAuthのウェブクライアントID |
 | `MANE_GOOGLE_PROJECT_NUMBER` | Expo | Play Integrityに接続したGoogle Cloudプロジェクト番号 |
 | `MANE_CHALLENGE_KEY` / `MANE_JWT_SEED` / `MANE_JWT_KID` | Go | パディングなしbase64urlのランダム鍵（32バイト以上）、Ed25519用32バイトseed、鍵ID |

@@ -10,23 +10,13 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => {
   const projectId: string | undefined = process.env.EXPO_PROJECT_ID?.trim() || config.extra?.eas?.projectId;
   const entry = process.env.MANE_AUTH_ENTRY?.trim();
-  const nodeID = process.env.MANE_NODE_ID;
-  const origin = process.env.MANE_NODE_ORIGIN;
-  const googleClientID = process.env.MANE_GOOGLE_WEB_CLIENT_ID;
-  const projectNumber = process.env.MANE_GOOGLE_PROJECT_NUMBER;
-  const rawNodes = process.env.MANE_ANDROID_AUTH_NODES?.trim();
-  const nodes: Record<string, string> | undefined = rawNodes
-    ? JSON.parse(rawNodes)
-    : nodeID && origin ? { [nodeID]: origin } : undefined;
-  if (rawNodes && !nodes) throw new Error('Invalid Android authentication node map');
-  if (nodes && (typeof nodes !== 'object' || Array.isArray(nodes) || !Object.keys(nodes).length ||
-    Object.entries(nodes).some(([id, url]) => !/^[a-zA-Z0-9_-]{1,64}$/.test(id) ||
-      typeof url !== 'string' || !url.startsWith('https://') || new URL(url).origin !== url))) {
-    throw new Error('Invalid Android authentication node map');
+  const googleClientID = process.env.MANE_GOOGLE_WEB_CLIENT_ID?.trim();
+  const projectNumber = process.env.MANE_GOOGLE_PROJECT_NUMBER?.trim();
+  if (entry && (!entry.startsWith('https://') || new URL(entry).origin !== entry)) {
+    throw new Error('Invalid Android authentication entry');
   }
-  const loginEntry = entry || (nodes && Object.keys(nodes).length === 1 ? Object.values(nodes)[0] : undefined);
-  const maneAuth = loginEntry && nodes && googleClientID && projectNumber
-    ? { entry: loginEntry, nodes, googleClientID, projectNumber }
+  const maneAuth = entry && googleClientID && projectNumber
+    ? { entry, googleClientID, projectNumber }
     : undefined;
   const base = { ...config, runtimeVersion: { policy: 'sdkVersion' },
     extra: { ...config.extra, maneAuth } } as ExpoConfig;
