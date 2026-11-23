@@ -70,6 +70,12 @@ func setup(t *testing.T) *fixture {
 	for _, label := range []string{"a", "b"} {
 		config := Config{NodeID: label, PublicOrigin: "https://node-" + label + ".example.test", PackageName: "com.disnana.mane_chan", SigningKeyID: "test",
 			ChallengeKey: []byte(strings.Repeat("a", 32)), SigningKey: signing, Now: f.now, GoogleSubject: verifier.Subject,
+			CreditBalance: func(_ context.Context, subject string) (int64, error) {
+				if subject != "google-account-sub" {
+					return 0, errAuth
+				}
+				return 125, nil
+			},
 			DecodeIntegrity: func(_ context.Context, raw string) (IntegrityVerdict, error) {
 				var v IntegrityVerdict
 				return v, json.Unmarshal([]byte(raw), &v)
@@ -102,12 +108,23 @@ func encode(t *testing.T, v any) string {
 
 func (f *fixture) loginBody(issuer, audience string, expires time.Time, change func(*IntegrityVerdict)) string {
 	f.t.Helper()
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.RegisteredClaims{Issuer: issuer, Subject: "google-account-sub",
-		Audience: jwt.ClaimStrings{audience}, ExpiresAt: jwt.NewNumericDate(expires)})
+	der, _ := wire.DecodeString(f.deviceDER)
+	wrongNonce := issuer == "wrong-nonce"
+	if wrongNonce {
+		issuer = "accounts.google.com"
+	}
+	badSignature := issuer == "bad-signature"
+	if badSignature {
+		issuer = "accounts.google.com"
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": issuer, "sub": "google-account-sub", "aud": audience,
+		"exp": expires.Unix(), "nonce": digest(der) + "." + strings.Repeat("a", 32)})
+	if wrongNonce {
+		token.Claims.(jwt.MapClaims)["nonce"] = strings.Repeat("b", 97)
+	}
 	token.Header["kid"] = "fixture"
 	key := f.google
-	if issuer == "bad-signature" {
-		token.Claims = jwt.RegisteredClaims{Issuer: "accounts.google.com", Subject: "google-account-sub", Audience: jwt.ClaimStrings{audience}, ExpiresAt: jwt.NewNumericDate(expires)}
+	if badSignature {
 		var err error
 		key, err = rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
@@ -118,7 +135,6 @@ func (f *fixture) loginBody(issuer, audience string, expires time.Time, change f
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	der, _ := wire.DecodeString(f.deviceDER)
 	verdict := IntegrityVerdict{"com.disnana.mane_chan", digest([]byte("mane-login-integrity-v1\n" + digest([]byte(raw)) + "\n" + digest(der))),
 		f.now(), "PLAY_RECOGNIZED", []string{"MEETS_DEVICE_INTEGRITY"}}
 	if change != nil {
@@ -201,6 +217,7 @@ func TestRejectInvalidLogin(t *testing.T) {
 		{"issuer", "issuer.example.test", "fixture-app", time.Minute, nil},
 		{"audience", "accounts.google.com", "wrong-app", time.Minute, nil},
 		{"expiry", "accounts.google.com", "fixture-app", -time.Second, nil},
+		{"wrong Google nonce", "wrong-nonce", "fixture-app", time.Minute, nil},
 		{"RSA signature", "bad-signature", "fixture-app", time.Minute, nil},
 		{"integrity request hash", "accounts.google.com", "fixture-app", time.Minute, func(v *IntegrityVerdict) { v.RequestHash = "different" }},
 		{"integrity package", "accounts.google.com", "fixture-app", time.Minute, func(v *IntegrityVerdict) { v.Package = "other" }},
@@ -294,4 +311,19 @@ func TestRefreshExpiresAfterFourteenDays(t *testing.T) {
 	p := f.challenge(f.a.URL, "POST", "/auth/refresh", body, "", s.Session)
 	f.clock.Add(int64(time.Second))
 	f.want(f.a.URL, "POST", "/auth/refresh", body, "", p, f.device, 401)
+}
+
+func TestCreditsRequiresSignedSessionAndReturnsItsBalance(t *testing.T) {
+	f := setup(t)
+	s := f.login()
+	p := f.challenge(f.a.URL, "GET", "/v1/credits", "", s.Access, "")
+	f.want(f.a.URL, "GET", "/v1/credits", "", "", p, f.device, 401)
+	result := f.want(f.a.URL, "GET", "/v1/credits", "", s.Access, p, f.device, 200)
+	var got struct {
+		Available int64 `json:"available_credits"`
+	}
+	if err := json.Unmarshal(result, &got); err != nil || got.Available != 125 {
+		t.Fatalf("unexpected balance: %s", result)
+	}
+	f.want(f.a.URL, "GET", "/v1/credits", "", s.Access, p, f.device, 401)
 }

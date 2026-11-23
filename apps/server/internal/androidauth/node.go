@@ -17,8 +17,9 @@ type Config struct {
 	NodeID, PublicOrigin, PackageName, SigningKeyID string
 	ChallengeKey                                    []byte
 	SigningKey                                      ed25519.PrivateKey
-	GoogleSubject                                   func(context.Context, string) (string, error)
+	GoogleSubject                                   func(context.Context, string, string) (string, error)
 	DecodeIntegrity                                 func(context.Context, string) (IntegrityVerdict, error)
+	CreditBalance                                   func(context.Context, string) (int64, error)
 	Now                                             func() time.Time
 }
 
@@ -52,6 +53,7 @@ func NewNode(cfg Config, sessions *MemorySessions) (*Node, error) {
 	n.mux.HandleFunc("POST /auth/refresh", n.refresh)
 	n.mux.HandleFunc("POST /auth/logout", n.logout)
 	n.mux.HandleFunc("GET /v1/me", n.me)
+	n.mux.HandleFunc("GET /v1/credits", n.credits)
 	return n, nil
 }
 
@@ -151,7 +153,7 @@ func validOperation(op operation) bool {
 	switch op.Path {
 	case "/auth/google", "/auth/refresh", "/auth/logout":
 		return op.Method == http.MethodPost
-	case "/v1/me":
+	case "/v1/me", "/v1/credits":
 		return op.Method == http.MethodGet && op.BodySHA256 == digest(nil)
 	default:
 		return false
@@ -185,7 +187,7 @@ func (n *Node) login(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithDeadline(r.Context(), time.UnixMilli(c.Issued).Add(proofTTL))
 	defer cancel()
-	subject, err := n.cfg.GoogleSubject(ctx, in.IDToken)
+	subject, err := n.cfg.GoogleSubject(ctx, in.IDToken, device)
 	if err != nil || subject == "" {
 		reject(w, 401)
 		return
@@ -255,4 +257,23 @@ func (n *Node) me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonReply(w, 200, map[string]string{"subject": s.subject})
+}
+
+func (n *Node) credits(w http.ResponseWriter, r *http.Request) {
+	raw, err := read(w, r, 1)
+	s, authErr := n.access(bearer(r))
+	if err != nil || len(raw) != 0 || authErr != nil || !n.accept(r, raw, s) {
+		reject(w, 401)
+		return
+	}
+	if n.cfg.CreditBalance == nil {
+		reject(w, 503)
+		return
+	}
+	balance, err := n.cfg.CreditBalance(r.Context(), s.subject)
+	if err != nil || balance < 0 || balance > (1<<53)-1 {
+		reject(w, 503)
+		return
+	}
+	jsonReply(w, 200, map[string]int64{"available_credits": balance})
 }

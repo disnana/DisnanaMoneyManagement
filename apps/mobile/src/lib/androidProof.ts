@@ -3,12 +3,17 @@ import { fetch } from 'expo/fetch';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
-type DeviceProof = {
+export type DeviceProof = {
   getPublicIdentity(): Promise<{ publicKey: string; fingerprint: string }>;
   signChallenge(challenge: string): Promise<string>;
+  googleIdToken(clientId: string, fingerprint: string): Promise<string | null>;
+  integrityToken(projectNumber: string, requestHash: string): Promise<string>;
+  loadSession(): Promise<string | null>;
+  saveSession(value: string | null): Promise<void>;
+  clearGoogleState(): Promise<void>;
 };
 
-type Operation = { method: 'GET'; path: '/v1/me' } | { method: 'POST'; path: '/auth/google' | '/auth/refresh' | '/auth/logout'; body?: string };
+type Operation = { method: 'GET'; path: '/v1/me' | '/v1/credits' } | { method: 'POST'; path: '/auth/google' | '/auth/refresh' | '/auth/logout'; body?: string };
 type Credentials = { accessToken?: string; sessionId?: string; publicKey?: string };
 type Challenge = { challenge: string; request_id: string; issuer_node_id: string; origin: string; expires_in_ms: number };
 const proofWindowMs = 5000;
@@ -43,6 +48,12 @@ export async function submitDeviceProof(
 
 class IssuerUnavailable extends Error {}
 
+export class DeviceProofHTTPError extends Error {
+  constructor(readonly status: number) {
+    super(`Device proof request failed (${status})`);
+  }
+}
+
 async function send(
   entry: string,
   nodes: Readonly<Record<string, string>>,
@@ -66,7 +77,7 @@ async function send(
       device_public_key: credentials.publicKey,
     }),
   });
-  if (!response.ok) throw new Error(`Challenge request failed (${response.status})`);
+  if (!response.ok) throw new DeviceProofHTTPError(response.status);
   const receivedAt = performance.now();
   const proof = await response.json() as Challenge;
   const expected = Object.hasOwn(nodes, proof.issuer_node_id) ? nodes[proof.issuer_node_id] : undefined;
@@ -78,7 +89,7 @@ async function send(
   const signature = await device.signChallenge(proof.challenge);
   const timeLeft = proofWindowMs - (performance.now() - receivedAt);
   if (timeLeft <= 0) throw new IssuerUnavailable('Challenge expired');
-  if (!/^\/(auth\/(google|refresh|logout)|v1\/me)$/.test(op.path)) throw new Error('Unsupported operation');
+  if (!/^\/(auth\/(google|refresh|logout)|v1\/(me|credits))$/.test(op.path)) throw new Error('Unsupported operation');
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
@@ -98,7 +109,7 @@ async function send(
         'X-Mane-Device-Signature': signature,
       },
     });
-    if (result.status >= 500) throw new Error('Issuer unavailable');
+    if (result.status === 502 || result.status === 504) throw new Error('Issuer unavailable');
     return result;
   } catch (error) {
     if (!signal?.aborted) {

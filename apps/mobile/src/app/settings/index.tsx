@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Linking, Platform, Text } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getPendingAdvances } from '@dmm/core/utils/advances';
 import { formatJPY } from '@dmm/core/utils/format';
+import { refreshAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
 import { useMotionPreference } from '@/lib/motionPref';
 import { useFinance } from '@/lib/store';
 import Constants from 'expo-constants';
@@ -20,6 +21,8 @@ function openLegalPage(page: 'terms' | 'privacy') {
 
 export default function Settings() {
   const p = usePalette();
+  const { signedIn } = useAndroidAccount();
+  useFocusEffect(useCallback(() => { void refreshAndroidAccount(); }, []));
   const [pref, setPref] = useThemePref();
   const [reduceMotion, setReduceMotion] = useMotionPreference();
   const [haptics, setHaptics] = useState(getHapticsEnabled);
@@ -100,7 +103,11 @@ export default function Settings() {
 
         <SectionTitle>アカウント</SectionTitle>
         <Group>
-          <Row title="サインイン" right="未設定（この端末のみ）" />
+          {Platform.OS === 'android' ? (
+            <Row title="Googleアカウント" right={signedIn ? 'ログイン済み' : '未ログイン'} chevron
+              icon={{ ios: 'person.crop.circle', android: 'account_circle' }}
+              onPress={() => router.push('/settings/account')} />
+          ) : <Row title="サインイン" right="未設定（この端末のみ）" />}
         </Group>
         <Text style={{ color: p.textSecondary, fontSize: 13, paddingHorizontal: 4, marginTop: -8 }}>
           アカウントは任意です。サインインしなくても、データはこの端末に保存されます。

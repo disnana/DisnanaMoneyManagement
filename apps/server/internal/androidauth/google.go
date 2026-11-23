@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,11 +18,14 @@ type GoogleIDToken struct {
 	Now      func() time.Time
 }
 
-func (g GoogleIDToken) Subject(ctx context.Context, raw string) (string, error) {
+func (g GoogleIDToken) Subject(ctx context.Context, raw, fingerprint string) (string, error) {
 	if g.Audience == "" || g.Key == nil || len(raw) > 8192 {
 		return "", errAuth
 	}
-	claims := &jwt.RegisteredClaims{}
+	claims := &struct {
+		Nonce string `json:"nonce"`
+		jwt.RegisteredClaims
+	}{}
 	now := g.Now
 	if now == nil {
 		now = time.Now
@@ -35,6 +39,9 @@ func (g GoogleIDToken) Subject(ctx context.Context, raw string) (string, error) 
 	}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithAudience(g.Audience), jwt.WithExpirationRequired(), jwt.WithTimeFunc(now))
 	if err != nil || !parsed.Valid || claims.Subject == "" || len(claims.Subject) > 255 ||
 		(claims.Issuer != "accounts.google.com" && claims.Issuer != "https://accounts.google.com") {
+		return "", errAuth
+	}
+	if suffix, ok := strings.CutPrefix(claims.Nonce, fingerprint+"."); !ok || len(suffix) != 32 {
 		return "", errAuth
 	}
 	if len(claims.Audience) != 1 {

@@ -9,11 +9,20 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  */
 export default ({ config }: ConfigContext): ExpoConfig => {
   const projectId: string | undefined = process.env.EXPO_PROJECT_ID?.trim() || config.extra?.eas?.projectId;
-  const base = { ...config, runtimeVersion: { policy: 'sdkVersion' as const } } as ExpoConfig;
+  const entry = process.env.MANE_AUTH_ENTRY;
+  const nodeID = process.env.MANE_NODE_ID;
+  const origin = process.env.MANE_NODE_ORIGIN;
+  const googleClientID = process.env.MANE_GOOGLE_WEB_CLIENT_ID;
+  const projectNumber = process.env.MANE_GOOGLE_PROJECT_NUMBER;
+  const maneAuth = entry && nodeID && origin && googleClientID && projectNumber
+    ? { entry, nodes: { [nodeID]: origin }, googleClientID, projectNumber }
+    : undefined;
+  const base = { ...config, runtimeVersion: { policy: 'sdkVersion' },
+    extra: { ...config.extra, maneAuth } } as ExpoConfig;
   if (!projectId) return base;
   return {
     ...base,
     updates: { ...config.updates, url: `https://u.expo.dev/${projectId}` },
-    extra: { ...config.extra, eas: { ...config.extra?.eas, projectId } },
+    extra: { ...base.extra, eas: { ...config.extra?.eas, projectId } },
   };
 };
