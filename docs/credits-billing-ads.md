@@ -15,6 +15,14 @@
 
 ## クローズドテストの確認項目
 
+### Google Play Billingの試験準備
+
+Android版のAIレシート用クレジットは、Play Consoleの「収益化」から一回限りの商品として作成し、Billingでは消費型の `INAPP` として扱う。テストで使う商品ID、付与量、価格、販売対象地域を対応付ける。購入画面に出す価格はPlayの `ProductDetails` から取得する。テスターは内部・クローズドテストの配布先に加え、実際に購入に使うGoogleアカウントをライセンステストに登録する。[Play Billingのテスト手順](https://developer.android.com/google/play/billing/test)
+
+Go側でGoogle Play Developer APIを有効にし、対象アプリに絞った検証用サービスアカウントに注文の照会・処理に必要な権限を付ける。認証用のPlay IntegrityとはAPIのスコープが異なる。Androidが購入トークンを送る際は、ログイン済みのユーザーと購入を結び付けるために `obfuscatedAccountId` を渡す。Goは購入状態・商品・数量・アカウントの一致を確認し、台帳への付与が確定した後にGoogle側で消費する。再送や通信断では同じ購入操作IDで照合する。保留中は付与しない。返金・取消の同期と、消費済み分の扱いは本番販売前に決める。[Developer APIの準備](https://developers.google.com/android-publisher/getting_started) · [購入の検証](https://developer.android.com/google/play/billing/security)
+
+### テストシナリオ
+
 1. Playのテスト購入とテスト広告の設定を確認してから、テスター用のAndroidビルドで購入・広告・レシートを試す。実価格・本番広告・AI予算の有効化は別途確認する。
 2. 購入成功直後のアプリ終了、購入保留、同一トークンの再通知、消費前のGo再起動、取消・返金を試す。残高・商品・費用明細が一致することを照合する。
 3. AdMobの署名エラー、重複通知、別ユーザー宛て、期限前後の精算を試す。受理後の割引終了日が分かり、広告が取得できない端末でもクレジットで記録を続けられることを確認する。

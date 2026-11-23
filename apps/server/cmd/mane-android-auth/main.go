@@ -17,11 +17,18 @@ import (
 	"time"
 
 	"github.com/disnana/dmm/server/internal/androidauth"
+	"github.com/disnana/dmm/server/internal/credits"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "credits" {
+		if err := manageCredits(os.Args[2:]); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	check := flag.Bool("check-config", false, "validate configuration without listening")
 	flag.Parse()
 	if flag.NArg() != 0 {
@@ -69,6 +76,10 @@ func run(checkConfig bool) error {
 		PackageName: pkg, SigningKeyID: os.Getenv("MANE_JWT_KID"), ChallengeKey: challenge, SigningKey: ed25519.NewKeyFromSeed(seed),
 		GoogleSubject: googleID.Subject, DecodeIntegrity: androidauth.PlayIntegrityDecoder(client, source, pkg)}
 	entries := map[string]int64{}
+	scyllaEnabled := os.Getenv("MANE_SCYLLA_HOSTS") != ""
+	if scyllaEnabled && os.Getenv("MANE_STAGING_CREDITS_FILE") != "" {
+		return errors.New("choose Scylla or MANE_STAGING_CREDITS_FILE for the staging balance")
+	}
 	if path := os.Getenv("MANE_STAGING_CREDITS_FILE"); path != "" {
 		data, err := os.ReadFile(path)
 		if err != nil || json.Unmarshal(data, &entries) != nil || entries == nil {
@@ -78,6 +89,14 @@ func run(checkConfig bool) error {
 	// Staging accounts without an explicitly provisioned balance start at zero.
 	config.CreditBalance = func(_ context.Context, sub string) (int64, error) {
 		return entries[sub], nil
+	}
+	if scyllaEnabled {
+		wallet, err := credits.OpenFromEnv()
+		if err != nil {
+			return err
+		}
+		defer wallet.Close()
+		config.CreditBalance = wallet.Balance
 	}
 	if publicKey := os.Getenv("MANE_WORKER_JWS_PUBLIC_KEY"); publicKey != "" {
 		proof, err := androidauth.NewWorkerProof(publicKey)

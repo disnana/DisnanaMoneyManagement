@@ -52,6 +52,7 @@ bash scripts/mane-android-auth.sh uninstall
 | `MANE_CHALLENGE_KEY` / `MANE_JWT_SEED` / `MANE_JWT_KID` | Go | パディングなしbase64urlのランダム鍵（32バイト以上）、Ed25519用32バイトseed、鍵ID |
 | Google ADC | Go | linked project の権限を持つ専用のGoogle資格情報。例として `GOOGLE_APPLICATION_CREDENTIALS` から参照する |
 | `MANE_STAGING_CREDITS_FILE` | Go | 任意のステージング残高ファイル。Googleの `sub` をキー、整数クレジットを値とするJSON。ファイルを省略した場合や未付与のテスターの残高は0 |
+| `MANE_SCYLLA_HOSTS` など | Go | [ScyllaDBの残高を使う試験用設定](scylladb.md#ステージングのクレジット台帳)。残高ファイルとは排他 |
 
 `MANE_GOOGLE_WEB_CLIENT_ID`、プロジェクト番号、公開ホストはアプリのビルド設定。ADCと署名鍵はGo側にのみ渡す。
 
@@ -62,4 +63,4 @@ bash scripts/mane-android-auth.sh uninstall
 3. 設定→Googleアカウント→Google で続ける。選択キャンセル、成功、残高取得、通信エラー、アプリ再起動後のログイン状態、ログアウトを確認する。未付与のテスターには0が表示され、通信エラーの場合は残高を取得できなかったことが表示される。
 4. 結合時はGoogle 公開鍵キャッシュが冷たい状態、Play Integrity decode、低速回線の組み合わせで5秒条件を計測する。実際の判定を測ってからリリース可否を判断する。
 
-ステージング残高は固定の確認用データ。購入、クレジット消費、AI解析、広告割引を接続する段階では永続ストアを使用する。
+ステージングの残高には、固定の確認用データまたはScyllaDBの台帳を使える。Play購入とAI解析の精算を実装する際は、ScyllaDBの台帳に接続する。

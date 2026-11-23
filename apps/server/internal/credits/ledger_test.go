@@ -1,0 +1,40 @@
+package credits
+
+import (
+	"errors"
+	"reflect"
+	"testing"
+	"time"
+)
+
+func TestSpendEarliestExpiryFirst(t *testing.T) {
+	now := time.UnixMilli(1000)
+	lots := []lot{{5, 0}, {10, 3000}, {9, 1000}, {3, 2000}}
+	next, err := apply(lots, operation{Kind: "spend", Amount: 6}, now)
+	if want := []lot{{7, 3000}, {5, 0}}; err != nil || !reflect.DeepEqual(next, want) {
+		t.Fatalf("spend = %v, %v; want %v", next, err, want)
+	}
+	for _, tc := range []struct{ now, want int64 }{{2999, 12}, {3000, 5}} {
+		if balance, err := activeBalance(next, tc.now); err != nil || balance != tc.want {
+			t.Fatalf("balance at %d = %d, %v; want %d", tc.now, balance, err, tc.want)
+		}
+	}
+	if _, err := apply(next, operation{Kind: "spend", Amount: 6}, time.UnixMilli(3000)); !errors.Is(err, ErrInsufficient) {
+		t.Fatalf("insufficient funds: %v", err)
+	}
+}
+
+func TestGrantLimitsAndExpiration(t *testing.T) {
+	now := time.UnixMilli(1000)
+	lots := []lot{{maxBalance - 1, 2000}}
+	if _, err := apply(lots, operation{Kind: "grant", Amount: 2, Expires: 2000}, now); err == nil {
+		t.Fatal("grant beyond the balance limit succeeded")
+	}
+	if _, err := apply(lots, operation{Kind: "grant", Amount: 1, Expires: 1000}, now); err == nil {
+		t.Fatal("already expired grant succeeded")
+	}
+	next, err := apply(lots, operation{Kind: "grant", Amount: 1, Expires: 2000}, now)
+	if err != nil || !reflect.DeepEqual(next, []lot{{maxBalance, 2000}}) {
+		t.Fatalf("grant = %v, %v", next, err)
+	}
+}
