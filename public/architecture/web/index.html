@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ショップの画面はGitHub Pagesから配信します。ログイン後は担当ノードに接続し、クレジット残高・購入履歴・利用履歴を取得します。">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:title" content="Webショップの通信 | Architecture | マネーちゃん">
+  <meta property="og:description" content="ショップの画面はGitHub Pagesから配信します。ログイン後は担当ノードに接続し、クレジット残高・購入履歴・利用履歴を取得します。">
+  <meta property="og:url" content="https://dmm.disnana.com/architecture/web/">
+  <meta property="og:image" content="https://dmm.disnana.com/architecture/share.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんの設計を紹介するArchitecture">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://dmm.disnana.com/architecture/web/">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/architecture/architecture.css">
+  <title>Webショップの通信 | Architecture | マネーちゃん</title>
+</head>
+<body class="architecture-page">
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="マネーちゃん 公式トップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ">
+      <a href="/architecture/">設計一覧</a>
+      <a href="/shop/">ショップ</a>
+    </nav>
+  </header>
+  <main class="shell" id="main">
+    <nav class="breadcrumb" aria-label="パンくず"><a href="/architecture/" lang="en">Architecture</a><span aria-hidden="true">/</span><span aria-current="page">Webショップの通信</span></nav>
+    <header class="topic-header">
+
+      <h1>Webショップの通信</h1>
+      <p class="topic-intro">ショップの画面はGitHub Pagesから配信します。ログイン後は担当ノードに接続し、クレジット残高・購入履歴・利用履歴を取得します。</p>
+    </header>
+    <div class="flow-grid single">
+      <figure class="flow">
+        <div class="diagram"><img src="/architecture/diagrams/web-read.svg" alt="" aria-labelledby="web-read-title web-read-description"></div>
+        <figcaption><h2 id="web-read-title">ログインから残高表示まで</h2><p id="web-read-description">Workerが短時間だけ有効な読み取り権限を発行し、担当Goノードが共有セッションを照合してデータを返します。</p></figcaption>
+      </figure>
+      <section class="takeaways" aria-labelledby="notes">
+        <h2 id="notes">しくみのポイント</h2>
+        <ul>
+          <li>通信障害時はWorkerから新たな担当ノードの割り当てを受け、読み取りを再開します。</li>
+          <li>ログイン、決済開始、決済通知はWorkerが担当します。</li>
+        </ul>
+      </section>
+    </div>
+    <nav class="related" aria-label="関連ページ">
+      <a href="/architecture/">← しくみの一覧</a>
+      <a href="/architecture/android/">担当ノードの切り替え →</a>
+      <a href="/architecture/payments/">決済の流れ →</a>
+    </nav>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a></nav></footer>
+</body>
+</html>

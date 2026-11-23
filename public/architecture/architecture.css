@@ -1,0 +1,90 @@
+.architecture-page .shell { width: min(100% - 44px, 1120px); }
+.architecture-page .top { min-height: 68px; border-bottom: 1px solid var(--line); }
+.architecture-page .top nav { align-items: center; }
+.architecture-page .top nav a { color: var(--muted); font-size: .875rem; }
+.arch-hero {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  align-items: center;
+  gap: clamp(24px, 5vw, 70px);
+  padding-block: clamp(32px, 6vw, 72px) clamp(28px, 5vw, 60px);
+}
+.arch-hero h1 { font-size: clamp(2.45rem, 7vw, 5.1rem); line-height: 1.1; letter-spacing: -.055em; }
+.arch-hero .headline { font-size: clamp(1.15rem, 3vw, 1.55rem); font-weight: 750; margin-top: 14px; }
+.arch-hero .intro-copy, .topic-intro { color: var(--muted); margin-top: 10px; max-width: 40em; }
+.arch-hero figure, .flow { margin: 0; }
+.arch-hero figure {
+  display: grid;
+  place-items: center;
+  padding: clamp(12px, 3vw, 30px);
+  min-width: 0;
+  background: #e4f0ea;
+  border: 1px solid #c8dfd4;
+  border-radius: 20px;
+}
+.arch-hero img { width: 100%; }
+.topics { padding-block: 21px 48px; border-top: 1px solid var(--line); }
+.topics h2 { font-size: 1.28rem; margin-bottom: 13px; }
+.topic-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0; gap: 12px; }
+.topic-grid a {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  text-decoration: none;
+}
+.topic-grid a:hover, .topic-grid a:focus-visible { border-color: var(--accent); }
+.topic-label { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; font-size: 1.075rem; font-weight: 780; }
+.topic-label span { color: var(--accent); flex: none; }
+.topic-summary { color: var(--muted); font-size: .88rem; }
+.stage { color: var(--accent); font-weight: 720; font-size: .8rem; }
+.breadcrumb { display: flex; gap: 10px; align-items: baseline; margin-top: 18px; color: var(--muted); font-size: .875rem; }
+.breadcrumb a { padding-block: 8px; }
+.topic-header { margin-block: 18px 22px; }
+.topic-header h1 { font-size: clamp(1.85rem, 5vw, 3.2rem); line-height: 1.2; letter-spacing: -.035em; margin-top: 4px; }
+.flow-grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.flow-grid.single { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+.flow {
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.flow img { object-fit: contain; width: 100%; height: auto; max-height: 365px; }
+.diagram { background: #f2f8f4; padding: 18px; }
+.flow figcaption { padding: 13px 16px 16px; }
+.flow h2, .takeaways h2 { font-size: 1.075rem; }
+.flow p, .takeaways li { color: var(--muted); font-size: .9rem; }
+.flow p { margin-top: 3px; }
+.takeaways { padding: 14px 0; }
+.takeaways ul { margin: 8px 0 0; padding-inline-start: 1.3em; }
+.takeaways li + li { margin-top: 7px; }
+.related { margin-block: 28px 40px; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.related a { color: var(--accent); padding-block: 7px; }
+.architecture-page .footer { border-top: 1px solid var(--line); color: var(--muted); }
+.architecture-page .footer nav { font-size: .875rem; }
+@media (max-width: 760px) {
+  .topic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .flow-grid.single { grid-template-columns: 1fr; gap: 6px; }
+}
+@media (max-width: 560px) {
+  .architecture-page .shell { width: min(100% - 32px, 1120px); }
+  .architecture-page .top { gap: 10px; }
+  .architecture-page .top nav { column-gap: 12px; justify-content: end; }
+  .architecture-page .brand { font-size: .9rem; gap: 8px; }
+  .architecture-page .brand img { width: 32px; }
+  .arch-hero { grid-template-columns: 1fr; gap: 18px; padding-block: 25px 22px; }
+  .arch-hero .headline { margin-top: 8px; }
+  .arch-hero figure { padding: 8px; border-radius: 14px; }
+  .arch-hero img { max-height: 145px; object-fit: contain; }
+  .flow-grid { grid-template-columns: 1fr; gap: 9px; }
+  .topic-grid { gap: 8px; }
+  .topic-grid a { padding: 10px; }
+  .topic-label { font-size: .98rem; gap: 5px; }
+  .diagram { padding: 10px; }
+  .flow img { max-height: 320px; }
+}

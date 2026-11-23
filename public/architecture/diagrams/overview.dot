@@ -1,0 +1,17 @@
+digraph {
+
+  graph [rankdir=TB, bgcolor=transparent, pad=.14, nodesep=.30, ranksep=.48, splines=polyline]
+  node [shape=box, style="rounded,filled", margin=".18,.07", fontname="Noto Sans CJK JP, sans-serif", fontsize=14, fillcolor="#eaf3ef", color="#78a598", fontcolor="#16332c", penwidth=1.15]
+  edge [fontname="Noto Sans CJK JP, sans-serif", fontsize=11, color="#52766b", fontcolor="#35594d", arrowsize=.7, penwidth=1.45]
+
+  mane [label="マネーちゃん", fillcolor="#155951", color="#155951", fontcolor=white, fontsize=16]
+  book [label="家計簿を記録"]
+  account [label="クレジットを確認"]
+  local [label="端末・ブラウザに保存", fillcolor="#ffffff"]
+  shared [label="共通のクレジット残高", fillcolor="#ffffff"]
+  mane -> {book account}
+  book -> local
+  account -> shared
+  {rank=same; book; account}
+  {rank=same; local; shared}
+}

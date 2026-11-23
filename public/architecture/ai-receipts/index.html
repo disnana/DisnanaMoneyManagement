@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="写真をレシートごとにまとめて送り、店舗・日付・金額・品目を確認してから家計簿に登録する機能を開発予定です。">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:title" content="AIレシート | Architecture | マネーちゃん">
+  <meta property="og:description" content="写真をレシートごとにまとめて送り、店舗・日付・金額・品目を確認してから家計簿に登録する機能を開発予定です。">
+  <meta property="og:url" content="https://dmm.disnana.com/architecture/ai-receipts/">
+  <meta property="og:image" content="https://dmm.disnana.com/architecture/share.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんの設計を紹介するArchitecture">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://dmm.disnana.com/architecture/ai-receipts/">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/architecture/architecture.css">
+  <title>AIレシート | Architecture | マネーちゃん</title>
+</head>
+<body class="architecture-page">
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="マネーちゃん 公式トップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ">
+      <a href="/architecture/">設計一覧</a>
+      <a href="/shop/">ショップ</a>
+    </nav>
+  </header>
+  <main class="shell" id="main">
+    <nav class="breadcrumb" aria-label="パンくず"><a href="/architecture/" lang="en">Architecture</a><span aria-hidden="true">/</span><span aria-current="page">AIレシート</span></nav>
+    <header class="topic-header">
+      <p class="stage">開発予定</p>
+      <h1>AIレシート</h1>
+      <p class="topic-intro">写真をレシートごとにまとめて送り、店舗・日付・金額・品目を確認してから家計簿に登録する機能を開発予定です。</p>
+    </header>
+    <div class="flow-grid single">
+      <figure class="flow">
+        <div class="diagram"><img src="/architecture/diagrams/receipt.svg" alt="" aria-labelledby="receipt-title receipt-description"></div>
+        <figcaption><h2 id="receipt-title">撮影から記録までの設計</h2><p id="receipt-description">Goがレシートごとに画像を解析し、結果をチェックします。利用者は原本と照合したうえで、合計か商品単位で記録します。</p></figcaption>
+      </figure>
+      <section class="takeaways" aria-labelledby="notes">
+        <h2 id="notes">しくみのポイント</h2>
+        <ul>
+          <li>通常は画像1枚につき基本1cr。長いレシートを2枚に分けた場合は基本2crです。</li>
+          <li>送信前に利用可能残高、消費の見込み、上限を確認します。見積もりとの差で上限を超えた費用は運営側が負担します。</li>
+        </ul>
+      </section>
+    </div>
+    <nav class="related" aria-label="関連ページ">
+      <a href="/architecture/">← しくみの一覧</a>
+      <a href="/terms/#ai-credits">クレジットの利用条件 →</a>
+      <a href="https://github.com/disnana/DisnanaMoneyManagement/blob/main/TODO.md">開発TODO →</a>
+    </nav>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a></nav></footer>
+</body>
+</html>

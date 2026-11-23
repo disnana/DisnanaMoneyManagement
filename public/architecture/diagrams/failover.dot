@@ -1,0 +1,18 @@
+digraph {
+
+  graph [rankdir=TB, bgcolor=transparent, pad=.14, nodesep=.30, ranksep=.48, splines=polyline]
+  node [shape=box, style="rounded,filled", margin=".18,.07", fontname="Noto Sans CJK JP, sans-serif", fontsize=14, fillcolor="#eaf3ef", color="#78a598", fontcolor="#16332c", penwidth=1.15]
+  edge [fontname="Noto Sans CJK JP, sans-serif", fontsize=11, color="#52766b", fontcolor="#35594d", arrowsize=.7, penwidth=1.45]
+
+  app [label="Android・Webショップ"]
+  worker [label="Cloudflare Worker\n別の担当を割り当て", fillcolor="#fff1dc", color="#c58b51"]
+  old [label="元のGoノード\n応答なし", style="rounded,filled,dashed", fillcolor="#f5f4f0", color="#a8a69b"]
+  next [label="新しいGoノード\nこのノード用の認可", fillcolor="#155951", color="#155951", fontcolor=white]
+  session [label="ScyllaDB\n共有セッション", fillcolor="#d6eeea"]
+  app -> old [label="直結できない", style=dashed, color="#a37b54"]
+  app -> worker [label="再割り当て"]
+  worker -> next [label="新しい接続先"]
+  app -> next [label="読み取りを再開"]
+  next -> session [label="照合"]
+  {rank=same; old; worker}
+}

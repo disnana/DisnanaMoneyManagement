@@ -1,0 +1,15 @@
+digraph {
+
+  graph [rankdir=TB, bgcolor=transparent, pad=.14, nodesep=.30, ranksep=.48, splines=polyline]
+  node [shape=box, style="rounded,filled", margin=".18,.07", fontname="Noto Sans CJK JP, sans-serif", fontsize=14, fillcolor="#eaf3ef", color="#78a598", fontcolor="#16332c", penwidth=1.15]
+  edge [fontname="Noto Sans CJK JP, sans-serif", fontsize=11, color="#52766b", fontcolor="#35594d", arrowsize=.7, penwidth=1.45]
+
+  page [label="Webショップ\nGitHub Pages"]
+  gate [label="Cloudflare Worker\n短時間の読み取り権限", fillcolor="#fff1dc", color="#c58b51"]
+  go [label="担当Goノード\n残高・購入履歴・利用履歴", fillcolor="#155951", color="#155951", fontcolor=white]
+  db [label="ScyllaDB\nセッション・残高・履歴", fillcolor="#d6eeea"]
+  page -> gate [label="ログイン後に割り当て"]
+  page -> go [label="読み取りは直結"]
+  gate -> go [label="担当を指定", style=dashed]
+  go -> db [label="認可を照合して取得"]
+}

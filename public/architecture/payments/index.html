@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ショップのテスト決済では、Stripeで支払いを確認してからクレジットを付与します。決済確認の途中で通信が切れた場合も、購入履歴から結果を再確認できます。">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:title" content="決済とクレジット付与 | Architecture | マネーちゃん">
+  <meta property="og:description" content="ショップのテスト決済では、Stripeで支払いを確認してからクレジットを付与します。決済確認の途中で通信が切れた場合も、購入履歴から結果を再確認できます。">
+  <meta property="og:url" content="https://dmm.disnana.com/architecture/payments/">
+  <meta property="og:image" content="https://dmm.disnana.com/architecture/share.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんの設計を紹介するArchitecture">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://dmm.disnana.com/architecture/payments/">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/architecture/architecture.css">
+  <title>決済とクレジット付与 | Architecture | マネーちゃん</title>
+</head>
+<body class="architecture-page">
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="マネーちゃん 公式トップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ">
+      <a href="/architecture/">設計一覧</a>
+      <a href="/shop/">ショップ</a>
+    </nav>
+  </header>
+  <main class="shell" id="main">
+    <nav class="breadcrumb" aria-label="パンくず"><a href="/architecture/" lang="en">Architecture</a><span aria-hidden="true">/</span><span aria-current="page">決済とクレジット付与</span></nav>
+    <header class="topic-header">
+      <p class="stage">テスト決済</p>
+      <h1>決済とクレジット付与</h1>
+      <p class="topic-intro">ショップのテスト決済では、Stripeで支払いを確認してからクレジットを付与します。決済確認の途中で通信が切れた場合も、購入履歴から結果を再確認できます。</p>
+    </header>
+    <div class="flow-grid single">
+      <figure class="flow">
+        <div class="diagram"><img src="/architecture/diagrams/payment.svg" alt="" aria-labelledby="payment-title payment-description"></div>
+        <figcaption><h2 id="payment-title">購入から付与まで</h2><p id="payment-description">注文を保存してからCheckoutを開始します。決済通知の署名と支払い情報を照合し、同じ注文への付与を一度に制限します。</p></figcaption>
+      </figure>
+      <section class="takeaways" aria-labelledby="notes">
+        <h2 id="notes">しくみのポイント</h2>
+        <ul>
+          <li>購入履歴から決済の状況を照合でき、元の決済が未払いで有効な場合は再開できます。</li>
+          <li>テスト環境の全額返金では未使用分を取り消します。部分返金やチャージバックは確認が必要な状態として扱います。</li>
+        </ul>
+      </section>
+    </div>
+    <nav class="related" aria-label="関連ページ">
+      <a href="/architecture/">← しくみの一覧</a>
+      <a href="/shop/">クレジットショップ →</a>
+      <a href="/architecture/credits/">クレジット残高 →</a>
+    </nav>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a></nav></footer>
+</body>
+</html>

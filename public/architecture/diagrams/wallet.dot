@@ -1,0 +1,13 @@
+digraph {
+
+  graph [rankdir=TB, bgcolor=transparent, pad=.14, nodesep=.30, ranksep=.48, splines=polyline]
+  node [shape=box, style="rounded,filled", margin=".18,.07", fontname="Noto Sans CJK JP, sans-serif", fontsize=14, fillcolor="#eaf3ef", color="#78a598", fontcolor="#16332c", penwidth=1.15]
+  edge [fontname="Noto Sans CJK JP, sans-serif", fontsize=11, color="#52766b", fontcolor="#35594d", arrowsize=.7, penwidth=1.45]
+
+  req [label="付与・消費・返金処理"]
+  op [label="操作IDを照合\n再送を判別"]
+  lots [label="消費時は期限が近い分から\n無期限分はその後"]
+  db [label="ScyllaDB\n残高と操作履歴", fillcolor="#155951", color="#155951", fontcolor=white]
+  views [label="AndroidとWebで共通の残高"]
+  req -> op -> lots -> db -> views
+}

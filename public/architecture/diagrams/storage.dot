@@ -1,0 +1,14 @@
+digraph {
+
+  graph [rankdir=TB, bgcolor=transparent, pad=.14, nodesep=.30, ranksep=.48, splines=polyline]
+  node [shape=box, style="rounded,filled", margin=".18,.07", fontname="Noto Sans CJK JP, sans-serif", fontsize=14, fillcolor="#eaf3ef", color="#78a598", fontcolor="#16332c", penwidth=1.15]
+  edge [fontname="Noto Sans CJK JP, sans-serif", fontsize=11, color="#52766b", fontcolor="#35594d", arrowsize=.7, penwidth=1.45]
+
+  form [label="取引・口座・予算を入力", fillcolor="#155951", color="#155951", fontcolor=white]
+  mobile [label="Android・iOS\nSQLite"]
+  web [label="Web家計簿\nIndexedDB"]
+  backup [label="必要なときに\nバックアップを書き出し"]
+  form -> {mobile web}
+  {mobile web} -> backup
+  {rank=same; mobile; web}
+}

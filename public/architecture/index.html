@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="マネーちゃんの設計を図で紹介します。家計データの保存、AndroidとWebの通信、決済・クレジット、AIレシートのしくみ。">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:title" content="Architecture | マネーちゃん">
+  <meta property="og:description" content="マネーちゃんの設計を図で紹介します。家計データの保存、AndroidとWebの通信、決済・クレジット、AIレシートのしくみ。">
+  <meta property="og:url" content="https://dmm.disnana.com/architecture/">
+  <meta property="og:image" content="https://dmm.disnana.com/architecture/share.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんの設計を紹介するArchitecture">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://dmm.disnana.com/architecture/">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/architecture/architecture.css">
+  <title>Architecture | マネーちゃん</title>
+</head>
+<body class="architecture-page">
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="マネーちゃん 公式トップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ">
+      <a href="/app/">Web版</a>
+      <a href="/shop/">ショップ</a>
+    </nav>
+  </header>
+  <main class="shell" id="main">
+    <section class="arch-hero" aria-labelledby="page-title">
+      <div>
+        <h1 id="page-title" lang="en">Architecture</h1>
+        <p class="headline">マネーちゃんのしくみ</p>
+        <p class="intro-copy">データの保存先、ログイン後の通信、クレジットが反映されるまでを図で紹介します。</p>
+      </div>
+      <figure><img src="/architecture/diagrams/overview.svg" alt="家計簿の記録は端末・ブラウザに保存。クレジットはログインしたアカウントの共通残高を確認。" width="380" height="198"></figure>
+    </section>
+    <section class="topics" aria-labelledby="topics-title">
+      <h2 id="topics-title">しくみを選ぶ</h2>
+      <ul class="topic-grid">
+        <li><a href="/architecture/data/">
+          <p class="topic-label">データの保存<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">端末内の保存とバックアップ</p>
+        </a></li>
+        <li><a href="/architecture/android/">
+          <p class="topic-label">Android認証<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">ログインと接続先の切り替え</p><p class="stage">内部テスト向け</p>
+        </a></li>
+        <li><a href="/architecture/web/">
+          <p class="topic-label">Webショップ<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">ログイン後の残高・履歴取得</p>
+        </a></li>
+        <li><a href="/architecture/payments/">
+          <p class="topic-label">決済と付与<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">支払い確認と二重付与の防止</p><p class="stage">テスト決済</p>
+        </a></li>
+        <li><a href="/architecture/credits/">
+          <p class="topic-label">クレジット残高<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">共通残高と期限の管理</p>
+        </a></li>
+        <li><a href="/architecture/ai-receipts/">
+          <p class="topic-label">AIレシート<span aria-hidden="true">→</span></p>
+          <p class="topic-summary">撮影・解析・確認と消費の上限</p><p class="stage">開発予定</p>
+        </a></li>
+      </ul>
+    </section>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a></nav></footer>
+</body>
+</html>

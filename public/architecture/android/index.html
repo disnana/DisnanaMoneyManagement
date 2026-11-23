@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ログイン時にGoogleの本人確認、Play Integrityの判定、端末の署名を照合します。担当ノードが決まると、Androidは残高などの認可済みAPIへ直接アクセスします。">
+  <meta name="theme-color" content="#f3f7f6">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="マネーちゃん">
+  <meta property="og:title" content="Androidの認証と復旧 | Architecture | マネーちゃん">
+  <meta property="og:description" content="ログイン時にGoogleの本人確認、Play Integrityの判定、端末の署名を照合します。担当ノードが決まると、Androidは残高などの認可済みAPIへ直接アクセスします。">
+  <meta property="og:url" content="https://dmm.disnana.com/architecture/android/">
+  <meta property="og:image" content="https://dmm.disnana.com/architecture/share.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="マネーちゃんの設計を紹介するArchitecture">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://dmm.disnana.com/architecture/android/">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/portal/site.css?v=shop-entry">
+  <link rel="stylesheet" href="/architecture/architecture.css">
+  <title>Androidの認証と復旧 | Architecture | マネーちゃん</title>
+</head>
+<body class="architecture-page">
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="マネーちゃん 公式トップ"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ">
+      <a href="/architecture/">設計一覧</a>
+      <a href="/shop/">ショップ</a>
+    </nav>
+  </header>
+  <main class="shell" id="main">
+    <nav class="breadcrumb" aria-label="パンくず"><a href="/architecture/" lang="en">Architecture</a><span aria-hidden="true">/</span><span aria-current="page">Androidの認証と復旧</span></nav>
+    <header class="topic-header">
+      <p class="stage">内部テスト向け</p>
+      <h1>Androidの認証と復旧</h1>
+      <p class="topic-intro">ログイン時にGoogleの本人確認、Play Integrityの判定、端末の署名を照合します。担当ノードが決まると、Androidは残高などの認可済みAPIへ直接アクセスします。</p>
+    </header>
+    <div class="flow-grid">
+      <figure class="flow">
+        <div class="diagram"><img src="/architecture/diagrams/android-login.svg" alt="" aria-labelledby="android-login-title android-login-description"></div>
+        <figcaption><h2 id="android-login-title">初回ログイン</h2><p id="android-login-description">Cloudflare Workerが担当ノードを選び、Goが本人確認と端末の検証を行います。セッションはScyllaDBに保存します。</p></figcaption>
+      </figure>
+      <figure class="flow">
+        <div class="diagram"><img src="/architecture/diagrams/failover.svg" alt="" aria-labelledby="failover-title failover-description"></div>
+        <figcaption><h2 id="failover-title">通信障害から復旧</h2><p id="failover-description">読み取りの通信に失敗した場合は別ノードを割り当て、共有セッションを照合して新しい担当用の認可を取得します。</p></figcaption>
+      </figure>
+    </div>
+      <section class="takeaways" aria-labelledby="notes">
+        <h2 id="notes">しくみのポイント</h2>
+        <ul>
+          <li>通常の読み取りでは担当ノード用の認可を使います。</li>
+          <li>同じ仕組みを使うWebショップでは、公開環境で担当ノードへの直結を確認しました。Androidの直結対応は内部テスト向けです。</li>
+        </ul>
+      </section>
+    <nav class="related" aria-label="関連ページ">
+      <a href="/architecture/">← しくみの一覧</a>
+      <a href="/architecture/web/">Webショップの通信 →</a>
+    </nav>
+  </main>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a></nav></footer>
+</body>
+</html>
