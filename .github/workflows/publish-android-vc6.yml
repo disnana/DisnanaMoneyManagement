@@ -1,0 +1,48 @@
+name: Publish Android v6 prerelease
+
+on:
+  push:
+    branches: [ops/publish-android-vc6]
+    paths: [.github/workflows/publish-android-vc6.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 45214667004
+          name: Mane-chan-unsigned-app-bundle
+          path: bundle
+      - name: Publish the verified bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd bundle
+          mv app-release.aab mane-chan-1.0.0-vc6-unsigned.aab
+          printf '%s  %s\n' \
+            '6287e6bca3e7f2dd7ff783a320c34cd79a5c8590d1c588778354631f5b7384e8' \
+            'mane-chan-1.0.0-vc6-unsigned.aab' > SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+          cat > release-notes.md <<'NOTES'
+          マネーちゃん Android 1.0.0 のクローズドテスト用ビルドです。案内画像のアイコン表示を修正しました。
+
+          - パッケージID `com.disnana.mane_chan`
+          - バージョンコード `6`
+          - ステージング接続設定
+          - 未署名の Android App Bundle。Play Console に提出する前に、登録済みのアップロード鍵で署名してください。
+          - SHA-256 は添付の `SHA256SUMS.txt` で確認できます。[ビルド元の GitHub Actions](https://github.com/disnana/DisnanaMoneyManagement/actions/runs/45214667004)
+          NOTES
+          gh release create android-v1.0.0-vc6 \
+            mane-chan-1.0.0-vc6-unsigned.aab SHA256SUMS.txt \
+            --target 04a8b6395a2513c8ce5ed4033468bc35244ba562 \
+            --title 'マネーちゃん Android 1.0.0 (vc6) — クローズドテスト用' \
+            --notes-file release-notes.md --prerelease
