@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { computeMonthCashFlow } from '@dmm/core/utils/metrics';
 import { formatJPY, formatMonthLabel, shiftMonth } from '@dmm/core/utils/format';
@@ -9,7 +9,8 @@ import { Group } from '@/ui/kit';
 
 export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 'expense' }) {
   const p = usePalette();
-  const { visibleState, setMonth } = useFinance();
+  const { visibleState } = useFinance();
+  const [selectedMonth, setSelectedMonth] = useState(month);
   const values = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => shiftMonth(month, i - 11));
     return months.map((key) => {
@@ -18,6 +19,7 @@ export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 
     });
   }, [month, kind, visibleState]);
 
+  const selectedAmount = values.find(({ key }) => key === selectedMonth)?.amount ?? 0;
   const label = kind === 'income' ? '収入' : '支出';
   const color = kind === 'income' ? p.income : p.danger;
   const chartHeight = 124;
@@ -34,14 +36,18 @@ export function MonthlyTrend({ month, kind }: { month: string; kind: 'income' | 
             <Text style={{ color: p.textSecondary, fontSize: 13 }}>過去12か月の{label}</Text>
             <Text style={{ color: p.text, fontSize: 13 }}>{formatJPY(values.reduce((sum, item) => sum + item.amount, 0))}</Text>
           </View>
+          <Text accessibilityLiveRegion="polite"
+            style={{ color: p.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+            {formatMonthLabel(selectedMonth)}の{label}　{formatJPY(selectedAmount)}
+          </Text>
           <View style={{ flexDirection: 'row', gap: 3 }}>
             {values.map(({ key, amount }) => {
-              const selected = key === month;
+              const selected = key === selectedMonth;
               const height = amount === 0 ? 1 : Math.max(2, Math.round(Math.abs(amount) * scale));
               const top = amount < 0 ? baseline : Math.max(0, baseline - height);
               return (
                 <Pressable key={key} accessibilityRole="button" accessibilityState={{ selected }}
-                  accessibilityLabel={`${formatMonthLabel(key)}の${label} ${formatJPY(amount)}`} onPress={() => setMonth(key)}
+                  accessibilityLabel={`${formatMonthLabel(key)}の${label} ${formatJPY(amount)}`} onPress={() => setSelectedMonth(key)}
                   style={{ flex: 1, alignItems: 'center', gap: 6 }}>
                   <View style={{ width: '100%', height: chartHeight }}>
                     <View style={{ position: 'absolute', top: Math.min(baseline, chartHeight - 1), width: '100%',
