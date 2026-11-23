@@ -6,12 +6,12 @@ import { admissionHash, DeviceProofHTTPError, getAndroidDeviceProof, submitDevic
 type Settings = { entry: string; googleClientID: string; projectNumber: string };
 type Session = { issuer_node_id: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
 type CreditActivity = { id: string; at_ms: number; operation: { kind: 'grant' | 'spend' | 'reverse'; amount: number } };
-type State = { signedIn: boolean; credits: number | null; history: CreditActivity[] | null; busy: boolean; message: string };
+type State = { signedIn: boolean; accountId: string | null; credits: number | null; history: CreditActivity[] | null; busy: boolean; message: string };
 const settings = Constants.expoConfig?.extra?.maneAuth as Settings | undefined;
 const device = Platform.OS === 'android' && settings ? getAndroidDeviceProof() : null;
 let session: Session | null = null;
 let loaded = false;
-let state: State = { signedIn: false, credits: null, history: null, busy: false, message: '' };
+let state: State = { signedIn: false, accountId: null, credits: null, history: null, busy: false, message: '' };
 const listeners = new Set<() => void>();
 
 export const accountAvailable = Boolean(device && settings);
@@ -45,9 +45,10 @@ function parseSession(value: unknown): Session {
 }
 
 async function setSession(next: Session | null) {
+  const sameSession = next !== null && next.issuer_node_id === session?.issuer_node_id && next.session_id === session?.session_id;
   await device!.saveSession(next ? JSON.stringify(next) : null);
   session = next;
-  publish({ signedIn: Boolean(next), credits: null, history: null });
+  if (!sameSession) publish({ signedIn: Boolean(next), accountId: null, credits: null, history: null });
 }
 
 async function restore() {
@@ -89,7 +90,7 @@ async function refresh() {
   }
 }
 
-async function authenticated(op: { method: 'GET'; path: '/v1/credits' } | { method: 'POST'; path: '/auth/logout' }) {
+async function authenticated(op: { method: 'GET'; path: '/v1/me' | '/v1/credits' } | { method: 'POST'; path: '/auth/logout' }) {
   if (!session) throw new Error('No account session');
   if (session.expires_at * 1000 < Date.now() + 10_000) await refresh();
   const send = () => request(op, { accessToken: session!.access_token });
@@ -120,6 +121,20 @@ async function loadCredits() {
   }
 }
 
+async function loadAccount() {
+  await loadCredits();
+  if (!session || state.accountId !== null) return;
+  try {
+    const response = await authenticated({ method: 'GET', path: '/v1/me' });
+    const result = await response.json() as { subject?: unknown } | null;
+    if (typeof result?.subject === 'string' && result.subject.length > 0 && result.subject.length <= 255) {
+      publish({ accountId: result.subject });
+    }
+  } catch {
+    if (!session) publish({ message: 'セッションが切れました。もう一度ログインしてください。' });
+  }
+}
+
 async function run(operation: () => Promise<void>, failure: string) {
   if (!accountAvailable || state.busy) return;
   publish({ busy: true, message: '' });
@@ -134,7 +149,7 @@ async function run(operation: () => Promise<void>, failure: string) {
 }
 
 export function refreshAndroidAccount() {
-  return run(loadCredits, 'アカウント情報を読み込めませんでした。');
+  return run(loadAccount, 'アカウント情報を読み込めませんでした。');
 }
 
 export function signInAndroidAccount() {
@@ -147,7 +162,7 @@ export function signInAndroidAccount() {
     const body = JSON.stringify({ id_token: idToken, integrity_token: integrityToken, device_public_key: publicKey });
     const response = await request({ method: 'POST', path: '/auth/google', body }, { publicKey });
     await setSession(parseSession(await response.json()));
-    await loadCredits();
+    await loadAccount();
   }, 'ログインできませんでした。通信とGoogle Playでの配布状況を確認して再試行してください。');
 }
 

@@ -10,7 +10,7 @@ const activityLabels = { grant: '付与', spend: '消費', reverse: '返金に�
 
 export default function AccountSettings() {
   const p = usePalette();
-  const { signedIn, credits, history, busy, message } = useAndroidAccount();
+  const { signedIn, accountId, credits, history, busy, message } = useAndroidAccount();
   useFocusEffect(useCallback(() => {
     void refreshAndroidAccount();
   }, []));
@@ -27,12 +27,19 @@ export default function AccountSettings() {
           <>
             <Group>
               <Row title="Googleアカウント" right="ログイン済み" icon={{ ios: 'person.crop.circle', android: 'account_circle' }} />
+              <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 3 }}>
+                <Text style={{ color: p.text, fontSize: 16, fontWeight: '600' }}>アカウントID</Text>
+                <Text selectable={accountId !== null} style={{ color: p.textSecondary, fontSize: 14, fontVariant: ['tabular-nums'] }}>
+                  {accountId ?? (busy ? '取得中…' : '取得できません')}
+                </Text>
+                {accountId ? <Text style={{ color: p.textSecondary, fontSize: 13 }}>お問い合わせ用。長押しでコピーできます。</Text> : null}
+              </View>
+              <Row title="アカウント情報を再読み込み" onPress={busy ? undefined : refreshAndroidAccount} />
             </Group>
             <SectionTitle>AIレシート</SectionTitle>
             <Group>
               <Row title="クレジット残高" icon={{ ios: 'wallet.pass', android: 'account_balance_wallet' }}
-                right={busy ? '取得中…' : credits === null ? '取得できません' : `${credits.toLocaleString('ja-JP')} クレジット`} />
-              <Row title="残高を再読み込み" onPress={busy ? undefined : refreshAndroidAccount} />
+                right={credits === null ? (busy ? '取得中…' : '取得できません') : `${credits.toLocaleString('ja-JP')} クレジット`} />
             </Group>
             <Text style={{ color: p.textSecondary }}>
               販売時は、公式サイトで購入したクレジットが同じGoogleアカウントの残高に反映されます。
