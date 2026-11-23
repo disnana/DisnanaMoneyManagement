@@ -8,6 +8,8 @@ import {VitePWA} from 'vite-plugin-pwa';
 export default defineConfig(() => {
   const rawBase = process.env.VITE_BASE_PATH || '/';
   const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+  const officialPortal = process.env.VITE_OFFICIAL_PORTAL === '1';
+  const appEntry = officialPortal ? '/app/' : base;
 
   return {
     base,
@@ -43,17 +45,17 @@ export default defineConfig(() => {
             {
               name: '収支を記録',
               short_name: '記録',
-              url: `${base}?action=add`,
+              url: `${appEntry}?action=add`,
               icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
             },
             {
               name: '取引履歴',
               short_name: '取引',
-              url: `${base}?tab=transactions`,
+              url: `${appEntry}?tab=transactions`,
               icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
             },
           ],
-          start_url: base,
+          start_url: appEntry,
           scope: base,
           lang: 'ja',
           icons: [
@@ -80,6 +82,16 @@ export default defineConfig(() => {
         workbox: {
           cleanupOutdatedCaches: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          ...(officialPortal ? {
+            navigateFallback: 'app/index.html',
+            navigateFallbackAllowlist: [/^\/app(?:\/|$)/],
+            manifestTransforms: [async (entries) => ({
+              manifest: entries.flatMap(entry =>
+                entry.url === 'index.html' ? [{ ...entry, url: 'app/index.html' }] :
+                entry.url === 'portal/index.html' ? [entry, { ...entry, url: 'index.html' }] : [entry]),
+              warnings: [],
+            })],
+          } : {}),
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

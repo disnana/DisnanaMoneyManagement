@@ -113,13 +113,23 @@ jobs:
       - name: Audit production dependencies
         run: bun audit --production --audit-level=high
 
-      - name: Build PWA
+      - name: Build GitHub Pages site
         env:
           VITE_BASE_PATH: ${{ steps.base_path.outputs.value }}
-        run: bun run build
+        run: |
+          if [ "$VITE_BASE_PATH" = "/" ]; then
+            bun run build:portal
+          else
+            bun run build
+          fi
 
       - name: Create SPA 404 fallback
-        run: cp dist/index.html dist/404.html
+        run: |
+          if [ -f dist/app/index.html ]; then
+            cp dist/app/index.html dist/404.html
+          else
+            cp dist/index.html dist/404.html
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
