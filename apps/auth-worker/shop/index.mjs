@@ -47,5 +47,5 @@ export async function shopRequest(request, env, fetcher) {
     callBackend(env, 'wallet', { subject: user.subject }),
     callBackend(env, 'orders', { subject: user.subject }),
   ]);
-  return json({ wallet, orders });
+  return json({ account_id: user.subject, wallet, orders });
 }

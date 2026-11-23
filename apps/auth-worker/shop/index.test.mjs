@@ -169,6 +169,15 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
   assert.equal((await send(paid)).status, 200);
   assert.equal(db.grants, 1);
   assert.equal(usedB, true);
+  const accountRequest = (headers = {}) => new Request(site + '/api/shop/account', { headers });
+  const anonymousAccount = await publicFetch(worker, accountRequest(), env);
+  assert.equal(anonymousAccount.status, 401);
+  assert.deepEqual(await anonymousAccount.json(), { error: 'login_required' });
+  const usualAccount = await publicFetch(worker, accountRequest(payHeaders), env);
+  assert.equal(usualAccount.headers.get('Cache-Control'), 'no-store');
+  assert.equal((await usualAccount.json()).account_id, 'same-google-sub');
+  const otherAccount = await publicFetch(worker, accountRequest(otherHeaders), env);
+  assert.equal((await otherAccount.json()).account_id, 'different-user');
   charge.amount_refunded = 25;
   await send(event('charge.refunded', 'evt_fixture_partial', { id: chargeID }));
   const read = () => publicFetch(worker, new Request(site + '/api/shop/account', { headers: payHeaders }), env).then(r => r.json());
