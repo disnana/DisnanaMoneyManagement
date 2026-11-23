@@ -32,7 +32,7 @@ function showAccountID(value) {
 }
 
 function showAccount(account) {
-  for (const id of ['history-links', 'lots', 'logout']) element(id).hidden = !account;
+  for (const id of ['lots', 'logout']) element(id).hidden = !account;
   for (const id of ['login', 'login-note']) element(id).hidden = Boolean(account);
   showAccountID(account?.account_id);
   const balance = element('balance');
@@ -178,6 +178,7 @@ element('logout').addEventListener('click', async () => {
       if (key.startsWith('mane-checkout:')) sessionStorage.removeItem(key);
     }
     showAccount(null);
+    element('login').focus({ preventScroll: true });
     await load();
   } catch {
     status.textContent = 'ログアウトできませんでした。再試行してください。';
