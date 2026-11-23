@@ -1,85 +1,107 @@
 import { Image } from 'expo-image';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View, useColorScheme } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { metrics, usePalette } from '@/lib/theme';
 
+type GuideImage = { image: number; darkImage: number };
+type GuideStep = { instruction: string; screenshot: GuideImage };
 type GuidePage = {
   title: string;
-  detail: string;
-  paths: readonly string[];
-  illustration: { image: number; darkImage: number; height: number };
+  steps: readonly GuideStep[];
 };
 
-const introduction: readonly GuidePage[] = [
-  {
-    title: '画面下の＋から記録',
-    detail: '中央の＋を押して、支出・収入・振替を選びます。金額などを入力して保存すると、取引タブから見返せます。',
-    paths: ['画面下の＋ → 支出・収入・振替', '画面下の取引 → 記録を見返す'],
-    illustration: { image: require('../../assets/start-guide/record.jpg'), darkImage: require('../../assets/start-guide/record-dark.jpg'), height: 118 },
+const topics = {
+  record: {
+    title: '支出や収入を記録する',
+    steps: [{
+      instruction: 'どのタブからでも、画面下の中央にある＋を押します。',
+      screenshot: { image: require('../../assets/start-guide/record.jpg'), darkImage: require('../../assets/start-guide/record-dark.jpg') },
+    }],
   },
-  {
-    title: '設定を開く・振動を止める',
-    detail: '記録したときやボタンを押したときの振動は、「操作時の振動」をオフにすると止められます。',
-    paths: ['ホーム右上の歯車 → 設定 → 操作 → 操作時の振動', '口座右上の歯車 → 設定'],
-    illustration: { image: require('../../assets/start-guide/settings-haptics.jpg'), darkImage: require('../../assets/start-guide/settings-haptics-dark.jpg'), height: 174 },
+  vibration: {
+    title: '操作時の振動を止める',
+    steps: [
+      {
+        instruction: 'ホームの右上にある歯車を押す',
+        screenshot: { image: require('../../assets/start-guide/settings-open.jpg'), darkImage: require('../../assets/start-guide/settings-open-dark.jpg') },
+      },
+      {
+        instruction: '設定の「操作」で「操作時の振動」をオフにする',
+        screenshot: { image: require('../../assets/start-guide/settings-vibration-off.jpg'), darkImage: require('../../assets/start-guide/settings-vibration-off-dark.jpg') },
+      },
+    ],
   },
-  {
-    title: '何にいくら使ったか確認',
-    detail: 'ホームで残高と月の収支を見て、分析で支出の割合や収入の内訳を見比べられます。',
-    paths: ['ホーム → 月の収支', '画面下の分析 → 支出・収入の内訳'],
-    illustration: { image: require('../../assets/start-guide/analysis.jpg'), darkImage: require('../../assets/start-guide/analysis-dark.jpg'), height: 265 },
+  analysis: {
+    title: '支出の内訳を見る',
+    steps: [{
+      instruction: '画面下の「分析」を押すと、カテゴリ別の支出を確認できます。',
+      screenshot: { image: require('../../assets/start-guide/analysis.jpg'), darkImage: require('../../assets/start-guide/analysis-dark.jpg') },
+    }],
   },
-  {
-    title: 'カードの未払いとポイント',
-    detail: 'カードごとに支払残額と利用可能額を確認。ポイントで払った分は、充当額を記録して実際の支払額に反映できます。',
-    paths: ['口座 → 確認したいカード', '画面下の＋ → 支出 → うちポイント充当'],
-    illustration: { image: require('../../assets/start-guide/card.jpg'), darkImage: require('../../assets/start-guide/card-dark.jpg'), height: 254 },
+  card: {
+    title: 'カードの未払い・ポイントを確認',
+    steps: [{
+      instruction: '未払いは「口座」でカードを選んで確認できます。ポイント払いは支出入力の「うちポイント充当」に記録します。',
+      screenshot: { image: require('../../assets/start-guide/card.jpg'), darkImage: require('../../assets/start-guide/card-dark.jpg') },
+    }],
   },
-  {
-    title: '目的に合わせて貯金',
-    detail: '旅行や買い替えなどの目標を作り、積み立てを記録。目標まであといくらか確認できます。',
-    paths: ['ホーム右上の「予算・計画」 → 貯金'],
-    illustration: { image: require('../../assets/start-guide/savings.jpg'), darkImage: require('../../assets/start-guide/savings-dark.jpg'), height: 254 },
+  savings: {
+    title: '貯金目標を立てる',
+    steps: [{
+      instruction: 'ホーム右上の「予算・計画」を開き、「貯金」を選びます。',
+      screenshot: { image: require('../../assets/start-guide/savings.jpg'), darkImage: require('../../assets/start-guide/savings-dark.jpg') },
+    }],
   },
-];
-
-const topics: readonly GuidePage[] = [
-  ...introduction,
-  {
+  search: {
     title: '過去の取引を探す',
-    detail: '取引の検索を開いて、キーワードや条件を指定できます。',
-    paths: ['画面下の取引 → 右上の虫眼鏡'],
-    illustration: { image: require('../../assets/start-guide/transaction-search.jpg'), darkImage: require('../../assets/start-guide/transaction-search-dark.jpg'), height: 88 },
+    steps: [{
+      instruction: '画面下の「取引」を開き、右上の虫眼鏡を押します。',
+      screenshot: { image: require('../../assets/start-guide/transaction-search.jpg'), darkImage: require('../../assets/start-guide/transaction-search-dark.jpg') },
+    }],
   },
-  {
+  planning: {
     title: '予算や買い物を計画する',
-    detail: 'カテゴリごとの予算や、買い物にかかる費用を確認できます。',
-    paths: ['ホーム右上の「予算・計画」 → 予算・買い物試算'],
-    illustration: { image: require('../../assets/start-guide/planning.jpg'), darkImage: require('../../assets/start-guide/planning-dark.jpg'), height: 155 },
+    steps: [{
+      instruction: 'ホーム右上の「予算・計画」を開き、「予算」か「買い物試算」を選びます。',
+      screenshot: { image: require('../../assets/start-guide/planning.jpg'), darkImage: require('../../assets/start-guide/planning-dark.jpg') },
+    }],
   },
-  {
+  categories: {
     title: 'カテゴリ・家計グループを変える',
-    detail: 'カテゴリの名前や色を変えたり、家庭や事業の記録を分けたりできます。',
-    paths: ['ホーム右上の歯車 → 設定 → 事業・精算 → カテゴリ・家計グループ'],
-    illustration: { image: require('../../assets/start-guide/categories-ledgers.jpg'), darkImage: require('../../assets/start-guide/categories-ledgers-dark.jpg'), height: 158 },
+    steps: [{
+      instruction: 'ホーム右上の歯車を押し、設定の「事業・精算」を探します。',
+      screenshot: { image: require('../../assets/start-guide/categories-ledgers.jpg'), darkImage: require('../../assets/start-guide/categories-ledgers-dark.jpg') },
+    }],
   },
-  {
-    title: 'バックアップ・CSV取り込み',
-    detail: '家計データの書き出し・復元や、対応するCSVの取り込みができます。',
-    paths: ['ホーム右上の歯車 → 設定 → データ管理'],
-    illustration: { image: require('../../assets/start-guide/data-management.jpg'), darkImage: require('../../assets/start-guide/data-management-dark.jpg'), height: 169 },
+  backups: {
+    title: 'バックアップ・CSVを取り込む',
+    steps: [{
+      instruction: 'ホーム右上の歯車を押し、設定から「データ管理」を開きます。',
+      screenshot: { image: require('../../assets/start-guide/data-management.jpg'), darkImage: require('../../assets/start-guide/data-management-dark.jpg') },
+    }],
   },
+} satisfies Record<string, GuidePage>;
+
+const introduction: readonly GuidePage[] = [topics.record, topics.vibration, topics.analysis, topics.card, topics.savings];
+const topicGroups = [
+  { title: '記録・確認', pages: [topics.record, topics.search, topics.analysis, topics.card] },
+  { title: '設定・データ', pages: [topics.vibration, topics.categories, topics.backups] },
+  { title: '予算・貯金', pages: [topics.planning, topics.savings] },
 ];
+const reviewPages: readonly GuidePage[] = topicGroups.flatMap((group) => group.pages);
+const screenshotRatio = 390 / 844;
 
 export function GettingStarted({ onClose, review = false }: { onClose: () => void; review?: boolean }) {
   const p = usePalette();
   const isDark = useColorScheme() === 'dark';
+  const { width, fontScale } = useWindowDimensions();
   const [index, setIndex] = useState<number | null>(review ? null : 0);
-  const pages = review ? topics : introduction;
+  const [openImage, setOpenImage] = useState<GuideStep>();
+  const pages = review ? reviewPages : introduction;
   const page = index === null ? undefined : pages[index];
-  const imageSource = isDark ? page?.illustration.darkImage : page?.illustration.image;
+  const sideBySide = width >= 360 && fontScale < 1.3 && page?.steps.length === 2;
   const last = index === pages.length - 1;
 
   return (
@@ -87,29 +109,45 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
       <View style={{ flex: 1, width: '100%', maxWidth: 480, alignSelf: 'center', paddingHorizontal: 24 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
           <Text accessibilityLiveRegion="polite" style={{ color: p.textSecondary, fontSize: 14 }}>
-            {review ? (page ? '使い方' : '') : (index ?? 0) + 1 + ' / ' + pages.length}
+            {openImage ? '画面の拡大' : review ? (page ? '使い方' : '') : (index ?? 0) + 1 + ' / ' + pages.length}
           </Text>
-          <Pressable accessibilityRole="button" onPress={onClose} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 }}>
-            <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>{review ? '閉じる' : 'スキップ'}</Text>
+          <Pressable accessibilityRole="button" onPress={openImage ? () => setOpenImage(undefined) : onClose}
+            style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 }}>
+            <Text style={{ color: p.tint, fontSize: 15, fontWeight: '600' }}>{openImage ? '手順に戻る' : review ? '閉じる' : 'スキップ'}</Text>
           </Pressable>
         </View>
-        {page && index !== null ? (
+        {openImage ? (
+          <ScrollView contentContainerStyle={{ paddingBottom: 16, gap: 10 }}>
+            <Text accessibilityRole="header" style={{ color: p.text, fontSize: 18, fontWeight: '700' }}>{openImage.instruction}</Text>
+            <Image source={isDark ? openImage.screenshot.darkImage : openImage.screenshot.image}
+              accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+              contentFit="contain" style={{ width: '100%', aspectRatio: screenshotRatio, borderRadius: 14 }} />
+          </ScrollView>
+        ) : page && index !== null ? (
           <>
             <ScrollView key={page.title} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', gap: 14, paddingVertical: 12 }}>
               <Text accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800' }}>
                 {page.title}
               </Text>
-              <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={{
-                backgroundColor: p.fill, borderRadius: 24, padding: 10, overflow: 'hidden',
-              }}>
-                <Image source={imageSource} recyclingKey={Platform.OS === 'android' ? String(imageSource) : undefined}
-                  contentFit="contain" style={{ height: page.illustration.height, width: '100%' }} />
+              <View style={{ flexDirection: sideBySide ? 'row' : 'column', gap: 12 }}>
+                {page.steps.map((step, stepIndex) => {
+                  const source = isDark ? step.screenshot.darkImage : step.screenshot.image;
+                  return (
+                    <View key={step.instruction} style={{ flex: sideBySide ? 1 : undefined, minWidth: 0, gap: 8 }}>
+                      <Text style={{ color: p.text, fontSize: 15, lineHeight: 22, fontWeight: '600', minHeight: sideBySide ? 48 : undefined }}>
+                        {page.steps.length > 1 ? `${stepIndex + 1}. ` : ''}{step.instruction}
+                      </Text>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`画面を拡大：${step.instruction}`}
+                        onPress={() => setOpenImage(step)} style={{ width: '100%', maxWidth: 190, alignSelf: 'center' }}>
+                        <Image source={source} recyclingKey={Platform.OS === 'android' ? String(source) : undefined}
+                          accessibilityElementsHidden importantForAccessibility="no-hide-descendants" contentFit="contain"
+                          style={{ width: '100%', aspectRatio: screenshotRatio, borderWidth: 1, borderColor: p.outline, borderRadius: 12 }} />
+                      </Pressable>
+                    </View>
+                  );
+                })}
               </View>
-              <Text style={{ color: p.textSecondary, fontSize: 16, lineHeight: 24 }}>{page.detail}</Text>
-              <View style={{ backgroundColor: p.fill, borderRadius: metrics.cardRadius, padding: 14, gap: 6 }}>
-                <Text style={{ color: p.tint, fontSize: 14, fontWeight: '700' }}>場所</Text>
-                {page.paths.map((path) => <Text key={path} style={{ color: p.text, fontSize: 15, lineHeight: 23 }}>{path}</Text>)}
-              </View>
+              <Text style={{ color: p.textSecondary, fontSize: 13, textAlign: 'center' }}>画像をタップすると拡大できます</Text>
             </ScrollView>
             <View style={{ gap: 6, paddingBottom: 14, paddingTop: 10 }}>
               <Pressable accessibilityRole="button" onPress={review ? () => setIndex(null) : last ? onClose : () => setIndex(index + 1)}
@@ -130,15 +168,23 @@ export function GettingStarted({ onClose, review = false }: { onClose: () => voi
         ) : (
           <ScrollView contentContainerStyle={{ gap: 8, paddingVertical: 12 }}>
             <Text accessibilityRole="header" style={{ color: p.text, fontSize: 28, fontWeight: '800', marginBottom: 8 }}>使い方</Text>
-            {pages.map((topic, topicIndex) => (
-              <Pressable key={topic.title} accessibilityRole="button" accessibilityLabel={topic.title} onPress={() => setIndex(topicIndex)}
-                style={({ pressed }) => ({
-                  minHeight: 48, flexDirection: 'row', gap: 10, alignItems: 'center', padding: 14,
-                  borderRadius: metrics.cardRadius, backgroundColor: pressed ? p.fill : p.card,
-                })}>
-                <Text style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: '600' }}>{topic.title}</Text>
-                <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={15} tintColor={p.tint} accessible={false} />
-              </Pressable>
+            {topicGroups.map((group) => (
+              <View key={group.title} style={{ gap: 6, marginBottom: 8 }}>
+                <Text accessibilityRole="header" style={{ color: p.textSecondary, fontSize: 14, fontWeight: '700' }}>{group.title}</Text>
+                <View style={{ backgroundColor: p.card, borderRadius: metrics.cardRadius, overflow: 'hidden' }}>
+                  {group.pages.map((topic, position) => (
+                    <Pressable key={topic.title} accessibilityRole="button" accessibilityLabel={topic.title}
+                      onPress={() => setIndex(reviewPages.indexOf(topic))} style={({ pressed }) => ({
+                        minHeight: 48, flexDirection: 'row', gap: 10, alignItems: 'center', padding: 12,
+                        borderTopWidth: position === 0 ? 0 : StyleSheet.hairlineWidth, borderTopColor: p.fill,
+                        backgroundColor: pressed ? p.fill : p.card,
+                      })}>
+                      <Text style={{ flex: 1, color: p.text, fontSize: 16, fontWeight: '600' }}>{topic.title}</Text>
+                      <SymbolView name={{ ios: 'chevron.right', android: 'chevron_right' }} size={15} tintColor={p.tint} accessible={false} />
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             ))}
           </ScrollView>
         )}
