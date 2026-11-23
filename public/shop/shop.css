@@ -97,6 +97,7 @@ label.pack-option:has(input:focus-visible) { outline: 3px solid var(--accent); o
 .record-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .record-actions { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
 .record-feedback { grid-column: 1 / -1; }
+.record-actions .button { min-height: 42px; padding: 6px 12px; font-size: .875rem; }
 .record-actions a { color: var(--accent); font-size: .875rem; }
 .record-actions .quiet { padding-inline: 0; }
 .record-value .muted { display: block; font-weight: 550; max-inline-size: 16ch; }

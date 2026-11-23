@@ -16,6 +16,7 @@ const orderStatus = {
 };
 const activity = { grant: '付与', spend: '消費', reverse: '返金に伴う引き戻し' };
 const orderFeedback = new Map();
+const resumeAvailability = new Map();
 const completedOrderStatuses = new Set(['paid', 'refunded', 'payment_failed', 'expired']);
 let offeredPacks = [];
 let selectedPackID = '';
@@ -77,14 +78,29 @@ function label(tag, text, className) {
   return node;
 }
 
-async function reconcile(button, order, feedback) {
-  button.disabled = true;
-  feedback.textContent = '決済状況を確認しています…';
+function openCheckout(value) {
+  const url = new URL(value);
+  if (url.origin !== 'https://checkout.stripe.com' || url.username || url.password) {
+    throw new Error('invalid_checkout');
+  }
+  location.assign(url.href);
+}
+
+async function reconcile(order, feedback, resume) {
+  const buttons = feedback.parentElement.querySelectorAll('.order-action');
+  buttons.forEach(button => { button.disabled = true; });
+  feedback.textContent = resume ? '元の決済画面を確認しています…' : '決済状況を確認しています…';
   try {
-    const result = await request('orders/' + encodeURIComponent(order.id) + '/reconcile', {});
-    const message = ['pending', 'fulfillment_pending', 'refund_pending'].includes(result.status)
-      ? '決済結果を確認中です。時間をおいて購入履歴をご確認ください。'
-      : '決済状況を更新しました。';
+    const result = await request('orders/' + encodeURIComponent(order.id) + (resume ? '/resume' : '/reconcile'), {});
+    if (resume && result.checkout_url) {
+      openCheckout(result.checkout_url);
+      return;
+    }
+    if (typeof result.resume_available === 'boolean') resumeAvailability.set(order.id, result.resume_available);
+    const message = result.resume_available ? 'まだお支払いは完了していません。「決済を再開」から続けられます。' :
+      result.status === 'pending' ? '決済状況を確認しました。この注文の決済画面は再開できません。' :
+      ['fulfillment_pending', 'refund_pending'].includes(result.status) ? '反映中です。時間をおいて購入履歴をご確認ください。' :
+      '決済状況を更新しました。';
     orderFeedback.set(order.id, message);
     feedback.textContent = message;
     await load();
@@ -92,7 +108,7 @@ async function reconcile(button, order, feedback) {
     if (updated !== feedback) updated?.focus({ preventScroll: true });
   } catch {
     feedback.textContent = '決済結果を取得できませんでした。再購入せず、時間をおいて購入履歴をご確認ください。';
-  } finally { button.disabled = false; }
+  } finally { buttons.forEach(button => { button.disabled = false; }); }
 }
 
 function showAccountID(value) {
@@ -114,7 +130,7 @@ function forgetCompletedOrders(orders) {
   }
 }
 
-function showAccount(account) {
+function showAccount(account, purchasesEnabled = false) {
   for (const id of ['account-history', 'lots', 'logout']) element(id).hidden = !account;
   for (const id of ['login', 'login-note']) element(id).hidden = Boolean(account);
   showAccountID(account?.account_id);
@@ -146,9 +162,14 @@ function showAccount(account) {
     if (order.amount_refunded > 0) actions.append(label('span', '返金 ' + yen.format(order.amount_refunded), 'muted'));
     if (order.receipt_url) linkReceipt(actions, order.receipt_url);
     if (['pending', 'fulfillment_pending', 'refund_pending', 'review_required'].includes(order.status)) {
-      const button = label('button', '決済状況を再確認', 'quiet');
-      button.addEventListener('click', () => void reconcile(button, order, feedback));
+      const button = label('button', '決済状況を再確認', 'quiet order-action');
+      button.addEventListener('click', () => void reconcile(order, feedback, false));
       actions.append(button);
+      if (order.status === 'pending' && purchasesEnabled && account.resume_supported && resumeAvailability.get(order.id) !== false) {
+        const resume = label('button', '決済を再開', 'button order-action');
+        resume.addEventListener('click', () => void reconcile(order, feedback, true));
+        actions.append(resume);
+      }
     }
     if (actions.childNodes.length) row.append(actions);
     row.append(feedback);
@@ -246,9 +267,7 @@ async function buy(pack) {
       if (error.message === 'order_expired') sessionStorage.removeItem(key);
       throw error;
     });
-    const url = new URL(result.checkout_url);
-    if (url.origin !== 'https://checkout.stripe.com') throw new Error('invalid_checkout');
-    location.assign(url.href);
+    openCheckout(result.checkout_url);
   } catch {
     feedback.textContent = '決済画面を開けませんでした。購入履歴で状況を確認してから、時間をおいて再試行してください。';
     resetCheckout();
@@ -265,10 +284,12 @@ async function load() {
         throw error;
       }),
     ]);
-    showAccount(account);
+    showAccount(account, enabled);
     renderPacks(packs, testMode, enabled, account);
     status.textContent = loginFailed ? 'ログインを完了できませんでした。再試行してください。' :
-      returned === 'canceled' ? '購入手続きから戻りました。決済状況は購入履歴で確認できます。' :
+      returned === 'canceled' ? (account?.resume_supported && enabled
+        ? '購入履歴から決済状況を確認し、未払いの決済を再開できます。'
+        : '購入手続きから戻りました。決済状況は購入履歴で確認できます。') :
       returned === 'returned' ? '決済状況を購入履歴で確認できます。反映まで時間がかかる場合があります。' :
       account ? '' : '残高を表示するにはログインしてください。';
   } catch {
@@ -291,6 +312,7 @@ element('logout').addEventListener('click', async () => {
       if (key.startsWith('mane-checkout:')) sessionStorage.removeItem(key);
     }
     orderFeedback.clear();
+    resumeAvailability.clear();
     showAccount(null);
     await load();
   } catch {
