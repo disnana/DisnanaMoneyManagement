@@ -26,13 +26,25 @@
   <meta name="twitter:image:alt" content="マネーちゃんのAIクレジットショップ">
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/portal/site.css">
-  <link rel="stylesheet" href="/shop/shop.css?v=history-1">
-  <script src="/shop/shop.js?v=history-1" type="module"></script>
+  <link rel="stylesheet" href="/shop/shop.css?v=menu-1">
+  <script src="/shop/shop-nav.js" type="module"></script>
+  <script src="/shop/shop.js?v=menu-1" type="module"></script>
 </head>
 <body class="shop-page">
   <header class="shop-bar"><div class="shell top">
     <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
-    <nav aria-label="主要ページ"><a href="/app/">Web家計簿</a><button id="logout" type="button" class="quiet" hidden>ログアウト</button></nav>
+    <div class="shop-navigation">
+      <button type="button" class="shop-menu-toggle" aria-expanded="false" aria-controls="shop-menu">
+        <span class="shop-menu-icon" aria-hidden="true"></span>メニュー
+      </button>
+      <nav id="shop-menu" class="shop-menu" aria-label="ショップ内のページ">
+        <a href="/shop/" aria-current="page">ショップ</a>
+        <a href="/shop/history/">購入履歴</a>
+        <a href="/shop/history/?type=activity">利用履歴</a>
+        <a href="/app/" class="shop-menu-secondary">Web家計簿</a>
+        <button id="logout" type="button" class="quiet" hidden>ログアウト</button>
+      </nav>
+    </div>
   </div></header>
   <main class="shell credit-shop">
     <header class="shop-intro">
@@ -56,10 +68,6 @@
           <p id="status" role="status"></p>
           <button id="refresh" type="button" class="quiet" hidden>更新</button>
         </div>
-        <nav id="history-links" class="shop-history-links" aria-label="クレジットの履歴" hidden>
-          <a href="/shop/history/">購入履歴</a>
-          <a href="/shop/history/?type=activity">利用履歴</a>
-        </nav>
       </div>
       <section class="shop-section packs-section" aria-labelledby="packs-heading">
         <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note">読み込み中…</p></div>
