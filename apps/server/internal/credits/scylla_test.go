@@ -77,8 +77,11 @@ func TestScyllaWallet(t *testing.T) {
 	if err := a.GrantPurchase(ctx, subject, "reversed-before-grant", 9, time.Time{}); !errors.Is(err, ErrPurchaseReversed) {
 		t.Fatalf("late grant after reversal = %v", err)
 	}
+	if err := a.GrantPurchase(ctx, subject, "expired-purchase", 9, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("record paid order with expired credits: %v", err)
+	}
 	snapshot, err := b.Snapshot(ctx, subject)
-	if err != nil || snapshot.Balance != 4 || len(snapshot.History) != 5 {
+	if err != nil || snapshot.Balance != 4 || len(snapshot.History) != 6 {
 		t.Fatalf("unexpected snapshot after reversal and retry: %+v, %v", snapshot, err)
 	}
 }

@@ -1,8 +1,8 @@
 import { b64url, callBackend, digest, equal, hash, json, random } from './protocol.mjs';
 
-const sessionCookie = '__Host-mane-shop';
-const stateCookie = '__Host-mane-oauth';
-const cookie = (name, value, seconds) => name + '=' + value + '; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=' + seconds;
+const sessionCookie = '__Secure-mane-shop';
+const stateCookie = '__Secure-mane-oauth';
+const cookie = (name, value, seconds) => name + '=' + value + '; Path=/api/shop/; Secure; HttpOnly; SameSite=Lax; Max-Age=' + seconds;
 const getCookie = (request, name) => {
   const match = (request.headers.get('Cookie') ?? '').split(';').map(x => x.trim()).find(x => x.startsWith(name + '='));
   const value = match?.slice(name.length + 1) ?? '';

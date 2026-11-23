@@ -1,10 +1,11 @@
 import { callBackend, decode, encode, equal, hash, hex, hmac, json, readBytes } from './protocol.mjs';
 
 const unix = () => Math.floor(Date.now() / 1000);
+const checkoutLifetime = 60 * 60;
+const minimumCheckoutLifetime = 30 * 60;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const stripeID = /^([a-z]+_)[a-zA-Z0-9_]{5,255}$/;
-const shopTestEnabled = env => env.MANE_SHOP_TEST_MODE === '1' &&
-  /^(sk|rk)_test_[a-zA-Z0-9_]+$/.test(env.STRIPE_SECRET_KEY ?? '') &&
+const stripeTestAvailable = env => /^(sk|rk)_test_[a-zA-Z0-9_]+$/.test(env.STRIPE_SECRET_KEY ?? '') &&
   /^whsec_[a-zA-Z0-9_]+$/.test(env.STRIPE_WEBHOOK_SECRET ?? '');
 
 export function packs(env) {
@@ -24,7 +25,7 @@ export function packs(env) {
 }
 
 async function stripe(env, fetcher, path, form, idempotency) {
-  if (!shopTestEnabled(env)) throw new Error('Stripe test configuration unavailable');
+  if (!stripeTestAvailable(env)) throw new Error('Stripe test configuration unavailable');
   const headers = new Headers({ Authorization: 'Bearer ' + env.STRIPE_SECRET_KEY });
   if (idempotency) headers.set('Idempotency-Key', idempotency);
   const response = await fetcher('https://api.stripe.com/v1' + path, {
@@ -52,12 +53,15 @@ export async function checkout(env, fetcher, user, input) {
     .bind(input.request_id, user, pack.id, pack.title, pack.amount, pack.credits, pack.validity_seconds, unix()).run();
   const order = await findOrder(env, input.request_id);
   if (!order || order.subject !== user || order.pack !== pack.id || order.status !== 'pending') return json({ error: 'order_conflict' }, 409);
-  if (order.checkout_url && order.created_at + 1800 > unix()) return json({ checkout_url: order.checkout_url });
-  if (order.created_at + 1800 <= unix()) return json({ error: 'order_expired' }, 409);
+  const expires = order.created_at + checkoutLifetime;
+  const remaining = expires - unix();
+  if (order.checkout_url && remaining > 0) return json({ checkout_url: order.checkout_url });
+  if (remaining <= minimumCheckoutLifetime) return json({ error: 'order_expired' }, 409);
   const site = env.SITE_ORIGIN;
   // Use the stored order, so retries are stable even if the pack is edited.
   const form = new URLSearchParams({
     mode: 'payment',
+    expires_at: String(expires),
     'payment_method_types[0]': 'card',
     'line_items[0][quantity]': '1',
     'line_items[0][price_data][currency]': 'jpy',
@@ -172,7 +176,7 @@ async function onCharge(env, fetcher, event) {
 }
 
 export async function webhook(env, fetcher, request) {
-  if (!shopTestEnabled(env)) return json({ error: 'sales_unavailable' }, 503);
+  if (!stripeTestAvailable(env)) return json({ error: 'sales_unavailable' }, 503);
   let event;
   try {
     const raw = await readBytes(request, 65536);
@@ -197,16 +201,22 @@ export function catalog(env) {
   return packs(env).map(({ id, title, amount, credits, validity_seconds }) => ({ id, title, amount, credits, validity_seconds }));
 }
 export async function canCheckout(env, subject) {
-  if (!shopTestEnabled(env) || !subject) return false;
+  if (env.MANE_SHOP_TEST_MODE !== '1' || !stripeTestAvailable(env) || !subject) return false;
   const subjectHash = await hash(subject);
   return (env.MANE_SHOP_TEST_SUBJECT_HASHES ?? '').split(',').map(x => x.trim()).includes(subjectHash);
 }
 
 export async function reconcile(env, fetcher) {
-  if (!shopTestEnabled(env)) return;
-  const { results } = await env.DB.prepare("SELECT * FROM orders WHERE status IN ('fulfillment_pending', 'refund_pending') ORDER BY created_at LIMIT 20").all();
-  const work = results.map(order => order.status === 'refund_pending'
-    ? refund(env, fetcher, order, order.amount_refunded, order.payment_intent)
-    : onCheckout(env, fetcher, { type: 'checkout.session.completed', data: { object: { id: order.stripe_session } } }));
+  if (!stripeTestAvailable(env)) return;
+  const time = unix();
+  const pending = "status IN ('fulfillment_pending', 'refund_pending') AND retry_at <= ?";
+  const { results } = await env.DB.prepare("SELECT * FROM orders WHERE " + pending + " ORDER BY retry_at, created_at LIMIT 20").bind(time).all();
+  const work = results.map(async order => {
+    const claim = await env.DB.prepare("UPDATE orders SET retry_at = ? WHERE id = ? AND " + pending)
+      .bind(time + 600, order.id, time).run();
+    if (!claim.meta.changes) return;
+    if (order.status === 'refund_pending') return refund(env, fetcher, order, order.amount_refunded, order.payment_intent);
+    return onCheckout(env, fetcher, { type: 'checkout.session.completed', data: { object: { id: order.stripe_session } } });
+  });
   await Promise.allSettled(work);
 }

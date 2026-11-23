@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS orders (
   payment_intent TEXT,
   receipt_url TEXT,
   amount_refunded INTEGER NOT NULL DEFAULT 0,
+  retry_at INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS orders_for_account ON orders (subject, created_at DESC);

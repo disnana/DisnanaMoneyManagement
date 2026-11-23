@@ -58,6 +58,10 @@ func apply(lots []lot, op operation, at time.Time) ([]lot, error) {
 	switch op.Kind {
 	case "grant":
 		if op.Expires != 0 && op.Expires <= now {
+			if op.Source != "" {
+				// A verified payment can arrive after the credits have already expired.
+				return active, nil
+			}
 			return nil, errors.New("credit expiration must be in the future")
 		}
 		if op.Amount > maxBalance-balance {

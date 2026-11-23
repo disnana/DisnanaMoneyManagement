@@ -49,7 +49,7 @@ function environment() {
 const post = (path, body, headers = {}) => new Request(site + '/api/shop/' + path, {
   method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body),
 });
-const payHeaders = { Origin: site, Cookie: '__Host-mane-shop=' + accountCookie };
+const payHeaders = { Origin: site, Cookie: '__Secure-mane-shop=' + accountCookie };
 const event = (kind, id, object) => ({ livemode: false, type: kind, id, data: { object } });
 
 test('valid signed Stripe events grant once, retry after a failed backend write, and reverse after full refund', async () => {
@@ -82,6 +82,7 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
       created++;
       assert.equal(options.headers.get('Idempotency-Key'), 'mane-checkout:' + requestID);
       assert.equal(options.body.get('line_items[0][price_data][unit_amount]'), String(pack.amount));
+      assert.ok(Number(options.body.get('expires_at')) - cutoff() >= 3500);
       return Response.json({ id: sessionID, url: 'https://checkout.stripe.com/c/pay/test', livemode: false });
     }
     if (url.pathname === '/v1/charges/' + chargeID) return Response.json(charge);
@@ -123,6 +124,7 @@ test('valid signed Stripe events grant once, retry after a failed backend write,
   assert.equal((await read()).orders[0].status, 'review_required');
   charge.amount_refunded = pack.amount;
   const refund = event('charge.refunded', 'evt_fixture_full', { id: chargeID });
+  env.MANE_SHOP_TEST_MODE = '0';
   assert.equal((await send(refund)).status, 200);
   assert.equal((await send(refund)).status, 200);
   assert.equal(reversals, 1);
@@ -155,7 +157,7 @@ test('Google OAuth callback consumes state once and browser session cookie is se
   const login = await worker.fetch(callback, env);
   assert.equal(login.status, 303);
   assert.equal(new URL(login.headers.get('Location')).search, '');
-  assert.ok(login.headers.getSetCookie().some(value => /^__Host-mane-shop=.*; Path=\/; Secure; HttpOnly; SameSite=Lax;/.test(value)));
+  assert.ok(login.headers.getSetCookie().some(value => /^__Secure-mane-shop=.*; Path=\/api\/shop\/; Secure; HttpOnly; SameSite=Lax;/.test(value)));
   assert.match((await worker.fetch(callback, env)).headers.get('Location'), /login=failed/);
   assert.equal(exchanges, 1);
 });

@@ -38,3 +38,14 @@ func TestGrantLimitsAndExpiration(t *testing.T) {
 		t.Fatalf("grant = %v, %v", next, err)
 	}
 }
+
+func TestLatePurchaseGrantDoesNotMakeExpiredCreditsSpendable(t *testing.T) {
+	now := time.UnixMilli(4000)
+	lots, err := apply([]lot{{Amount: 7}}, operation{Kind: "grant", Amount: 10, Expires: 3000, Source: "order"}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if balance, err := activeBalance(lots, now.UnixMilli()); err != nil || balance != 7 {
+		t.Fatalf("available amount after expired payment = %d, %v", balance, err)
+	}
+}

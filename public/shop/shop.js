@@ -77,6 +77,10 @@ function showAccount(account) {
   }, '購入履歴はありません。');
   rows('history', wallet.history, (row, item) => {
     row.textContent = date.format(item.at_ms) + '　' + (activity[item.operation.kind] ?? '確認中') + '　' + number.format(item.operation.amount);
+    if (item.operation.kind === 'grant' && item.operation.expires_at_ms) {
+      const expires = item.operation.expires_at_ms;
+      row.append('　期限 ' + date.format(expires) + (expires <= Date.now() ? '（失効）' : ''));
+    }
   }, 'クレジット履歴はありません。');
 }
 
@@ -85,7 +89,7 @@ function recoverableOrder(packID) {
   const stored = sessionStorage.getItem(key);
   if (stored) {
     const value = JSON.parse(stored);
-    if (value.created + 25 * 60 * 1000 > Date.now()) return [key, value.id];
+    if (value.created + 60 * 60 * 1000 > Date.now()) return [key, value.id];
   }
   const id = crypto.randomUUID();
   sessionStorage.setItem(key, JSON.stringify({ id, created: Date.now() }));
@@ -161,7 +165,7 @@ element('logout').addEventListener('click', async () => {
     status.textContent = 'ログアウトできませんでした。再試行してください。';
   } finally { button.disabled = false; }
 });
-if (returned) {
+if (returned === 'returned') {
   for (const key of Object.keys(sessionStorage)) {
     if (key.startsWith('mane-checkout:')) sessionStorage.removeItem(key);
   }
