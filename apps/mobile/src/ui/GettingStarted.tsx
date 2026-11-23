@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { router, Stack } from 'expo-router';
+import type { SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, View, useColorScheme, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,14 +12,14 @@ type GuideImage = { image: number; darkImage: number };
 type GuideStep = { instruction: string; screenshot: GuideImage };
 type GuidePage = {
   title: string;
-  location: string;
   steps: readonly GuideStep[];
 };
 
 const topics = {
   record: {
     title: '支出や収入を記録する',
-    location: '画面下の＋',
+    listTitle: '取引を記録',
+    icon: { ios: 'plus', android: 'add' },
     steps: [{
       instruction: 'どのタブからでも、画面下の中央にある＋を押します。',
       screenshot: { image: require('../../assets/start-guide/record.jpg'), darkImage: require('../../assets/start-guide/record-dark.jpg') },
@@ -26,7 +27,8 @@ const topics = {
   },
   vibration: {
     title: '操作時の振動を止める',
-    location: '設定 → 操作',
+    listTitle: '振動をオフ',
+    icon: { ios: 'waveform', android: 'vibration' },
     steps: [
       {
         instruction: 'ホームの右上にある歯車を押す',
@@ -40,7 +42,8 @@ const topics = {
   },
   analysis: {
     title: '支出の内訳を見る',
-    location: '画面下の分析',
+    listTitle: '支出の内訳',
+    icon: { ios: 'chart.pie', android: 'pie_chart' },
     steps: [{
       instruction: '画面下の「分析」を押すと、カテゴリ別の支出を確認できます。',
       screenshot: { image: require('../../assets/start-guide/analysis.jpg'), darkImage: require('../../assets/start-guide/analysis-dark.jpg') },
@@ -48,7 +51,8 @@ const topics = {
   },
   card: {
     title: 'カードの未払い・ポイントを確認',
-    location: '口座 → カード、または支出入力',
+    listTitle: 'カード未払い・ポイント',
+    icon: { ios: 'creditcard', android: 'credit_card' },
     steps: [{
       instruction: '未払いは「口座」でカードを選んで確認できます。ポイント払いは支出入力の「うちポイント充当」に記録します。',
       screenshot: { image: require('../../assets/start-guide/card.jpg'), darkImage: require('../../assets/start-guide/card-dark.jpg') },
@@ -56,7 +60,8 @@ const topics = {
   },
   savings: {
     title: '貯金目標を立てる',
-    location: '予算・計画 → 貯金',
+    listTitle: '貯金目標',
+    icon: { ios: 'target', android: 'flag' },
     steps: [{
       instruction: 'ホーム右上の「予算・計画」を開き、「貯金」を選びます。',
       screenshot: { image: require('../../assets/start-guide/savings.jpg'), darkImage: require('../../assets/start-guide/savings-dark.jpg') },
@@ -64,7 +69,8 @@ const topics = {
   },
   search: {
     title: '過去の取引を探す',
-    location: '取引 → 右上の虫眼鏡',
+    listTitle: '取引を検索',
+    icon: { ios: 'magnifyingglass', android: 'search' },
     steps: [{
       instruction: '画面下の「取引」を開き、右上の虫眼鏡を押します。',
       screenshot: { image: require('../../assets/start-guide/transaction-search.jpg'), darkImage: require('../../assets/start-guide/transaction-search-dark.jpg') },
@@ -72,7 +78,8 @@ const topics = {
   },
   planning: {
     title: '予算や買い物を計画する',
-    location: '予算・計画 → 予算・買い物試算',
+    listTitle: '予算・買い物試算',
+    icon: { ios: 'calendar', android: 'calendar_month' },
     steps: [{
       instruction: 'ホーム右上の「予算・計画」を開き、「予算」か「買い物試算」を選びます。',
       screenshot: { image: require('../../assets/start-guide/planning.jpg'), darkImage: require('../../assets/start-guide/planning-dark.jpg') },
@@ -80,7 +87,8 @@ const topics = {
   },
   categories: {
     title: 'カテゴリ・家計グループを変える',
-    location: '設定 → 事業・精算',
+    listTitle: 'カテゴリ・家計グループ',
+    icon: { ios: 'tag', android: 'label' },
     steps: [{
       instruction: 'ホーム右上の歯車を押し、設定の「事業・精算」を探します。',
       screenshot: { image: require('../../assets/start-guide/categories-ledgers.jpg'), darkImage: require('../../assets/start-guide/categories-ledgers-dark.jpg') },
@@ -88,13 +96,14 @@ const topics = {
   },
   backups: {
     title: 'バックアップ・CSVを取り込む',
-    location: '設定 → データ管理',
+    listTitle: 'バックアップ・CSV取り込み',
+    icon: { ios: 'tray.and.arrow.down', android: 'file_download' },
     steps: [{
       instruction: 'ホーム右上の歯車を押し、設定から「データ管理」を開きます。',
       screenshot: { image: require('../../assets/start-guide/data-management.jpg'), darkImage: require('../../assets/start-guide/data-management-dark.jpg') },
     }],
   },
-} satisfies Record<string, GuidePage>;
+} satisfies Record<string, GuidePage & { listTitle: string; icon: Pick<Extract<SymbolViewProps['name'], object>, 'ios' | 'android'> }>;
 
 const introduction: readonly GuidePage[] = [topics.record, topics.vibration, topics.analysis, topics.card, topics.savings];
 export type GuideTopic = keyof typeof topics;
@@ -237,7 +246,11 @@ export function GettingStarted({ onClose, review = false, reviewRoute }: {
                 <Group>
                   {group.pages.map((topicId) => {
                     const topic = topics[topicId];
-                    return <Row key={topicId} title={topic.title} subtitle={topic.location} compact chevron onPress={() => openTopic(topicId)} />;
+                    return (
+                      <Row key={topicId} title={topic.listTitle}
+                        icon={{ ...topic.icon, web: topic.icon.android }}
+                        compact chevron onPress={() => openTopic(topicId)} />
+                    );
                   })}
                 </Group>
               </View>
