@@ -119,6 +119,7 @@ test('history cursors are forwarded only for the signed-in account', async () =>
   assert.equal((await get('history/orders?cursor=' + cursor + '&cursor=' + cursor, payHeaders)).status, 400);
   assert.deepEqual(await (await get('summary', payHeaders)).json(), {
     account_id: 'same-google-sub', wallet: { available_credits: 12, lots: [] },
+    catalog: { packs: [pack], checkout_enabled: true, test_mode: true },
   });
   assert.deepEqual(await (await get('history/orders?cursor=' + encodeURIComponent(cursor), payHeaders)).json(), {
     items: [], resume_supported: true,

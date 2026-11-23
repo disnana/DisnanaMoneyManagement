@@ -11,6 +11,10 @@ const routes = new Map([
 const orderRoute = /^orders\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/(reconcile|resume)$/;
 const historyRoutes = new Map([['history/orders', 'orders-page'], ['history/activity', 'activity-page']]);
 
+async function storefrontCatalog(env, subject) {
+  return { packs: catalog(env), checkout_enabled: await canCheckout(env, subject), test_mode: true };
+}
+
 export async function shopRequest(request, env, fetcher) {
   const url = new URL(request.url);
   if (url.origin !== env.SITE_ORIGIN || url.protocol !== 'https:') return json({ error: 'not_found' }, 404);
@@ -30,7 +34,7 @@ export async function shopRequest(request, env, fetcher) {
   if (method === 'POST' && request.headers.get('Origin') !== env.SITE_ORIGIN) return json({ error: 'origin_rejected' }, 403);
   if (path === 'packs') {
     const user = await session(request, env);
-    return json({ packs: catalog(env), checkout_enabled: await canCheckout(env, user?.subject), test_mode: true });
+    return json(await storefrontCatalog(env, user?.subject));
   }
   if (path.startsWith('auth/') && method === 'GET') {
     const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
@@ -54,7 +58,7 @@ export async function shopRequest(request, env, fetcher) {
   if (path === 'summary') {
     const wallet = await callBackend(env, 'wallet-summary', { subject: user.subject });
     if (!wallet) return json({ error: 'temporarily_unavailable' }, 503);
-    return json({ account_id: user.subject, wallet });
+    return json({ account_id: user.subject, wallet, catalog: await storefrontCatalog(env, user.subject) });
   }
   if (history) {
     const page = await callBackend(env, history, { subject: user.subject, cursor: cursor ?? '' });
