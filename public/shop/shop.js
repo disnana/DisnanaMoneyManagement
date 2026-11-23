@@ -2,7 +2,7 @@ import { date, element, forgetCompletedOrders, label, number, openCheckout, requ
 
 // Cached HTML can still reference this entry point.
 if (element("wallet-expiry")) {
-  void import("./shop-store-v2.js");
+  void import("./shop-store-v3.js");
 } else {
   const status = element('status');
   const params = new URLSearchParams(location.search);
