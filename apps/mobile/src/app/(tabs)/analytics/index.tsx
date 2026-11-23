@@ -39,7 +39,9 @@ export default function Analytics() {
       <>
         <LedgerPicker />
         <Segmented value={mode} onChange={setMode} options={MODES} />
-        {mode.endsWith('-trend') ? <MonthlyTrend month={month} kind={kind} /> : (
+        {mode.endsWith('-trend') ? (
+          <MonthlyTrend key={isPreview ? 'preview' : 'active'} month={month} kind={kind} />
+        ) : (
           <AnalyticsMonth key={kind} kind={kind} month={month} isPreview={isPreview} sort={sort} onSortChange={changeSort} />
         )}
       </>
