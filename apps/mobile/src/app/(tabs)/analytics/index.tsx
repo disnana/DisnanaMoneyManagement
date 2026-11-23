@@ -55,11 +55,17 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
   onSortChange: (sort: Sort) => void;
 }) {
   const p = usePalette();
-  const { visibleState, state, setCategoryOrder } = useFinance();
+  const { visibleState, state, activeLedger, setCategoryOrder } = useFinance();
   const m = useMemo(() => computeMonthMetrics(visibleState, month), [visibleState, month]);
   const breakdown = kind === 'income' ? m.incomeCategoryBreakdown : m.categoryBreakdown;
   const label = kind === 'income' ? '収入' : '支出';
   const [before, setBefore] = useState<string[]>(); // category order before the first drag in this session
+  const [selection, setSelection] = useState<{ id: string; month: string; ledgerId?: string }>();
+  const ledgerId = activeLedger?.id;
+  const chartCategories = breakdown.filter((category) => category.amount > 0);
+  const selected = selection?.month === month && selection.ledgerId === ledgerId
+    ? chartCategories.find((category) => category.categoryId === selection.id) : undefined;
+  const percent = (share: number) => `${Math.round(share * 1000) / 10}%`;
 
   // "並び順" follows the category order from the settings (and what is changed here); the rest stay by amount
   const fullOrder = getOrderedCategories(kind, state.customCategories, state.categoryOrder?.[kind], state.hiddenCategoryIds).map((c) => c.id);
@@ -99,10 +105,17 @@ function AnalyticsMonth({ kind, month, isPreview, sort, onSortChange }: {
     <>
       <AnalyticsMonthCard month={month}>
         <DonutChart
-          slices={breakdown.filter((c) => c.amount > 0).map((c) => ({ id: c.categoryId, value: c.amount, color: c.color }))}
-          centerLabel={label}
-          centerValue={formatJPY(m[kind])}
+          slices={chartCategories.map((c) => ({ id: c.categoryId, value: c.amount, color: c.color,
+            label: `${c.name}、${formatJPY(c.amount)}、${percent(c.share)}` }))}
+          centerLabel={selected?.name ?? label}
+          centerValue={formatJPY(selected?.amount ?? m[kind])}
+          centerDetail={selected ? percent(selected.share) : undefined}
+          selectedId={selected?.categoryId}
+          onSlicePress={isPreview ? undefined : (id) => setSelection(selected?.categoryId === id ? undefined : { id, month, ledgerId })}
         />
+        {chartCategories.length > 0 ? (
+          <Text style={{ color: p.textSecondary, fontSize: 12, textAlign: 'center' }}>色のついた部分をタップすると内訳を表示します</Text>
+        ) : null}
       </AnalyticsMonthCard>
 
       <SectionTitle action="予算・計画" onAction={() => router.push('/planning')}>カテゴリ別</SectionTitle>
