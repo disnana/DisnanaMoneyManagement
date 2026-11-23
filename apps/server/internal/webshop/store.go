@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/gocql/gocql"
 )
@@ -87,19 +89,47 @@ func (s store) read(ctx context.Context, id string) (order, int64, error) {
 }
 
 func (s store) list(ctx context.Context, subject string) ([]order, error) {
-	iter := s.query(ctx, "SELECT payload FROM shop_orders WHERE subject = ? LIMIT 50", subject).Iter()
-	orders := []order{}
-	var payload string
-	for iter.Scan(&payload) {
+	page, err := s.orderPage(ctx, subject, "", 50)
+	return page.Items, err
+}
+
+type orderPage struct {
+	Items      []order `json:"items"`
+	NextCursor string  `json:"next_cursor,omitempty"`
+}
+
+func (s store) orderPage(ctx context.Context, subject, cursor string, limit int) (orderPage, error) {
+	const query = "SELECT created_at, id, payload FROM shop_orders WHERE subject = ?"
+	stmt := query + " LIMIT ?"
+	args := []any{subject, limit + 1}
+	if cursor != "" {
+		stamp, id, _ := strings.Cut(cursor, ":")
+		created, err := strconv.ParseInt(stamp, 10, 64)
+		if err != nil || created < 0 || !orderID.MatchString(id) {
+			return orderPage{}, errBad
+		}
+		stmt = query + " AND (created_at, id) < (?, ?) LIMIT ?"
+		args = []any{subject, created, id, limit + 1}
+	}
+	iter := s.query(ctx, stmt, args...).Iter()
+	page := orderPage{Items: []order{}}
+	var created int64
+	var id, payload, lastCursor string
+	for iter.Scan(&created, &id, &payload) {
+		if len(page.Items) == limit {
+			page.NextCursor = lastCursor
+			break
+		}
 		var o order
 		if err := json.Unmarshal([]byte(payload), &o); err != nil {
 			_ = iter.Close()
-			return nil, err
+			return orderPage{}, err
 		}
 		o.Subject, o.Session, o.CheckoutURL, o.Intent = "", "", "", ""
-		orders = append(orders, o)
+		page.Items = append(page.Items, o)
+		lastCursor = strconv.FormatInt(created, 10) + ":" + id
 	}
-	return orders, iter.Close()
+	return page, iter.Close()
 }
 
 func (s store) update(ctx context.Context, id string, change func(*order) (bool, error)) (order, error) {

@@ -2,6 +2,7 @@ package credits
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,39 +196,78 @@ type historyEntry struct {
 }
 
 type Snapshot struct {
-	Balance int64          `json:"available_credits"`
-	Lots    []lot          `json:"lots"`
+	Summary
 	History []historyEntry `json:"history"`
 }
 
+type Summary struct {
+	Balance int64 `json:"available_credits"`
+	Lots    []lot `json:"lots"`
+}
+
 func (w *Wallet) Snapshot(ctx context.Context, subject string) (Snapshot, error) {
-	snapshot := Snapshot{Lots: []lot{}, History: []historyEntry{}}
+	summary, err := w.Summary(ctx, subject)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	page, err := w.History(ctx, subject, "", 50)
+	return Snapshot{Summary: summary, History: page.Items}, err
+}
+
+func (w *Wallet) Summary(ctx context.Context, subject string) (Summary, error) {
+	summary := Summary{Lots: []lot{}}
 	_, lots, err := w.read(ctx, subject)
 	if errors.Is(err, gocql.ErrNotFound) {
-		return snapshot, nil
+		return summary, nil
 	}
 	if err != nil {
-		return Snapshot{}, err
+		return Summary{}, err
 	}
 	now := time.Now().UnixMilli()
-	snapshot.Balance, err = activeBalance(lots, now)
+	summary.Balance, err = activeBalance(lots, now)
 	if err != nil {
-		return Snapshot{}, err
+		return Summary{}, err
 	}
 	for _, item := range lots {
 		if item.Expires == 0 || item.Expires > now {
-			snapshot.Lots = append(snapshot.Lots, item)
+			summary.Lots = append(summary.Lots, item)
 		}
 	}
-	rows := w.session.Query("SELECT operation FROM credit_wallet_entries WHERE subject = ? AND entry >= 'history:' AND entry < 'history;' ORDER BY entry DESC LIMIT 50", subject).WithContext(ctx).Iter()
-	var data string
-	for rows.Scan(&data) {
+	return summary, nil
+}
+
+type HistoryPage struct {
+	Items      []historyEntry `json:"items"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+}
+
+var ErrInvalidHistoryCursor = errors.New("invalid credit history cursor")
+
+func (w *Wallet) History(ctx context.Context, subject, cursor string, limit int) (HistoryPage, error) {
+	before := "history;"
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.Strict().DecodeString(cursor)
+		key := string(raw)
+		if err != nil || len(key) < 29 || len(key) > 156 || key <= "history:" || key >= before {
+			return HistoryPage{}, ErrInvalidHistoryCursor
+		}
+		before = key
+	}
+	rows := w.session.Query("SELECT entry, operation FROM credit_wallet_entries WHERE subject = ? AND entry >= 'history:' AND entry < ? ORDER BY entry DESC LIMIT ?", subject, before, limit+1).WithContext(ctx).Iter()
+	page := HistoryPage{Items: []historyEntry{}}
+	var key, data, lastKey string
+	for rows.Scan(&key, &data) {
+		if len(page.Items) == limit {
+			page.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(lastKey))
+			break
+		}
 		var entry historyEntry
 		if err := json.Unmarshal([]byte(data), &entry); err != nil {
 			_ = rows.Close()
-			return Snapshot{}, err
+			return HistoryPage{}, err
 		}
-		snapshot.History = append(snapshot.History, entry)
+		page.Items = append(page.Items, entry)
+		lastKey = key
 	}
-	return snapshot, rows.Close()
+	return page, rows.Close()
 }

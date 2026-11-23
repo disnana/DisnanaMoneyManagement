@@ -26,8 +26,8 @@
   <meta name="twitter:image:alt" content="マネーちゃんのAIクレジットショップ">
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/portal/site.css">
-  <link rel="stylesheet" href="/shop/shop.css">
-  <script src="/shop/shop.js" type="module"></script>
+  <link rel="stylesheet" href="/shop/shop.css?v=history-1">
+  <script src="/shop/shop.js?v=history-1" type="module"></script>
 </head>
 <body class="shop-page">
   <header class="shop-bar"><div class="shell top">
@@ -56,6 +56,10 @@
           <p id="status" role="status"></p>
           <button id="refresh" type="button" class="quiet" hidden>更新</button>
         </div>
+        <nav id="history-links" class="shop-history-links" aria-label="クレジットの履歴" hidden>
+          <a href="/shop/history/">購入履歴</a>
+          <a href="/shop/history/?type=activity">利用履歴</a>
+        </nav>
       </div>
       <section class="shop-section packs-section" aria-labelledby="packs-heading">
         <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note">読み込み中…</p></div>
@@ -71,32 +75,17 @@
         </form>
       </section>
     </div>
-    <div id="account-history" hidden>
-      <nav class="history-nav" aria-label="履歴の種類">
-        <a href="#orders-section">購入履歴</a><a href="#history-section">利用履歴</a>
-      </nav>
-      <div class="history-layout">
-        <section class="shop-section" id="orders-section" aria-labelledby="orders-heading">
-          <div class="section-heading"><h2 id="orders-heading">購入履歴</h2></div>
-          <ul class="records" id="orders"></ul>
-        </section>
-        <section class="shop-section" id="history-section" aria-labelledby="history-heading">
-          <div class="section-heading"><h2 id="history-heading">クレジット利用履歴</h2></div>
-          <ul class="records" id="history"></ul>
-        </section>
+    <section id="account-details" class="account-details" aria-labelledby="account-id-label" hidden>
+      <div>
+        <label id="account-id-label" for="account-id">アカウントID</label>
+        <p id="account-id-help" class="muted">お問い合わせ時にお伝えください。</p>
       </div>
-      <section id="account-details" class="account-details" aria-labelledby="account-id-label" hidden>
-        <div>
-          <label id="account-id-label" for="account-id">アカウントID</label>
-          <p id="account-id-help" class="muted">お問い合わせ時にお伝えください。</p>
-        </div>
-        <div class="account-id-actions">
-          <input id="account-id" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="account-id-help">
-          <button id="copy-account-id" type="button" class="quiet">コピー</button>
-        </div>
-        <p id="copy-status" class="muted" role="status"></p>
-      </section>
-    </div>
+      <div class="account-id-actions">
+        <input id="account-id" type="text" readonly spellcheck="false" autocomplete="off" aria-describedby="account-id-help">
+        <button id="copy-account-id" type="button" class="quiet">コピー</button>
+      </div>
+      <p id="copy-status" class="muted" role="status"></p>
+    </section>
   </main>
   <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a><a href="mailto:support@disnana.com">お問い合わせ</a></nav></footer>
 </body>

@@ -2,7 +2,9 @@ package webshop
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -131,4 +133,34 @@ func TestScyllaShop(t *testing.T) {
 	if balance, err := wallet.Balance(ctx, sub); err != nil || balance != 0 {
 		t.Fatalf("balance after refund = %d, %v", balance, err)
 	}
+	t.Run("same-second orders beyond 50 records", func(t *testing.T) {
+		const count = 55
+		for index := range count {
+			id := fmt.Sprintf("00000000-0000-0000-0000-%012x", index)
+			data, err := json.Marshal(order{ID: id, Subject: sub, Created: created.Created, CheckoutURL: "private"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.store.query(ctx, "INSERT INTO shop_orders (subject, created_at, id, payload) VALUES (?, ?, ?, ?)", sub, created.Created, id, string(data)).Exec(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		seen, cursor := map[string]bool{}, ""
+		for _, size := range []int{20, 20, 16} {
+			page, err := b.store.orderPage(ctx, sub, cursor, 20)
+			if err != nil || len(page.Items) != size {
+				t.Fatalf("order page = %+v, %v", page, err)
+			}
+			for _, item := range page.Items {
+				if seen[item.ID] || item.Subject != "" || item.CheckoutURL != "" {
+					t.Fatalf("unexpected order in history: %+v", item)
+				}
+				seen[item.ID] = true
+			}
+			cursor = page.NextCursor
+		}
+		if cursor != "" || !seen["00000000-0000-0000-0000-000000000000"] {
+			t.Fatal("did not reach the end of the order history")
+		}
+	})
 }

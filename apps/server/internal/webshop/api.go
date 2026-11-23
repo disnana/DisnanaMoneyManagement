@@ -19,6 +19,8 @@ const Prefix = "/_internal/web-shop/"
 
 type Wallet interface {
 	Snapshot(context.Context, string) (credits.Snapshot, error)
+	Summary(context.Context, string) (credits.Summary, error)
+	History(context.Context, string, string, int) (credits.HistoryPage, error)
 	GrantPurchase(context.Context, string, string, int64, time.Time) error
 	ReversePurchase(context.Context, string, string) error
 }
@@ -62,6 +64,7 @@ type input struct {
 	IDToken  string `json:"id_token"`
 	Subject  string `json:"subject"`
 	Limit    int    `json:"limit"`
+	Cursor   string `json:"cursor"`
 	Order    order  `json:"order"`
 	Action   string `json:"action"`
 }
@@ -94,15 +97,27 @@ func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result = map[string]string{"subject": subject}
 	case "session-get", "session-put", "session-delete", "oauth-put", "oauth-claim", "rate", "event-get", "event-put":
 		result, err = a.sessions(r.Context(), path, in)
-	case "wallet", "orders":
+	case "wallet", "orders", "wallet-summary", "orders-page", "activity-page":
 		if in.Subject == "" || len(in.Subject) > 255 {
 			err = errBad
 			break
 		}
-		if path == "wallet" {
+		switch path {
+		case "wallet":
 			result, err = a.wallet.Snapshot(r.Context(), in.Subject)
-		} else {
+		case "orders":
 			result, err = a.store.list(r.Context(), in.Subject)
+		case "wallet-summary":
+			result, err = a.wallet.Summary(r.Context(), in.Subject)
+		case "orders-page", "activity-page":
+			const pageSize = 20
+			if len(in.Cursor) > 208 {
+				err = errBad
+			} else if path == "orders-page" {
+				result, err = a.store.orderPage(r.Context(), in.Subject, in.Cursor, pageSize)
+			} else {
+				result, err = a.wallet.History(r.Context(), in.Subject, in.Cursor, pageSize)
+			}
 		}
 	case "order-get", "order-create", "order-checkout", "order-apply":
 		result, err = a.orders(r.Context(), path, in)
@@ -117,7 +132,7 @@ func shopResponse(w http.ResponseWriter, data any, err error) {
 	if err != nil {
 		code := http.StatusServiceUnavailable
 		switch {
-		case errors.Is(err, errBad):
+		case errors.Is(err, errBad), errors.Is(err, credits.ErrInvalidHistoryCursor):
 			code = http.StatusBadRequest
 		case errors.Is(err, errAuth):
 			code = http.StatusUnauthorized

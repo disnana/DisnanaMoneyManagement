@@ -2,6 +2,7 @@ package credits
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -84,4 +85,36 @@ func TestScyllaWallet(t *testing.T) {
 	if err != nil || snapshot.Balance != 4 || len(snapshot.History) != 6 {
 		t.Fatalf("unexpected snapshot after reversal and retry: %+v, %v", snapshot, err)
 	}
+	t.Run("history beyond 50 records", func(t *testing.T) {
+		const count = 55
+		const stamp = 1700000000000
+		for index := range count {
+			id := fmt.Sprintf("history-test-%02d", index)
+			data, err := json.Marshal(historyEntry{ID: id, At: stamp, Operation: operation{Kind: "spend", Amount: 1}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := fmt.Sprintf("history:%019d:%s", stamp, id)
+			if err := a.session.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)", subject, key, string(data)).WithContext(ctx).Exec(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		seen, cursor := map[string]bool{}, ""
+		for _, size := range []int{20, 20, 20, 1} {
+			page, err := b.History(ctx, subject, cursor, 20)
+			if err != nil || len(page.Items) != size {
+				t.Fatalf("history page = %+v, %v", page, err)
+			}
+			for _, item := range page.Items {
+				if seen[item.ID] {
+					t.Fatalf("duplicate history ID %q", item.ID)
+				}
+				seen[item.ID] = true
+			}
+			cursor = page.NextCursor
+		}
+		if cursor != "" || !seen["history-test-00"] {
+			t.Fatal("did not reach the end of the history")
+		}
+	})
 }

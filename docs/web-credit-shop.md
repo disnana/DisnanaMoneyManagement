@@ -6,7 +6,8 @@
 | --- | --- |
 | `/` | マネーちゃんの公式トップ、機能紹介、Androidと各ページへの案内 |
 | `/app/` | 既存のWeb家計簿。現在と同じオリジン、保存領域、PWAのIDを使う |
-| `/shop/` | Googleログイン、クレジットパック、残高・期限、購入・台帳履歴、領収書 |
+| `/shop/` | Googleログイン、クレジットパック、残高・期限、問い合わせ用のアカウントID |
+| `/shop/history/`、`/shop/history/?type=activity` | 購入履歴・領収書、クレジット利用履歴。新しい順に20件ずつ表示 |
 | `/terms/`、`/privacy/` | 利用規約・プライバシーポリシー |
 | `/api/shop/*` | 同一オリジンのWorker。上記の静的ファイルとは別経路 |
 
@@ -25,6 +26,7 @@
 
 ## 決済と復旧
 
+- ショップは `/api/shop/summary` で残高と期限を取得する。履歴を開いたときは `/api/shop/history/orders` または `/api/shop/history/activity` にカーソルを渡して次の20件を取得する。既存テーブルのクラスタリング順を使うためスキーマ変更は不要。更新済みのGoを両ノードで起動してからWorkerをデプロイする。それまでは旧APIが返す最新50件をページ分けして表示する。
 - Checkoutを作る前にGo経由で注文を保存する。同じ注文IDをStripeへの冪等キーとして使用し、保存した価格と数量で再試行する。
 - WorkerはWebhookの署名を検証し、Stripe APIで注文・通貨・金額・支払いを照合する。Goは注文の条件付き更新と既存台帳への冪等な操作を行う。これらは別のパーティションにあるため、中断時は同じ注文IDで再開する。確認済みの処理をDBに保存できた後にStripeへ成功を返す。失敗時はStripeが再送する。
 - 購入履歴の「決済状況を再確認」ボタンは、認証済みの所有者が `POST /api/shop/orders/{orderId}/reconcile` で既存決済を照合する。Stripeへの照合後はWebhookと同じ命令を使う。「決済を再開」で `POST /api/shop/orders/{orderId}/resume` を呼び、Stripeで未払いかつ有効と確認できた元のCheckoutを開く。Goに到達できない場合はWorkerがリクエストIDとノードIDを記録し、503と再試行時間を返す。

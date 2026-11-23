@@ -96,6 +96,41 @@ function environment() {
   };
 }
 
+test('history cursors are forwarded only for the signed-in account', async () => {
+  const env = { ...environment(), MANE_SHOP_TEST_AUDIENCE: 'authenticated' };
+  const db = backendFixture();
+  db.sessions.set(await hash(accountCookie), { subject: 'same-google-sub' });
+  const calls = [];
+  const cursor = '1795432539:' + requestID;
+  const worker = createWorker({ fetchNode: async (uri, options) => {
+    const url = new URL(uri);
+    const operation = url.pathname.split('/').at(-1);
+    if (['wallet-summary', 'orders-page', 'activity-page'].includes(operation)) {
+      calls.push({ operation, ...JSON.parse(options.body) });
+      return operation === 'wallet-summary'
+        ? Response.json({ available_credits: 12, lots: [] }) : Response.json({ items: [] });
+    }
+    return db.dispatch(url, options, [nodeA, nodeB].find(node => node.origin === url.origin));
+  } });
+  const get = (path, headers) => publicFetch(worker, new Request(site + '/api/shop/' + path, { headers }), env);
+  assert.equal((await get('history/orders')).status, 401);
+  assert.equal((await get('history/orders?subject=other', payHeaders)).status, 400);
+  assert.equal((await get('history/activity?cursor=broken', payHeaders)).status, 400);
+  assert.equal((await get('history/orders?cursor=' + cursor + '&cursor=' + cursor, payHeaders)).status, 400);
+  assert.deepEqual(await (await get('summary', payHeaders)).json(), {
+    account_id: 'same-google-sub', wallet: { available_credits: 12, lots: [] },
+  });
+  assert.deepEqual(await (await get('history/orders?cursor=' + encodeURIComponent(cursor), payHeaders)).json(), {
+    items: [], resume_supported: true,
+  });
+  assert.deepEqual(await (await get('history/activity', payHeaders)).json(), { items: [], resume_supported: false });
+  assert.deepEqual(calls, [
+    { operation: 'wallet-summary', subject: 'same-google-sub' },
+    { operation: 'orders-page', subject: 'same-google-sub', cursor },
+    { operation: 'activity-page', subject: 'same-google-sub', cursor: '' },
+  ]);
+});
+
 const post = (path, body, headers = {}) => new Request(site + '/api/shop/' + path, {
   method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body),
 });

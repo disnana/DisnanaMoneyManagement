@@ -298,6 +298,9 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
       }
       if (result.status >= 200 && result.status < 300) return result.data;
       if (result.status === 409) throw Object.assign(new Error('order_conflict'), { status: 409 });
+      if (result.status === 400 && (operation === 'orders-page' || operation === 'activity-page')) {
+        throw Object.assign(new Error('invalid cursor'), { status: 400 });
+      }
       throw new Error('shop upstream rejected command');
     }
     throw new Error('no shop node available');
@@ -318,6 +321,7 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
           if (response.status !== 503) return response;
           return reply(503, 'temporarily_unavailable', { 'Retry-After': '15' });
         } catch (error) {
+          if (error?.status === 400) return reply(400, 'invalid_request');
           if (error?.status === 409) return reply(409, 'order_conflict');
           console.warn('shop unavailable', { trace, method: request.method });
           return reply(503, 'temporarily_unavailable', { 'Retry-After': '15' });
