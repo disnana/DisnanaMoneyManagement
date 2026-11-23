@@ -75,6 +75,9 @@
 .packs-section { grid-area: packs; min-width: 0; }
 .packs-section .section-heading { justify-content: space-between; margin-bottom: 12px; }
 .packs-section .section-heading h2 { font-size: 1.3rem; }
+.pack-usage-guide { margin-block: 0 14px; color: var(--muted); font-size: .875rem; line-height: 1.6; }
+.pack-usage-guide p + p { margin-top: 4px; }
+.pack-usage-guide a { color: var(--accent); text-decoration: underline; text-underline-offset: .15em; }
 .pack-selector { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .pack-list { border-block: 1px solid var(--line); }
 .pack-list > li + li { border-top: 1px solid var(--line); }
