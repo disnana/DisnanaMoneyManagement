@@ -3,19 +3,18 @@ main = "index.mjs"
 compatibility_date = "2026-11-23"
 workers_dev = false
 preview_urls = false
+keep_vars = true
 routes = [
   { pattern = "mane-auth-stg.disnana.com", custom_domain = true },
   { pattern = "dmm.disnana.com/api/shop/*", zone_name = "disnana.com" },
 ]
 
 [vars]
-MANE_AUTH_NODES = '[{"id":"staging-a","origin":"https://node-a-stg.disnana.com"},{"id":"staging-b","origin":"https://node-b-stg.disnana.com"}]'
-
-# Set to 1 only after the Go nodes are ready.
-MANE_WEB_SHOP_ENABLED = "0"
+# Set MANE_AUTH_NODES in the Dashboard with the actual origins and Scylla Host IDs.
+# keep_vars preserves Dashboard bindings that are not declared in this file.
+MANE_WEB_SHOP_ENABLED = "1"
 SITE_ORIGIN = "https://dmm.disnana.com"
 MANE_SHOP_TEST_MODE = "0"
-MANE_SHOP_PACKS = "[]"
 # Shop secrets: GOOGLE_WEB_CLIENT_SECRET, STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
 # Optional for tunnels protected by Access: set both MANE_SHOP_ACCESS_CLIENT_ID
 # and MANE_SHOP_ACCESS_CLIENT_SECRET as Worker secrets.
