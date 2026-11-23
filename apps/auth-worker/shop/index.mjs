@@ -1,0 +1,51 @@
+import { allow, finishLogin, logout, session, startLogin } from './auth.mjs';
+import { canCheckout, catalog, checkout, reconcile, webhook } from './payments.mjs';
+import { callBackend, decode, json, readBytes } from './protocol.mjs';
+
+const prefix = '/api/shop/';
+const routes = new Map([
+  ['packs', 'GET'], ['auth/start', 'GET'], ['auth/callback', 'GET'], ['auth/logout', 'POST'],
+  ['account', 'GET'], ['checkout', 'POST'], ['stripe/webhook', 'POST'],
+]);
+const reconcileRoute = /^orders\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\/reconcile$/;
+
+export async function shopRequest(request, env, fetcher) {
+  const url = new URL(request.url);
+  if (url.origin !== env.SITE_ORIGIN || url.protocol !== 'https:') return json({ error: 'not_found' }, 404);
+  const path = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) : '';
+  const match = reconcileRoute.exec(path);
+  const method = match ? 'POST' : routes.get(path);
+  if (!method) return json({ error: 'not_found' }, 404);
+  if (request.method !== method) return json({ error: 'method_not_allowed' }, 405);
+  if (url.search && path !== 'auth/callback') return json({ error: 'invalid_request' }, 400);
+  if (path === 'stripe/webhook') return webhook(env, fetcher, request);
+  if (method === 'POST' && request.headers.get('Origin') !== env.SITE_ORIGIN) return json({ error: 'origin_rejected' }, 403);
+  if (path === 'packs') {
+    const user = await session(request, env);
+    return json({ packs: catalog(env), checkout_enabled: await canCheckout(env, user?.subject), test_mode: true });
+  }
+  if (path.startsWith('auth/') && method === 'GET') {
+    const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+    if (!await allow(env, 'auth:' + ip, 15)) return json({ error: 'too_many_requests' }, 429);
+    return path === 'auth/start' ? startLogin(env) : finishLogin(request, env, fetcher);
+  }
+  if (path === 'auth/logout') return logout(request, env);
+  const user = await session(request, env);
+  if (!user) return json({ error: 'login_required' }, 401);
+  const scope = match ? 'reconcile' : path;
+  if (!await allow(env, scope + ':' + user.subject, path === 'account' ? 30 : 8)) {
+    return json({ error: 'too_many_requests' }, 429);
+  }
+  if (match) return reconcile(env, fetcher, user.subject, match[1]);
+  if (path === 'checkout') {
+    let input;
+    try { input = JSON.parse(decode(await readBytes(request, 4096))); }
+    catch { return json({ error: 'invalid_request' }, 400); }
+    return checkout(env, fetcher, user.subject, input);
+  }
+  const [wallet, orders] = await Promise.all([
+    callBackend(env, 'wallet', { subject: user.subject }),
+    callBackend(env, 'orders', { subject: user.subject }),
+  ]);
+  return json({ wallet, orders });
+}

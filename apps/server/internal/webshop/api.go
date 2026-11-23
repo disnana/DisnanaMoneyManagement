@@ -2,20 +2,17 @@ package webshop
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/disnana/dmm/server/internal/credits"
+	"github.com/gocql/gocql"
 )
 
 const Prefix = "/_internal/web-shop/"
@@ -25,117 +22,313 @@ type Wallet interface {
 	GrantPurchase(context.Context, string, string, int64, time.Time) error
 	ReversePurchase(context.Context, string, string) error
 }
+type proofCheck func(string, string, string, []byte, time.Time) bool
 
 type API struct {
 	wallet       Wallet
-	key          []byte
+	store        store
+	proof        proofCheck
 	verifyGoogle func(context.Context, string, string) (string, error)
-	now          func() time.Time
 }
 
-var orderID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
-func New(wallet Wallet, encoded string, verify func(context.Context, string, string) (string, error)) (*API, error) {
-	key, err := base64.RawURLEncoding.DecodeString(encoded)
-	if wallet == nil || verify == nil || err != nil || len(key) < 32 {
-		return nil, errors.New("web shop requires ScyllaDB and a base64url worker key of at least 32 bytes")
+func New(wallet Wallet, db *gocql.Session, check proofCheck, verify func(context.Context, string, string) (string, error)) (*API, error) {
+	if wallet == nil || db == nil || check == nil || verify == nil {
+		return nil, errors.New("web shop requires ScyllaDB and Worker proof")
 	}
-	return &API{wallet: wallet, key: key, verifyGoogle: verify, now: time.Now}, nil
+	for _, table := range []string{"shop_order_owners", "shop_orders", "shop_oauth_attempts", "shop_sessions", "shop_rate_windows", "shop_stripe_events"} {
+		if err := db.Query("SELECT * FROM " + table + " LIMIT 1").Iter().Close(); err != nil {
+			return nil, err
+		}
+	}
+	return &API{wallet: wallet, store: store{db: db}, proof: check, verifyGoogle: verify}, nil
 }
 
-func (a *API) isSigned(r *http.Request, raw []byte) bool {
-	stamp, proof, ok := strings.Cut(r.Header.Get("X-Mane-Web-Signature"), ".")
-	ts, err := strconv.ParseInt(stamp, 10, 64)
-	if !ok || err != nil || ts < a.now().Unix()-30 || ts > a.now().Unix()+30 {
-		return false
-	}
-	sig, err := base64.RawURLEncoding.DecodeString(proof)
-	sum := sha256.Sum256(raw)
-	mac := hmac.New(sha256.New, a.key)
-	mac.Write([]byte(strings.Join([]string{stamp, r.Method, r.URL.Path, hex.EncodeToString(sum[:])}, "\n")))
-	return err == nil && hmac.Equal(sig, mac.Sum(nil))
+var (
+	orderID   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	hashID    = regexp.MustCompile(`^[a-f0-9]{64}$`)
+	secretID  = regexp.MustCompile(`^[a-zA-Z0-9_-]{43}$`)
+	packID    = regexp.MustCompile(`^[a-z0-9_-]{1,40}$`)
+	sessionID = regexp.MustCompile(`^cs_test_[a-zA-Z0-9_]{5,255}$`)
+	intentID  = regexp.MustCompile(`^pi_[a-zA-Z0-9_]{5,255}$`)
+	errBad    = errors.New("invalid shop request")
+	errAuth   = errors.New("unauthorized")
+)
+
+type input struct {
+	Key      string `json:"key"`
+	Claim    string `json:"claim"`
+	Verifier string `json:"verifier"`
+	Nonce    string `json:"nonce"`
+	IDToken  string `json:"id_token"`
+	Subject  string `json:"subject"`
+	Limit    int    `json:"limit"`
+	Order    order  `json:"order"`
+	Action   string `json:"action"`
 }
 
 func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Content-Type", "application/json")
-	respond := func(status int, payload any) {
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(payload)
-	}
-	reject := func(status int) { respond(status, map[string]string{"error": http.StatusText(status)}) }
 	if r.Method != http.MethodPost || r.URL.RawQuery != "" || r.URL.ForceQuery || r.URL.EscapedPath() != r.URL.Path {
-		reject(400)
+		http.NotFound(w, r)
 		return
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 12<<10))
-	if err != nil {
-		reject(400)
+	if err != nil || !a.proof(r.Header.Get("X-Mane-Worker-Proof"), r.Method, r.URL.Path, raw, time.Now()) {
+		http.NotFound(w, r)
 		return
 	}
-	if !a.isSigned(r, raw) {
-		reject(403)
-		return
-	}
-	var input struct {
-		Subject string `json:"subject"`
-		IDToken string `json:"id_token"`
-		Nonce   string `json:"nonce"`
-		Order   string `json:"order_id"`
-		Amount  int64  `json:"amount"`
-		Expires int64  `json:"expires_at_ms"`
-	}
-	if err := json.Unmarshal(raw, &input); err != nil {
-		reject(400)
+	var in input
+	if err := json.Unmarshal(raw, &in); err != nil {
+		shopResponse(w, nil, errBad)
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, Prefix)
-	if path == "identity" {
-		sub, err := a.verifyGoogle(r.Context(), input.IDToken, input.Nonce)
+	var result any
+	switch path {
+	case "identity":
+		var subject string
+		subject, err = a.verifyGoogle(r.Context(), in.IDToken, in.Nonce)
 		if err != nil {
-			reject(401)
-			return
+			err = errAuth
 		}
-		respond(200, map[string]string{"subject": sub})
-		return
+		result = map[string]string{"subject": subject}
+	case "session-get", "session-put", "session-delete", "oauth-put", "oauth-claim", "rate", "event-get", "event-put":
+		result, err = a.sessions(r.Context(), path, in)
+	case "wallet", "orders":
+		if in.Subject == "" || len(in.Subject) > 255 {
+			err = errBad
+			break
+		}
+		if path == "wallet" {
+			result, err = a.wallet.Snapshot(r.Context(), in.Subject)
+		} else {
+			result, err = a.store.list(r.Context(), in.Subject)
+		}
+	case "order-get", "order-create", "order-checkout", "order-apply":
+		result, err = a.orders(r.Context(), path, in)
+	default:
+		err = gocql.ErrNotFound
 	}
-	if input.Subject == "" || len(input.Subject) > 255 {
-		reject(400)
-		return
+	shopResponse(w, result, err)
+}
+
+func shopResponse(w http.ResponseWriter, data any, err error) {
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		code := http.StatusServiceUnavailable
+		switch {
+		case errors.Is(err, errBad):
+			code = http.StatusBadRequest
+		case errors.Is(err, errAuth):
+			code = http.StatusUnauthorized
+		case errors.Is(err, gocql.ErrNotFound):
+			code = http.StatusNotFound
+		case errors.Is(err, errConflict), errors.Is(err, credits.ErrOperationConflict):
+			code = http.StatusConflict
+		}
+		w.WriteHeader(code)
+		data = map[string]string{"error": http.StatusText(code)}
+	}
+	if data == nil {
+		data = map[string]bool{"ok": true}
+	}
+	_ = json.NewEncoder(w).Encode(data)
+}
+
+func (a *API) sessions(ctx context.Context, path string, in input) (any, error) {
+	if !hashID.MatchString(in.Key) {
+		return nil, errBad
+	}
+	q := a.store.query
+	switch path {
+	case "event-get":
+		var at time.Time
+		err := q(ctx, "SELECT received_at FROM shop_stripe_events WHERE id = ?", in.Key).Scan(&at)
+		return map[string]bool{"received": true}, err
+	case "event-put":
+		return nil, q(ctx, "INSERT INTO shop_stripe_events (id, received_at) VALUES (?, ?)", in.Key, time.Now()).Exec()
+	case "rate":
+		if in.Limit < 1 || in.Limit > 100 {
+			return nil, errBad
+		}
+		allowed, err := a.store.allow(ctx, in.Key, in.Limit)
+		return map[string]bool{"allowed": allowed}, err
+	case "oauth-put":
+		if !secretID.MatchString(in.Nonce) || !secretID.MatchString(in.Verifier) {
+			return nil, errBad
+		}
+		return nil, q(ctx, "INSERT INTO shop_oauth_attempts (id, nonce, verifier, claim_id) VALUES (?, ?, ?, '')", in.Key, in.Nonce, in.Verifier).Exec()
+	case "oauth-claim":
+		if !orderID.MatchString(in.Claim) {
+			return nil, errBad
+		}
+		if _, err := cas(q(ctx, "UPDATE shop_oauth_attempts SET claim_id = ? WHERE id = ? IF claim_id = ''", in.Claim, in.Key)); err != nil {
+			return nil, err
+		}
+		var claim, nonce, verifier string
+		err := q(ctx, "SELECT claim_id, nonce, verifier FROM shop_oauth_attempts WHERE id = ?", in.Key).Scan(&claim, &nonce, &verifier)
+		if err != nil {
+			return nil, err
+		}
+		if claim != in.Claim || nonce == "" || verifier == "" {
+			return nil, gocql.ErrNotFound
+		}
+		return map[string]string{"nonce": nonce, "verifier": verifier}, nil
+	case "session-put":
+		if in.Subject == "" || len(in.Subject) > 255 {
+			return nil, errBad
+		}
+		return nil, q(ctx, "INSERT INTO shop_sessions (id, subject) VALUES (?, ?)", in.Key, in.Subject).Exec()
+	case "session-delete":
+		return nil, q(ctx, "DELETE FROM shop_sessions WHERE id = ?", in.Key).Exec()
+	default:
+		var subject string
+		err := q(ctx, "SELECT subject FROM shop_sessions WHERE id = ?", in.Key).Scan(&subject)
+		return map[string]string{"subject": subject}, err
+	}
+}
+
+func stripeURL(value, host string) bool {
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "https" && u.Host == host && u.User == nil && len(value) <= 2048
+}
+
+func (a *API) orders(ctx context.Context, path string, in input) (order, error) {
+	o := in.Order
+	if !orderID.MatchString(o.ID) {
+		return order{}, errBad
 	}
 	switch path {
-	case "wallet":
-		wallet, err := a.wallet.Snapshot(r.Context(), input.Subject)
-		if err != nil {
-			reject(503)
-			return
+	case "order-create":
+		if o.Subject == "" || len(o.Subject) > 255 || !packID.MatchString(o.Pack) || len(o.Title) == 0 || len(o.Title) > 320 ||
+			o.Amount <= 0 || o.Amount > 99999999 || o.Credits <= 0 || o.Credits > 1<<53-1 ||
+			(o.Validity != nil && (*o.Validity <= 0 || *o.Validity > 10*365*86400)) {
+			return order{}, errBad
 		}
-		respond(200, wallet)
-		return
-	case "grant", "reverse":
-		if !orderID.MatchString(input.Order) || (path == "grant" && (input.Amount <= 0 || input.Amount > 1<<53-1 || input.Expires < 0)) {
-			reject(400)
-			return
+		return a.store.create(ctx, order{ID: o.ID, Subject: o.Subject, Pack: o.Pack, Title: o.Title, Amount: o.Amount,
+			Credits: o.Credits, Validity: o.Validity, Created: time.Now().Unix()})
+	case "order-checkout":
+		if !sessionID.MatchString(o.Session) || !stripeURL(o.CheckoutURL, "checkout.stripe.com") {
+			return order{}, errBad
 		}
-		if path == "grant" {
-			var expiry time.Time
-			if input.Expires != 0 {
-				expiry = time.UnixMilli(input.Expires)
+		return a.store.update(ctx, o.ID, func(current *order) (bool, error) {
+			if current.Subject != o.Subject || current.Status != "pending" || current.Session != "" && current.Session != o.Session {
+				return false, errConflict
 			}
-			err = a.wallet.GrantPurchase(r.Context(), input.Subject, input.Order, input.Amount, expiry)
-		} else {
-			err = a.wallet.ReversePurchase(r.Context(), input.Subject, input.Order)
-		}
-		if errors.Is(err, credits.ErrOperationConflict) || errors.Is(err, credits.ErrPurchaseReversed) {
-			reject(409)
-			return
-		}
-		if err != nil {
-			reject(503)
-			return
-		}
-		respond(200, map[string]bool{"applied": true})
+			if current.CheckoutURL == o.CheckoutURL && current.Session == o.Session {
+				return false, nil
+			}
+			current.Session, current.CheckoutURL = o.Session, o.CheckoutURL
+			return true, nil
+		})
+	case "order-apply":
+		return a.settle(ctx, in.Action, o)
 	default:
-		reject(404)
+		current, _, err := a.store.read(ctx, o.ID)
+		if err == nil && o.Subject != "" && current.Subject != o.Subject {
+			return order{}, gocql.ErrNotFound
+		}
+		return current, err
 	}
+}
+
+func (a *API) settle(ctx context.Context, action string, evidence order) (order, error) {
+	current, err := a.store.update(ctx, evidence.ID, func(o *order) (bool, error) {
+		return applyEvidence(o, evidence, action)
+	})
+	if err != nil {
+		return current, err
+	}
+	next := ""
+	switch current.Status {
+	case "fulfillment_pending":
+		if action != "grant" {
+			return current, nil
+		}
+		var expiry time.Time
+		if current.Expires != 0 {
+			expiry = time.UnixMilli(current.Expires)
+		}
+		err = a.wallet.GrantPurchase(ctx, current.Subject, current.ID, current.Credits, expiry)
+		if errors.Is(err, credits.ErrPurchaseReversed) {
+			latest, _, readErr := a.store.read(ctx, current.ID)
+			return latest, readErr
+		}
+		next = "paid"
+	case "refund_pending":
+		if action != "refund" {
+			return current, nil
+		}
+		err = a.wallet.ReversePurchase(ctx, current.Subject, current.ID)
+		next = "refunded"
+	}
+	if err != nil || next == "" {
+		return current, err
+	}
+	return a.store.update(ctx, current.ID, func(o *order) (bool, error) {
+		if o.Status != current.Status {
+			return false, nil
+		}
+		o.Status = next
+		return true, nil
+	})
+}
+
+func applyEvidence(o *order, event order, action string) (bool, error) {
+	if event.Session != "" && !sessionID.MatchString(event.Session) ||
+		event.Intent != "" && !intentID.MatchString(event.Intent) ||
+		event.Session != "" && o.Session != "" && event.Session != o.Session ||
+		event.Intent != "" && o.Intent != "" && event.Intent != o.Intent {
+		return false, errConflict
+	}
+	if action == "expired" || action == "payment_failed" {
+		if o.Status != "pending" {
+			return false, nil
+		}
+		o.Status, o.CheckoutURL = action, ""
+		return true, nil
+	}
+	if o.Amount != event.Amount || event.Intent == "" || event.Refunded < 0 || event.Refunded > o.Amount ||
+		event.Receipt != "" && !stripeURL(event.Receipt, "pay.stripe.com") {
+		return false, errBad
+	}
+	if o.Status == "refunded" || o.Status == "refund_pending" {
+		return false, nil
+	}
+	switch action {
+	case "refund":
+		if event.Refunded != o.Amount {
+			return false, errBad
+		}
+		o.Status = "refund_pending"
+	case "review":
+		if event.Refunded == o.Amount {
+			return false, errBad
+		}
+		if o.Status == "review_required" && o.Refunded >= event.Refunded {
+			return false, nil
+		}
+		o.Status = "review_required"
+	case "grant":
+		if event.Refunded != 0 || event.Session == "" || event.Expires < 0 {
+			return false, errBad
+		}
+		if o.Status == "fulfillment_pending" && o.Expires != event.Expires {
+			return false, errConflict
+		}
+		if o.Status == "paid" || o.Status == "review_required" || o.Status == "fulfillment_pending" {
+			return false, nil
+		}
+		o.Status, o.Expires = "fulfillment_pending", event.Expires
+	default:
+		return false, errBad
+	}
+	o.Intent, o.Refunded, o.CheckoutURL = event.Intent, event.Refunded, ""
+	if event.Session != "" {
+		o.Session = event.Session
+	}
+	if event.Receipt != "" {
+		o.Receipt = event.Receipt
+	}
+	return true, nil
 }

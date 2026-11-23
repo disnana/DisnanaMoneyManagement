@@ -40,18 +40,17 @@ function trustedURL(value, host) {
   catch { return null; }
 }
 
-const findOrder = (env, id) => env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first();
+const findOrder = (env, id, subject) => callBackend(env, 'order-get', { order: { id, subject } });
 
 export async function checkout(env, fetcher, user, input) {
   if (!await canCheckout(env, user)) return json({ error: 'sales_unavailable' }, 503);
   if (!uuid.test(input?.request_id ?? '')) return json({ error: 'invalid_request' }, 400);
   const pack = packs(env).find(item => item.id === input.pack_id);
   if (!pack) return json({ error: 'pack_unavailable' }, 400);
-  await env.DB.prepare(`INSERT INTO orders
-    (id, subject, pack, title, amount, credits, validity_seconds, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?) ON CONFLICT(id) DO NOTHING`)
-    .bind(input.request_id, user, pack.id, pack.title, pack.amount, pack.credits, pack.validity_seconds, unix()).run();
-  const order = await findOrder(env, input.request_id);
+  const order = await callBackend(env, 'order-create', { order: {
+    id: input.request_id, subject: user, pack: pack.id, title: pack.title,
+    amount: pack.amount, credits: pack.credits, validity_seconds: pack.validity_seconds,
+  } });
   if (!order || order.subject !== user || order.pack !== pack.id || order.status !== 'pending') return json({ error: 'order_conflict' }, 409);
   const expires = order.created_at + checkoutLifetime;
   const remaining = expires - unix();
@@ -75,10 +74,10 @@ export async function checkout(env, fetcher, user, input) {
   });
   const session = await stripe(env, fetcher, '/checkout/sessions', form, 'mane-checkout:' + order.id);
   const url = trustedURL(session.url, 'checkout.stripe.com');
-  if (!url || session.livemode !== false || !stripeID.test(session.id ?? '')) throw new Error('invalid Checkout response');
-  const update = await env.DB.prepare("UPDATE orders SET stripe_session = ?, checkout_url = ? WHERE id = ? AND status = 'pending' AND (stripe_session IS NULL OR stripe_session = ?)")
-    .bind(session.id, url, order.id, session.id).run();
-  if (!update.meta.changes) return json({ error: 'order_conflict' }, 409);
+  if (!url || session.livemode !== false || !/^cs_test_[a-zA-Z0-9_]{5,255}$/.test(session.id ?? '')) throw new Error('invalid Checkout response');
+  await callBackend(env, 'order-checkout', { order: {
+    id: order.id, subject: user, stripe_session: session.id, checkout_url: url,
+  } });
   return json({ checkout_url: url });
 }
 
@@ -95,38 +94,31 @@ export async function validWebhook(raw, header, secret, at = unix()) {
   return signatures.some(part => part.startsWith('v1=') && equal(part.slice(3), expected));
 }
 
-async function refund(env, fetcher, order, refunded, paymentIntent) {
-  await env.DB.prepare(`UPDATE orders SET status = 'refund_pending', amount_refunded = ?, payment_intent = ?, checkout_url = NULL
-    WHERE id = ? AND status <> 'refunded'`).bind(refunded, paymentIntent, order.id).run();
-  await callBackend(env, 'reverse', { subject: order.subject, order_id: order.id }, fetcher);
-  await env.DB.prepare("UPDATE orders SET status = 'refunded' WHERE id = ? AND status = 'refund_pending'").bind(order.id).run();
+function apply(env, order, action, evidence = {}) {
+  return callBackend(env, 'order-apply', { action, order: { id: order.id, amount: order.amount, ...evidence } });
 }
 
-async function review(env, order, refunded, paymentIntent) {
-  await env.DB.prepare(`UPDATE orders SET status = 'review_required', amount_refunded = MAX(amount_refunded, ?),
-    payment_intent = ?, checkout_url = NULL WHERE id = ? AND status NOT IN ('refunded', 'refund_pending')`)
-    .bind(refunded, paymentIntent, order.id).run();
+function refundOrReview(env, order, charge, intent, evidence = {}) {
+  return apply(env, order, charge.amount_refunded === order.amount ? 'refund' : 'review', {
+    ...evidence, payment_intent: intent.id, amount_refunded: charge.amount_refunded,
+  });
 }
 
-async function settle(env, fetcher, order, sessionID, intent, charge) {
+async function settle(env, order, sessionID, intent, charge) {
   if (intent.status !== 'succeeded' || intent.amount_received !== order.amount || intent.currency !== 'jpy' ||
       intent.metadata?.mane_order !== order.id || intent.livemode !== false || !charge ||
       charge.payment_intent !== intent.id || charge.livemode !== false || !charge.paid ||
       !Number.isSafeInteger(charge.amount_refunded) || charge.amount_refunded < 0 || charge.amount_refunded > order.amount) {
     throw new Error('invalid payment state');
   }
-  if (charge.amount_refunded === order.amount) return refund(env, fetcher, order, charge.amount_refunded, intent.id);
-  if (charge.amount_refunded > 0 || charge.disputed) return review(env, order, charge.amount_refunded, intent.id);
-  await env.DB.prepare(`UPDATE orders SET status = 'fulfillment_pending', payment_intent = ?, stripe_session = ?, receipt_url = ?,
-    checkout_url = NULL WHERE id = ? AND status IN ('pending', 'payment_failed', 'fulfillment_pending')
-    AND (stripe_session IS NULL OR stripe_session = ?)`)
-    .bind(intent.id, sessionID, trustedURL(charge.receipt_url, 'pay.stripe.com'), order.id, sessionID).run();
-  const current = await findOrder(env, order.id);
-  if (current.status !== 'fulfillment_pending' || current.stripe_session !== sessionID) return;
+  const evidence = {
+    stripe_session: sessionID, payment_intent: intent.id,
+    receipt_url: trustedURL(charge.receipt_url, 'pay.stripe.com') ?? '',
+  };
+  if (charge.amount_refunded > 0 || charge.disputed) return refundOrReview(env, order, charge, intent, evidence);
   const expires = order.validity_seconds === null ? 0 : (charge.created + order.validity_seconds) * 1000;
   if (!Number.isSafeInteger(expires) || expires < 0) throw new Error('invalid expiration');
-  await callBackend(env, 'grant', { subject: order.subject, order_id: order.id, amount: order.credits, expires_at_ms: expires }, fetcher);
-  await env.DB.prepare("UPDATE orders SET status = 'paid' WHERE id = ? AND status = 'fulfillment_pending'").bind(order.id).run();
+  return apply(env, order, 'grant', { ...evidence, expires_at_ms: expires });
 }
 
 const sessionEvents = new Set([
@@ -134,23 +126,23 @@ const sessionEvents = new Set([
   'checkout.session.async_payment_failed', 'checkout.session.expired',
 ]);
 
-async function onCheckout(env, fetcher, event) {
-  const id = event.data?.object?.id;
+async function onCheckout(env, fetcher, id, eventType, expectedOrder) {
   if (!stripeID.test(id ?? '')) return;
   const session = await stripe(env, fetcher, '/checkout/sessions/' + id + '?expand%5B%5D=payment_intent.latest_charge');
   const orderID = session.metadata?.mane_order;
   if (!uuid.test(orderID ?? '')) return;
-  const order = await findOrder(env, orderID);
+  const order = expectedOrder ?? await findOrder(env, orderID);
   if (!order) return;
-  if (session.id !== id || session.client_reference_id !== order.id || session.livemode !== false ||
+  if (session.id !== id || orderID !== order.id || session.client_reference_id !== order.id || session.livemode !== false ||
       session.mode !== 'payment' || session.currency !== 'jpy' || session.amount_total !== order.amount ||
       (order.stripe_session && order.stripe_session !== id)) throw new Error('Checkout order mismatch');
   if (session.payment_status === 'paid' && session.status === 'complete' && session.payment_intent) {
-    return settle(env, fetcher, order, session.id, session.payment_intent, session.payment_intent.latest_charge);
+    return settle(env, order, session.id, session.payment_intent, session.payment_intent.latest_charge);
   }
   const failure = session.status === 'expired' ? 'expired' :
-    event.type === 'checkout.session.async_payment_failed' ? 'payment_failed' : null;
-  if (failure) await env.DB.prepare("UPDATE orders SET status = ?, checkout_url = NULL WHERE id = ? AND status = 'pending'").bind(failure, order.id).run();
+    eventType === 'checkout.session.async_payment_failed' ? 'payment_failed' : null;
+  if (failure) return apply(env, order, failure, { stripe_session: id });
+  return order;
 }
 
 const chargeEvents = new Set(['charge.refunded', 'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed']);
@@ -169,9 +161,8 @@ async function onCharge(env, fetcher, event) {
       intent.amount_received !== order.amount || !charge.paid || charge.currency !== 'jpy' ||
       !Number.isSafeInteger(charge.amount_refunded) || charge.amount_refunded < 0 || charge.amount_refunded > order.amount ||
       (order.payment_intent && order.payment_intent !== intent.id)) throw new Error('payment order mismatch');
-  if (charge.amount_refunded === order.amount) return refund(env, fetcher, order, charge.amount_refunded, intent.id);
   if (charge.amount_refunded > 0 || event.type.startsWith('charge.dispute.')) {
-    await review(env, order, charge.amount_refunded, intent.id);
+    await refundOrReview(env, order, charge, intent);
   }
 }
 
@@ -188,12 +179,12 @@ export async function webhook(env, fetcher, request) {
     return json({ error: 'invalid_event' }, 400);
   }
   if (event.livemode !== false || !stripeID.test(event.id ?? '')) return json({ error: 'invalid_event' }, 400);
-  const handled = await env.DB.prepare('SELECT id FROM stripe_events WHERE id = ?').bind(event.id).first();
-  if (handled) return json({ received: true });
-  if (sessionEvents.has(event.type)) await onCheckout(env, fetcher, event);
-  else if (chargeEvents.has(event.type)) await onCharge(env, fetcher, event);
-  else return json({ received: true });
-  await env.DB.prepare('INSERT INTO stripe_events VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING').bind(event.id, event.type, unix()).run();
+  if (!sessionEvents.has(event.type) && !chargeEvents.has(event.type)) return json({ received: true });
+  const eventKey = await hash(event.id);
+  if (await callBackend(env, 'event-get', { key: eventKey })) return json({ received: true });
+  if (sessionEvents.has(event.type)) await onCheckout(env, fetcher, event.data?.object?.id, event.type);
+  else await onCharge(env, fetcher, event);
+  await callBackend(env, 'event-put', { key: eventKey });
   return json({ received: true });
 }
 
@@ -206,17 +197,10 @@ export async function canCheckout(env, subject) {
   return (env.MANE_SHOP_TEST_SUBJECT_HASHES ?? '').split(',').map(x => x.trim()).includes(subjectHash);
 }
 
-export async function reconcile(env, fetcher) {
-  if (!stripeTestAvailable(env)) return;
-  const time = unix();
-  const pending = "status IN ('fulfillment_pending', 'refund_pending') AND retry_at <= ?";
-  const { results } = await env.DB.prepare("SELECT * FROM orders WHERE " + pending + " ORDER BY retry_at, created_at LIMIT 20").bind(time).all();
-  const work = results.map(async order => {
-    const claim = await env.DB.prepare("UPDATE orders SET retry_at = ? WHERE id = ? AND " + pending)
-      .bind(time + 600, order.id, time).run();
-    if (!claim.meta.changes) return;
-    if (order.status === 'refund_pending') return refund(env, fetcher, order, order.amount_refunded, order.payment_intent);
-    return onCheckout(env, fetcher, { type: 'checkout.session.completed', data: { object: { id: order.stripe_session } } });
-  });
-  await Promise.allSettled(work);
+export async function reconcile(env, fetcher, subject, id) {
+  const order = await findOrder(env, id, subject);
+  if (!order) return json({ error: 'order_not_found' }, 404);
+  if (!order.stripe_session) return json({ status: order.status });
+  const updated = await onCheckout(env, fetcher, order.stripe_session, undefined, order);
+  return json({ status: updated?.status ?? order.status });
 }

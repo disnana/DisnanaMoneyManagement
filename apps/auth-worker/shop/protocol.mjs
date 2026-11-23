@@ -43,21 +43,6 @@ export async function readBytes(request, limit) {
 export const json = (value, status = 200) =>
   Response.json(value, { status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } });
 
-export async function callBackend(env, operation, data, fetcher) {
-  const key = env.MANE_WEB_WORKER_KEY;
-  const origin = new URL(env.MANE_BACKEND_ORIGIN);
-  if (!/^[A-Za-z0-9_-]{43,}$/.test(key ?? '') || origin.protocol !== 'https:' || origin.origin !== env.MANE_BACKEND_ORIGIN) {
-    throw new Error('backend configuration unavailable');
-  }
-  const path = '/_internal/web-shop/' + operation;
-  const body = JSON.stringify(data);
-  const stamp = Math.floor(Date.now() / 1000);
-  const rawKey = Uint8Array.from(atob(key.replaceAll('-', '+').replaceAll('_', '/')), ch => ch.charCodeAt(0));
-  const signature = b64url(await hmac(rawKey, encode([stamp, 'POST', path, await hash(body)].join('\n'))));
-  const response = await fetcher(origin.origin + path, {
-    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000), body,
-    headers: { 'Content-Type': 'application/json', 'X-Mane-Web-Signature': stamp + '.' + signature },
-  });
-  if (!response.ok) throw new Error('backend rejected ' + operation + ' (' + response.status + ')');
-  return response.json();
+export function callBackend(env, operation, data) {
+  return env.shopRPC(operation, data);
 }

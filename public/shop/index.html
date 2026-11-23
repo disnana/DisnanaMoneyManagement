@@ -3,48 +3,55 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f3f7f6">
+  <meta name="theme-color" content="#112c29">
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>ショップ・クレジット管理 | マネーちゃん</title>
+  <title>クレジットショップ | マネーちゃん</title>
   <link rel="icon" href="/favicon.ico">
   <link rel="stylesheet" href="/portal/site.css">
+  <link rel="stylesheet" href="/shop/shop.css">
   <script src="/shop/shop.js" type="module"></script>
 </head>
-<body>
-  <header class="shell top">
-    <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="38" height="38">マネーちゃん</a>
-    <nav aria-label="主要ページ"><a href="/app/">Web版を開く</a></nav>
-  </header>
-  <main class="shell shop">
-    <h1>ショップ・クレジット管理</h1>
-    <p>AIレシートに使うクレジットを、Androidと同じGoogleアカウントで管理できます。</p>
+<body class="shop-page">
+  <header class="shop-bar"><div class="shell top">
+    <a class="brand" href="/"><img src="/portal/mascot.png" alt="" width="36" height="36">マネーちゃん</a>
+    <nav aria-label="主要ページ"><a href="/app/">Web家計簿</a><button id="logout" class="quiet" hidden>ログアウト</button></nav>
+  </div></header>
+  <main class="shell credit-shop">
+    <header class="shop-intro">
+      <h1>クレジットショップ</h1>
+      <p>AIレシートに使うクレジットを購入・管理できます。</p>
+    </header>
     <noscript><p>残高や購入状況の表示にはJavaScriptが必要です。</p></noscript>
-    <p id="status" class="status" role="status">読み込み中…</p>
-    <div class="actions">
-      <a id="login" class="button primary" href="/api/shop/auth/start" hidden>Googleでログイン</a>
-      <button id="refresh" class="button" hidden>表示を更新</button>
-      <button id="logout" class="button" hidden>ログアウト</button>
+    <section id="wallet" class="credit-balance" aria-labelledby="wallet-heading">
+      <div class="balance-content">
+        <h2 id="wallet-heading">利用可能なクレジット</h2>
+        <p class="balance-value" id="balance">—</p>
+        <ul class="expiry-list" id="lots" hidden></ul>
+        <p id="login-note">Androidと同じGoogleアカウントで残高を確認できます。</p>
+        <a id="login" class="button" href="/api/shop/auth/start">Googleでログイン</a>
+      </div>
+      <div class="balance-art"><img src="/portal/mascot.png" alt="" width="144" height="144"></div>
+    </section>
+    <div class="shop-feedback"><p id="status" role="status"></p><button id="refresh" class="quiet" hidden>表示を更新</button></div>
+    <section class="shop-section" aria-labelledby="packs-heading">
+      <div class="section-heading"><h2 id="packs-heading">クレジットを購入</h2><p id="pack-note" hidden></p></div>
+      <ul class="pack-list" id="packs"></ul>
+    </section>
+    <div id="account-history" hidden>
+      <nav class="history-nav" aria-label="履歴の種類">
+        <a href="#orders-section">購入履歴</a><a href="#history-section">利用履歴</a>
+      </nav>
+      <section class="shop-section" id="orders-section" aria-labelledby="orders-heading">
+        <div class="section-heading"><h2 id="orders-heading">購入履歴</h2></div>
+        <ul class="records" id="orders"></ul>
+      </section>
+      <section class="shop-section" id="history-section" aria-labelledby="history-heading">
+        <div class="section-heading"><h2 id="history-heading">クレジット利用履歴</h2></div>
+        <ul class="records" id="history"></ul>
+      </section>
     </div>
-    <section id="wallet" hidden aria-label="クレジット残高">
-      <h2>利用できるクレジット</h2>
-      <p class="amount" id="balance"></p>
-      <ul class="list" id="lots"></ul>
-    </section>
-    <section aria-labelledby="packs-heading">
-      <h2 id="packs-heading">クレジットパック</h2>
-      <p id="pack-note"></p>
-      <ul class="list" id="packs"></ul>
-    </section>
-    <section id="orders-section" hidden aria-labelledby="orders-heading">
-      <h2 id="orders-heading">購入履歴・領収書</h2>
-      <ul class="list" id="orders"></ul>
-    </section>
-    <section id="history-section" hidden aria-labelledby="history-heading">
-      <h2 id="history-heading">クレジット履歴</h2>
-      <ul class="list" id="history"></ul>
-    </section>
   </main>
-  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a><a href="mailto:support@disnana.com">購入・利用のお問い合わせ</a></nav></footer>
+  <footer class="shell footer"><a href="/">公式トップ</a><nav aria-label="公式情報"><a href="/terms/">利用規約</a><a href="/privacy/">プライバシーポリシー</a><a href="mailto:support@disnana.com">お問い合わせ</a></nav></footer>
 </body>
 </html>

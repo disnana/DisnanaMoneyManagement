@@ -46,7 +46,7 @@ jobs:
       - name: Unit tests
         run: bun run test
       - name: Authentication Worker tests
-        run: node --test apps/auth-worker/index.test.mjs apps/shop-worker/index.test.mjs
+        run: node --test apps/auth-worker/index.test.mjs apps/auth-worker/shop/index.test.mjs
       - name: Build
         run: bun run build
       - name: Build official site for GitHub Pages
@@ -73,6 +73,7 @@ jobs:
           for _ in {1..40}; do
             if docker exec dmm-scylla cqlsh -e "CREATE KEYSPACE IF NOT EXISTS dmm_test WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1} AND tablets = {'enabled': false}"; then
               docker exec -i dmm-scylla cqlsh -k dmm_test < internal/credits/schema.cql
+              docker exec -i dmm-scylla cqlsh -k dmm_test < internal/webshop/schema.cql
               exit 0
             fi
             sleep 3
@@ -85,7 +86,7 @@ jobs:
           MANE_SCYLLA_HOSTS: '127.0.0.1'
           MANE_SCYLLA_KEYSPACE: 'dmm_test'
           MANE_SCYLLA_DATACENTER: 'datacenter1'
-        run: go test -count=1 -v ./internal/credits
+        run: go test -count=1 -v ./internal/credits ./internal/webshop
 
   e2e:
     name: E2E · Playwright (mobile + desktop)

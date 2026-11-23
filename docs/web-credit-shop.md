@@ -12,22 +12,23 @@
 
 静的ページは既存のGitHub Pagesで配信する。独自ドメインなどルート配信時のビルドコマンドは `bun run build:portal`、成果物は `dist`。通常の `bun run build` とサブパス配信では、従来どおりPWAをトップに出す。公開ホストと端末データの保存領域はそのまま使い、旧PWAショートカットのURLを引き継ぐ。
 
-ショップAPIはCloudflareのWorker Routeで `dmm.disnana.com/api/shop/*` だけを割り当てる。ドメインの配信元、GitHub Pagesの設定、Cloudflare DNSの既存の向き先は移管しない。Stripeの試験では専用の試験ホストを使い、GitHub Pagesの公開版はレビュー後に更新する。
+ショップAPIは既存の `mane-auth-staging` Worker の `dmm.disnana.com/api/shop/*` ルートで扱う。Android認証のカスタムドメインと、GitHub Pagesの静的配信は従来の経路を使う。WorkerがGoogle OAuthとStripeを処理し、既存のGoサービスに署名付きの内部APIでデータ操作を依頼する。注文・Webセッション・残高はScyllaDBを共有する。
 
-## 試験環境の更新順序
+## ステージング反映
 
-1. 隔離ScyllaDBで [credit schema](../apps/server/internal/credits/schema.cql) を適用し、既存の [ScyllaDB設定](scylladb.md#ステージングのクレジット台帳) を両Goノードでそろえる。両ノードを更新し、Androidから残高が読めることを確認する。セッションの永続化は別作業で、今回の再起動は現行の試験セッションを失効させる。
-2. Goの `android-auth.env` とショップWorkerに、同じ32バイト以上のランダムなbase64url値を `MANE_WEB_WORKER_KEY` として設定する。GoのWebショップAPIはScyllaDB有効時だけ使える。WorkerとはHTTPSの内部呼び出しを使い、HTTPメソッド、パス、本文のハッシュ、時刻をHMACで照合する。GoのエンドポイントをAndroid用Workerの公開ルートには追加しない。
-3. 試験用D1を作り、[schema.sql](../apps/shop-worker/schema.sql) を適用する。[Wrangler設定例](../apps/shop-worker/wrangler.example.toml) をコピーし、試験ホストに合わせて `SITE_ORIGIN`、ルート、D1 ID、GoノードのHTTPSオリジンを指定する。静的ページと同じホストの `/api/shop/*` をWorkerに割り当てる。
-4. Androidと同じGoogleのWeb OAuthクライアントを使い、Google Cloudで `https://<試験ホスト>/api/shop/auth/callback` を承認済みリダイレクトURIに登録する。Workerに `GOOGLE_WEB_CLIENT_ID` と `GOOGLE_WEB_CLIENT_SECRET` を設定する。WebはGoogleの `sub` をGoで検証してから、Androidと同じ残高を取得する。
-5. Stripeのテスト環境から `STRIPE_SECRET_KEY` と `STRIPE_WEBHOOK_SECRET` をWorkerに登録する。Webhook URLは `/api/shop/stripe/webhook`。対象は `checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、`charge.dispute.updated`、`charge.dispute.closed`。Stripe Dashboardのテスト環境で返金を実行する。
-6. 購入を許可したテストアカウントのGoogle `sub` をSHA-256の小文字16進数に変換し、カンマ区切りで `MANE_SHOP_TEST_SUBJECT_HASHES` に設定する。試験用の商品設定は `MANE_SHOP_PACKS` にJSON配列で指定する。項目は `id`、`title`、JPYの整数 `amount`、整数 `credits`、有効秒数または `null` の `validity_seconds`。試験設定と認証を確認できた後に `MANE_SHOP_TEST_MODE=1`。テストキーと対象アカウントの両方が必要。
+1. 両ノードの接続先とkeyspaceを揃える。既存の [credit schema](../apps/server/internal/credits/schema.cql) が適用されたステージングkeyspaceに、[ショップ用CQL](../apps/server/internal/webshop/schema.cql) を一度適用する。両Goノードを更新し、既存の `MANE_WORKER_JWS_PUBLIC_KEY` と接続設定に加えて `MANE_WEB_SHOP_ENABLED=1` を設定する。再起動後に既存Androidセッションは再ログインが必要になる。
+2. Cloudflare Accessで各ノードの `/_internal/web-shop/*` を **Service Auth** に限定する。Goの接続は既存Tunnel経由。既存Workerに `MANE_SHOP_ACCESS_CLIENT_ID`、`MANE_SHOP_ACCESS_CLIENT_SECRET` をSecretとして登録する。Goは正しいEd25519署名がないリクエストを404で拒否する。署名対象は既存と同じく短い有効期限、宛先、メソッド、パス、本文。Androidが使うルートへのAccessポリシー追加は今回不要。
+3. [既存Worker](../apps/auth-worker/index.mjs) の新しい版をデプロイし、[設定例](../apps/auth-worker/wrangler.example.toml) に従って `dmm.disnana.com/api/shop/*` を追加する。このルートからショップのAPIを公開する。GitHub Pagesにショップ画面を配信する。最初は `MANE_SHOP_TEST_MODE=0` のままにする。
+4. Google Cloudの既存Web OAuthクライアントに `https://dmm.disnana.com/api/shop/auth/callback` を登録し、Workerに `GOOGLE_WEB_CLIENT_ID` と `GOOGLE_WEB_CLIENT_SECRET` を設定する。WebとAndroidで同じGoogleアカウントの残高を確認し、別ノード経由やGo再起動後でもWebのログインが使えるか試す。Webセッションの権限はショップAPIに限定される。
+5. Stripeのテスト環境から `STRIPE_SECRET_KEY` と `STRIPE_WEBHOOK_SECRET` をWorkerに登録する。Webhook URLは `/api/shop/stripe/webhook`。対象は `checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed`、`checkout.session.expired`、`charge.refunded`、`charge.dispute.created`、`charge.dispute.updated`、`charge.dispute.closed`。
+6. 購入を許可するGoogle `sub` のSHA-256（小文字16進数、複数はカンマ区切り）を `MANE_SHOP_TEST_SUBJECT_HASHES` に指定する。試験パックは `MANE_SHOP_PACKS` にJSON配列で設定する。項目は `id`、`title`、JPYの整数 `amount`、整数 `credits`、有効秒数または `null` の `validity_seconds`。動作確認後に `MANE_SHOP_TEST_MODE=1`。テスト鍵と対象アカウントの両方が必要。
 
-## 注文と台帳
+## 決済と復旧
 
-購入開始時にWorkerが認証済みの購入者と価格・クレジット数をD1に記録する。Stripeの決済完了後、WorkerはWebhooksの署名と時刻を検証し、Stripe APIで決済状態を再取得する。注文・通貨・金額・支払いの一致を確認してからGoで付与する。Stripe CheckoutからWebショップに戻る操作は、画面表示だけを更新する。
-
-付与・全額返金による未使用分の取り消し・台帳の監査行は、購入IDをキーにScyllaDBへ条件付きで記録する。途中で失敗した注文はD1に付与中・返金反映中として残り、Webhook再送または定期処理で同じ操作IDを使う。新規購入を停止しても、テスト鍵が設定された環境では既存注文へのWebhookと定期処理が動作する。試験実装では部分返金やチャージバックを確認待ちとして記録する。残高は自動で保留せず、確定済みの付与は利用できる。部分返金・異議申立てや、返金時点で消費済みのクレジットの扱いは本番前に決める。既存の期限優先消費を使い、無期限は後から消費する。AIジョブ開始時の見積・予約・精算は、AI実行APIとの接続時に追加する。
+- Checkoutを作る前にGo経由で注文を保存する。同じ注文IDをStripeへの冪等キーとして使用し、保存した価格と数量で再試行する。
+- WorkerはWebhookの署名を検証し、Stripe APIで注文・通貨・金額・支払いを照合する。Goは注文の条件付き更新と既存台帳への冪等な操作を行う。これらは別のパーティションにあるため、中断時は同じ注文IDで再開する。確認済みの処理をDBに保存できた後にStripeへ成功を返す。失敗時はStripeが再送する。
+- 購入履歴の「決済状況を再確認」ボタンは、認証済みの所有者が `POST /api/shop/orders/{orderId}/reconcile` で既存決済を照合する。新たなCheckoutを作成しない。Stripeへの照合後はWebhookと同じ命令を使う。Goに到達できない場合はWorkerがリクエストIDとノードIDを記録し、503と再試行時間を返す。
+- テスト段階では全額返金に対し未使用分を取り消す。部分返金とチャージバックは確認待ちとして記録する。消費済み分への扱い、Stripeの再送が終了した後の定期照合、AI実行の予約と精算は本番化前の設計項目。
 
 ## 本番販売前の確認
 

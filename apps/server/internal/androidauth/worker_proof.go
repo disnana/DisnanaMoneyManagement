@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,4 +75,11 @@ func (w *WorkerProof) accepts(token, node, method, path string, raw []byte, now 
 func sha256Bytes(raw []byte) []byte {
 	hash := sha256.Sum256(raw)
 	return hash[:]
+}
+
+// ForWebShop binds shop commands to this node and limits the proof to shop paths.
+func (w *WorkerProof) ForWebShop(node string) func(string, string, string, []byte, time.Time) bool {
+	return func(token, method, path string, body []byte, now time.Time) bool {
+		return strings.HasPrefix(path, "/_internal/web-shop/") && w.accepts(token, node, method, path, body, now)
+	}
 }

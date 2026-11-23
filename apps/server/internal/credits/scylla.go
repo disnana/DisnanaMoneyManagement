@@ -57,6 +57,8 @@ func OpenFromEnv() (*Wallet, error) {
 	return &Wallet{session}, nil
 }
 
+func (w *Wallet) Session() *gocql.Session { return w.session }
+
 func (w *Wallet) Close() { w.session.Close() }
 
 func (w *Wallet) read(ctx context.Context, subject string) (int64, []lot, error) {

@@ -123,11 +123,12 @@ func run(checkConfig bool) error {
 		return errors.New("invalid Android auth environment settings")
 	}
 	var handler http.Handler = node
-	if key := os.Getenv("MANE_WEB_WORKER_KEY"); key != "" {
-		if wallet == nil {
-			return errors.New("MANE_WEB_WORKER_KEY requires ScyllaDB")
+	if os.Getenv("MANE_WEB_SHOP_ENABLED") == "1" {
+		if wallet == nil || config.WorkerProof == nil {
+			return errors.New("MANE_WEB_SHOP_ENABLED requires ScyllaDB and MANE_WORKER_JWS_PUBLIC_KEY")
 		}
-		web, err := webshop.New(wallet, key, googleID.WebSubject)
+		check := config.WorkerProof.ForWebShop(config.NodeID)
+		web, err := webshop.New(wallet, wallet.Session(), check, googleID.WebSubject)
 		if err != nil {
 			return err
 		}

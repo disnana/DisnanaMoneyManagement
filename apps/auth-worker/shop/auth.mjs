@@ -20,7 +20,7 @@ const callback = '/api/shop/auth/callback';
 export async function startLogin(env) {
   if (!env.GOOGLE_WEB_CLIENT_ID || !env.GOOGLE_WEB_CLIENT_SECRET) return json({ error: 'login_unavailable' }, 503);
   const state = random(), nonce = random(), verifier = random();
-  await env.DB.prepare('INSERT INTO oauth_attempts VALUES (?, ?, ?, ?)').bind(await hash(state), verifier, nonce, now() + 600).run();
+  await callBackend(env, 'oauth-put', { key: await hash(state), verifier, nonce });
   const login = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   login.search = new URLSearchParams({
     client_id: env.GOOGLE_WEB_CLIENT_ID, redirect_uri: url(env, callback), response_type: 'code', scope: 'openid',
@@ -35,8 +35,7 @@ export async function finishLogin(request, env, fetcher) {
   const code = params.get('code');
   const fail = () => redirect(url(env, '/shop/?login=failed'), [cookie(stateCookie, '', 0)]);
   if (!state || !code || code.length > 2048 || !equal(state, params.get('state') ?? '')) return fail();
-  const attempt = await env.DB.prepare('DELETE FROM oauth_attempts WHERE state_hash = ? AND expires_at > ? RETURNING verifier, nonce')
-    .bind(await hash(state), now()).first();
+  const attempt = await callBackend(env, 'oauth-claim', { key: await hash(state), claim: crypto.randomUUID() });
   if (!attempt) return fail();
   const exchange = await fetcher('https://oauth2.googleapis.com/token', {
     method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5000),
@@ -48,29 +47,29 @@ export async function finishLogin(request, env, fetcher) {
   if (!exchange.ok) return fail();
   const { id_token: idToken } = await exchange.json();
   if (typeof idToken !== 'string' || idToken.length > 8192) return fail();
-  const { subject } = await callBackend(env, 'identity', { id_token: idToken, nonce: attempt.nonce }, fetcher);
+  const result = await callBackend(env, 'identity', { id_token: idToken, nonce: attempt.nonce });
+  const subject = result?.subject;
   if (typeof subject !== 'string' || !subject || subject.length > 255) return fail();
   const previous = getCookie(request, sessionCookie);
   const token = random(), lifetime = 8 * 60 * 60;
-  if (previous) await env.DB.prepare('DELETE FROM web_sessions WHERE session_hash = ?').bind(await hash(previous)).run();
-  await env.DB.prepare('INSERT INTO web_sessions VALUES (?, ?, ?)').bind(await hash(token), subject, now() + lifetime).run();
+  if (previous) await callBackend(env, 'session-delete', { key: await hash(previous) });
+  await callBackend(env, 'session-put', { key: await hash(token), subject });
   return redirect(url(env, '/shop/'), [cookie(stateCookie, '', 0), cookie(sessionCookie, token, lifetime)]);
 }
 
 export async function session(request, env) {
   const token = getCookie(request, sessionCookie);
   if (!token) return null;
-  return env.DB.prepare('SELECT subject FROM web_sessions WHERE session_hash = ? AND expires_at > ?').bind(await hash(token), now()).first();
+  return callBackend(env, 'session-get', { key: await hash(token) });
 }
 export async function logout(request, env) {
   const token = getCookie(request, sessionCookie);
-  if (token) await env.DB.prepare('DELETE FROM web_sessions WHERE session_hash = ?').bind(await hash(token)).run();
+  if (token) await callBackend(env, 'session-delete', { key: await hash(token) });
   return new Response(null, { status: 204, headers: { 'Set-Cookie': cookie(sessionCookie, '', 0), 'Cache-Control': 'no-store' } });
 }
 
 export async function allow(env, key, limit) {
   const end = (Math.floor(now() / 60) + 1) * 60;
-  const row = await env.DB.prepare('INSERT INTO rate_windows VALUES (?, 1, ?) ON CONFLICT(bucket) DO UPDATE SET hits = hits + 1 WHERE hits < ? RETURNING hits')
-    .bind(await hash(key + ':' + end), end, limit).first();
-  return Boolean(row);
+  const row = await callBackend(env, 'rate', { key: await hash(key + ':' + end), limit });
+  return row.allowed;
 }

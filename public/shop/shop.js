@@ -38,6 +38,7 @@ function rows(id, items, render, empty) {
   }
   if (!items.length) {
     const row = document.createElement('li');
+    row.className = 'empty';
     row.textContent = empty;
     list.append(row);
   }
@@ -56,31 +57,66 @@ function linkReceipt(row, value) {
   } catch { /* Stripe has no receipt for this order yet. */ }
 }
 
+function label(tag, text, className) {
+  const node = document.createElement(tag);
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+
+async function reconcile(button, order) {
+  button.disabled = true;
+  try {
+    const result = await request('orders/' + encodeURIComponent(order.id) + '/reconcile', {});
+    await load();
+    status.textContent = ['pending', 'fulfillment_pending', 'refund_pending'].includes(result.status)
+      ? '決済結果を確認中です。時間をおいて購入履歴をご確認ください。'
+      : '決済状況を更新しました。';
+  } catch {
+    status.textContent = '決済結果を取得できませんでした。再購入せず、時間をおいて購入履歴をご確認ください。';
+  } finally { button.disabled = false; }
+}
+
 function showAccount(account) {
-  for (const id of ['wallet', 'orders-section', 'history-section', 'logout']) element(id).hidden = !account;
-  element('login').hidden = Boolean(account);
+  for (const id of ['account-history', 'lots', 'logout']) element(id).hidden = !account;
+  for (const id of ['login', 'login-note']) element(id).hidden = Boolean(account);
+  const balance = element('balance');
+  balance.textContent = account ? number.format(account.wallet.available_credits) : '—';
   if (!account) return;
+  balance.append(label('small', 'クレジット', ''));
   const { wallet, orders } = account;
-  element('balance').textContent = number.format(wallet.available_credits) + ' クレジット';
   const totals = new Map();
   for (const lot of wallet.lots) {
     const expires = lot.expires_at_ms ?? 0;
     totals.set(expires, (totals.get(expires) ?? 0) + lot.amount);
   }
-  rows('lots', [...totals].sort((a, b) => a[0] - b[0]), (row, [expiry, amount]) => {
+  rows('lots', [...totals].sort((a, b) => (a[0] || Infinity) - (b[0] || Infinity)), (row, [expiry, amount]) => {
     row.textContent = (expiry ? date.format(expiry) + 'まで' : '無期限') + '　' + number.format(amount);
   }, '利用できるクレジットはありません。');
   rows('orders', orders, (row, order) => {
-    row.textContent = date.format(order.created_at * 1000) + '　' + order.title + '　' + yen.format(order.amount) + '　' + (orderStatus[order.status] ?? '確認中');
-    if (order.amount_refunded > 0) row.append('　返金 ' + yen.format(order.amount_refunded));
-    if (order.receipt_url) linkReceipt(row, order.receipt_url);
+    const title = label('div', order.title, 'record-title');
+    title.append(label('span', date.format(order.created_at * 1000), 'muted record-meta'));
+    const value = label('div', yen.format(order.amount), 'record-value');
+    value.append(label('span', orderStatus[order.status] ?? '確認中', 'muted'));
+    row.append(title, value);
+    const actions = label('div', '', 'record-actions');
+    if (order.amount_refunded > 0) actions.append(label('span', '返金 ' + yen.format(order.amount_refunded), 'muted'));
+    if (order.receipt_url) linkReceipt(actions, order.receipt_url);
+    if (['pending', 'fulfillment_pending', 'refund_pending', 'review_required'].includes(order.status)) {
+      const button = label('button', '決済状況を再確認', 'quiet');
+      button.addEventListener('click', () => void reconcile(button, order));
+      actions.append(button);
+    }
+    if (actions.childNodes.length) row.append(actions);
   }, '購入履歴はありません。');
   rows('history', wallet.history, (row, item) => {
-    row.textContent = date.format(item.at_ms) + '　' + (activity[item.operation.kind] ?? '確認中') + '　' + number.format(item.operation.amount);
+    const title = label('div', activity[item.operation.kind] ?? '確認中', 'record-title');
+    title.append(label('span', date.format(item.at_ms), 'muted record-meta'));
     if (item.operation.kind === 'grant' && item.operation.expires_at_ms) {
       const expires = item.operation.expires_at_ms;
-      row.append('　期限 ' + date.format(expires) + (expires <= Date.now() ? '（失効）' : ''));
+      title.append(label('span', '期限 ' + date.format(expires) + (expires <= Date.now() ? '（失効）' : ''), 'muted record-meta'));
     }
+    row.append(title, label('span', (item.operation.kind === 'grant' ? '+' : '−') + number.format(item.operation.amount), 'record-value'));
   }, 'クレジット履歴はありません。');
 }
 
@@ -102,14 +138,14 @@ async function buy(button, pack) {
   try {
     const [key, id] = recoverableOrder(pack.id);
     const result = await request('checkout', { pack_id: pack.id, request_id: id }).catch(error => {
-      if (['order_conflict', 'order_expired'].includes(error.message)) sessionStorage.removeItem(key);
+      if (error.message === 'order_expired') sessionStorage.removeItem(key);
       throw error;
     });
     const url = new URL(result.checkout_url);
     if (url.origin !== 'https://checkout.stripe.com') throw new Error('invalid_checkout');
     location.assign(url.href);
   } catch {
-    status.textContent = '決済画面を開けませんでした。しばらく待って再試行してください。';
+    status.textContent = '決済画面を開けませんでした。購入履歴で状況を確認してから、時間をおいて再試行してください。';
     button.disabled = false;
   }
 }
@@ -125,15 +161,16 @@ async function load() {
       }),
     ]);
     showAccount(account);
-    element('pack-note').textContent = enabled ? 'テスト購入用です。' : 'クレジットの販売は準備中です。';
+    element('pack-note').hidden = false;
+    element('pack-note').textContent = enabled ? 'Stripeテスト決済' : '販売準備中';
     rows('packs', packs, (row, pack) => {
-      row.textContent = pack.title + '　' + number.format(pack.credits) + ' クレジット　' + yen.format(pack.amount);
-      row.append(pack.validity_seconds === null ? '　無期限' : '　決済から ' + number.format(pack.validity_seconds / 3600) + ' 時間有効');
+      row.append(label('div', pack.title, 'pack-title'),
+        label('div', number.format(pack.credits) + ' クレジット', 'pack-value'),
+        label('div', yen.format(pack.amount) + ' · ' + (pack.validity_seconds === null ? '無期限' : number.format(pack.validity_seconds / 3600) + ' 時間有効'), 'muted'));
       if (!enabled || !account) return;
-      row.append(document.createElement('br'));
       const button = document.createElement('button');
       button.className = 'button primary';
-      button.textContent = 'Stripeの決済画面へ';
+      button.textContent = '決済へ進む';
       button.addEventListener('click', () => void buy(button, pack));
       row.append(button);
     }, '現在表示できるパックはありません。');

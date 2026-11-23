@@ -1,3 +1,5 @@
+import { shopRequest } from './shop/index.mjs';
+
 // Go still issues the signed challenge and verifies the device response.
 const challengePath = '/auth/challenge';
 const statusPath = '/_internal/scylla-status';
@@ -78,11 +80,11 @@ function base64url(value) {
 }
 const textBytes = new TextEncoder();
 
-async function signRequest(key, node, bodyHash, now) {
+async function signRequest(key, node, bodyHash, now, path = challengePath) {
   const iat = Math.floor(now() / 1000);
   const header = base64url(textBytes.encode(JSON.stringify({ alg: 'EdDSA', typ: 'JWT', kid: 'mane-worker-v1' })));
   const claims = { iss: 'mane-auth-staging', aud: node.id, iat, exp: iat + 5, jti: crypto.randomUUID(),
-    method: 'POST', path: challengePath, body_sha256: bodyHash };
+    method: 'POST', path, body_sha256: bodyHash };
   const input = header + '.' + base64url(textBytes.encode(JSON.stringify(claims)));
   const signature = await crypto.subtle.sign('Ed25519', key, textBytes.encode(input));
   return input + '.' + base64url(signature);
@@ -221,10 +223,101 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
     ctx.waitUntil(statusRefresh);
   }
 
+  function candidates(nodes, env, ctx) {
+    if (poolKey !== env.MANE_AUTH_NODES) {
+      poolKey = env.MANE_AUTH_NODES;
+      nextPoll = 0;
+      cached = undefined;
+    }
+    sample(nodes, env, ctx);
+    const up = [], unknown = [];
+    for (const node of nodes) {
+      const statuses = (cached ?? []).filter(item => now() - item.observed_at_ms < staleAfter)
+        .map(item => item.hosts[node.scyllaHostID]).filter(Boolean);
+      if (statuses.includes('UN')) up.push(node);
+      else if (!statuses.length || !statuses.every(status => /^D[NJLM]$/.test(status))) unknown.push(node);
+    }
+    return [...shuffled(up, random), ...shuffled(unknown, random)];
+  }
+
+  async function workerSigner(env) {
+    const configuredKey = env.MANE_WORKER_JWS_PRIVATE_KEY?.trim();
+    if (!configuredKey) throw new Error('worker signing key is required');
+    if (signerConfig !== configuredKey) {
+      const der = Uint8Array.from(atob(configuredKey), c => c.charCodeAt(0));
+      const nextSigner = await crypto.subtle.importKey('pkcs8', der, 'Ed25519', false, ['sign']);
+      signer = nextSigner;
+      signerConfig = configuredKey;
+    }
+    return signer;
+  }
+
+  async function shopBackend(nodes, env, operation, data, trace) {
+    if (!env.MANE_SHOP_ACCESS_CLIENT_ID || !env.MANE_SHOP_ACCESS_CLIENT_SECRET) {
+      throw new Error('shop origin authentication missing');
+    }
+    const key = await workerSigner(env);
+    const path = '/_internal/web-shop/' + operation;
+    const body = JSON.stringify(data);
+    const bodyHash = base64url(await crypto.subtle.digest('SHA-256', textBytes.encode(body)));
+    const deadline = Date.now() + 5500;
+    for (const node of nodes) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      let result;
+      try {
+        const proof = await signRequest(key, node, bodyHash, now, path);
+        const response = await fetchNode(node.origin + path, {
+          method: 'POST', body, redirect: 'manual', signal: AbortSignal.timeout(Math.min(remaining, 3000)),
+          headers: {
+            'Content-Type': 'application/json', 'X-Mane-Worker-Proof': proof,
+            'CF-Access-Client-Id': env.MANE_SHOP_ACCESS_CLIENT_ID,
+            'CF-Access-Client-Secret': env.MANE_SHOP_ACCESS_CLIENT_SECRET,
+          },
+        });
+        if (!response.headers.get('content-type')?.startsWith('application/json') || response.status >= 500 || response.status === 403) {
+          void response.body?.cancel().catch(() => {});
+          console.warn('shop upstream', { trace, operation, node: node.id, status: response.status });
+          continue;
+        }
+        if ([401, 404].includes(response.status)) {
+          void response.body?.cancel().catch(() => {});
+          return null;
+        }
+        result = { status: response.status, data: await readJSON(response, 192 * 1024) };
+      } catch {
+        console.warn('shop upstream timeout or invalid response', { trace, operation, node: node.id });
+        // A rate-limit increment can be uncertain after a timeout. Fail closed for this request.
+        if (operation === 'rate') break;
+        continue;
+      }
+      if (result.status >= 200 && result.status < 300) return result.data;
+      if (result.status === 409) throw Object.assign(new Error('order_conflict'), { status: 409 });
+      throw new Error('shop upstream rejected command');
+    }
+    throw new Error('no shop node available');
+  }
+
   return {
     async fetch(request, env, ctx) {
       const url = new URL(request.url);
       const path = url.pathname;
+      if (path.startsWith('/api/shop/')) {
+        if (env.MANE_WEB_SHOP_ENABLED !== '1' || url.origin !== env.SITE_ORIGIN) return reply(404, 'not found');
+        const trace = crypto.randomUUID();
+        try {
+          const nodes = configuredNodes(env.MANE_AUTH_NODES, url.origin);
+          const preferred = candidates(nodes, env, ctx);
+          const shopRPC = (operation, data) => shopBackend(preferred, env, operation, data, trace);
+          const response = await shopRequest(request, { ...env, shopRPC }, fetchNode);
+          if (response.status !== 503) return response;
+          return reply(503, 'temporarily_unavailable', { 'Retry-After': '15' });
+        } catch (error) {
+          if (error?.status === 409) return reply(409, 'order_conflict');
+          console.warn('shop unavailable', { trace, method: request.method });
+          return reply(503, 'temporarily_unavailable', { 'Retry-After': '15' });
+        }
+      }
       const accountRoute = accountRoutes.get(path);
       if (!accountRoute || url.search || request.url.includes('?')) return reply(404, 'not found');
       const [method, limit] = accountRoute;
@@ -257,32 +350,11 @@ export function createWorker({ fetchNode = fetch, now = Date.now, random = Math.
       } catch {
         return reply(503, 'challenge unavailable');
       }
-      if (poolKey !== env.MANE_AUTH_NODES) {
-        poolKey = env.MANE_AUTH_NODES;
-        nextPoll = 0;
-        cached = undefined;
-      }
-      sample(nodes, env, ctx);
-      const up = [], unknown = [];
-      for (const node of nodes) {
-        const statuses = (cached ?? []).filter(s => now() - s.observed_at_ms < staleAfter)
-          .map(s => s.hosts[node.scyllaHostID]).filter(Boolean);
-        if (statuses.includes('UN')) up.push(node);
-        else if (!statuses.length || !statuses.every(s => /^D[NJLM]$/.test(s))) unknown.push(node);
-      }
-      const eligible = [...shuffled(up, random), ...shuffled(unknown, random)];
+      const eligible = candidates(nodes, env, ctx);
       const started = now();
       let key;
       try {
-        const configuredKey = env.MANE_WORKER_JWS_PRIVATE_KEY?.trim();
-        if (!configuredKey) return reply(503, 'challenge unavailable');
-        if (signerConfig !== configuredKey) {
-          const der = Uint8Array.from(atob(configuredKey), c => c.charCodeAt(0));
-          const nextSigner = await crypto.subtle.importKey('pkcs8', der, 'Ed25519', false, ['sign']);
-          signer = nextSigner;
-          signerConfig = configuredKey;
-        }
-        key = signer;
+        key = await workerSigner(env);
       } catch {
         return reply(503, 'challenge unavailable');
       }
