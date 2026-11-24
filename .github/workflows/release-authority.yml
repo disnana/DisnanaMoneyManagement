@@ -34,7 +34,7 @@ jobs:
       contents: read
       attestations: read
       id-token: write
-    uses: disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@d7ba6ad22c77c5348be0bd937050999e7dd02a58
+    uses: disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@d4eac0c42a98a93aa772474a50f7b8df2ca55898
     with:
       operation: ${{ inputs.operation || '' }}
       build_run_id: ${{ inputs.build_run_id || '' }}
