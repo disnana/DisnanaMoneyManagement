@@ -31,7 +31,7 @@ jobs:
           bun install --frozen-lockfile
           bunx expo prebuild --platform android --no-install
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
-            'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;27.1.12297006'
+            'platforms;android-37.0' 'build-tools;36.0.0' 'build-tools;37.0.0' 'ndk;27.1.12297006'
           curl --fail --silent --show-error --location --max-time 180 \
             https://services.gradle.org/distributions/gradle-9.4.1-bin.zip -o "$RUNNER_TEMP/mane-gradle.zip"
           printf '%s  %s\n' '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb' \
