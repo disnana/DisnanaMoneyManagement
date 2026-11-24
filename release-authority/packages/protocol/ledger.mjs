@@ -184,10 +184,41 @@ export class ReleaseLedger {
       this.checkPolicy(record.manifest, now);
       requireRule(now >= record.armedAt + 8000 && now < record.armedAt + minute, 'Approval timing outside policy');
       const { approvalNonce: discarded, ...approved } = record;
+      const dispatch = this.policy.autoDispatch?.() && approved.manifest.releaseStatus === 'upload-only' ? 'QUEUED' : undefined;
       return {
-        record: { ...approved, state: 'APPROVED', approvedAt: now },
+        record: { ...approved, state: 'APPROVED', approvedAt: now, dispatch },
         event: { type: 'approved', administrator },
       };
+    });
+  }
+
+  pendingDispatchIds() {
+    return this.sql.exec("SELECT id FROM releases WHERE json_extract(payload, '$.dispatch') = 'QUEUED'")
+      .toArray().map(({ id }) => id);
+  }
+
+  async beginDispatch(releaseId) {
+    return this.mutate(releaseId, (record, now) => {
+      if (record?.dispatch !== 'QUEUED') return {};
+      if (record.state !== 'APPROVED' || !this.policy.autoDispatch?.() || this.policy.disabled()
+        || now >= Math.min(Date.parse(record.manifest.expiresAt), record.approvedAt + 5 * minute)) {
+        return { record: { ...record, dispatch: 'SKIPPED' }, event: { type: 'dispatch_skipped' } };
+      }
+      try { this.checkPolicy(record.manifest, now); }
+      catch { return { record: { ...record, dispatch: 'SKIPPED' }, event: { type: 'dispatch_skipped' } }; }
+      const { buildRunId, verifierRunId, verifierWorkflowSha } = record.manifest;
+      return {
+        record: { ...record, dispatch: 'STARTED' }, event: { type: 'dispatch_started', verifierRunId },
+        response: { buildRunId, verifierRunId, workflowSha: verifierWorkflowSha },
+      };
+    });
+  }
+
+  async finishDispatch(releaseId, result) {
+    requireRule(['sent', 'failed', 'unknown'].includes(result), 'Invalid dispatch result');
+    return this.mutate(releaseId, (record) => {
+      if (record?.dispatch !== 'STARTED') return {};
+      return { record: { ...record, dispatch: result.toUpperCase() }, event: { type: `dispatch_${result}` } };
     });
   }
 

@@ -27,6 +27,13 @@ class ZipValidationTest(unittest.TestCase):
         path = self.archive([("base/root/", b""), ("base/root/test", b"data")])
         self.assertEqual(len(verifier.inspect_zip(path)), 4)
 
+    def test_reanimated_kotlin_module_allows_only_the_exact_path(self):
+        name = "base/root/META-INF/DMM:react-native-reanimated_release.kotlin_module"
+        self.assertIn(name, verifier.inspect_zip(self.archive([(name, b"metadata")])))
+        for unapproved in (name + "/", name.replace("DMM:", "other:")):
+            with self.subTest(name=unapproved), self.assertRaises(ValueError):
+                verifier.inspect_zip(self.archive([(unapproved, b"")]))
+
     def test_duplicate_case_collisions_and_traversal(self):
         for name in ["BundleConfig.pb", "BUNDLECONFIG.PB", "../outside", "base//a", "base/root//"]:
             with self.subTest(name=name), self.assertRaises(ValueError):

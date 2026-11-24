@@ -50,6 +50,13 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 
 現時点ではモックでAPI呼び出しと異常時の停止を検証済みです。トラック未割り当てのAABが実際にApp Bundle Explorerに表示され、手動で選べるかはPlayの実環境で照合します。
 
+### 承認でFinalizerを起動する構成
+
+- GitHub Appを専用で作り、`disnana/DisnanaMoneyManagement` のみにインストールします。リポジトリ権限はActionsの読み取りと書き込みです。Appの鍵をPKCS#8 PEMに変換し、[Dispatcher Worker](../wrangler.dispatcher.example.toml) の `GITHUB_APP_PKCS8_PEM` にSecretとして登録します。`GITHUB_APP_ID` と `GITHUB_APP_INSTALLATION_ID` は対応する数値IDです。Dispatcherに外部ルートを付ける必要はありません。
+- Signerに `GITHUB_DISPATCHER` Service Bindingを接続し、検証が済んだ運用環境で `RELEASE_AUTO_DISPATCH=true` にします。Signerが承認と同時に台帳へ起動待ちを記録し、DOアラームからDispatcherを呼びます。Dispatcherは対象リポジトリの短命installation tokenでVerifierの成功とSHAを確認し、固定ワークフローの `finalize` を起動します。GitHubの書き込み権限はDispatcherに、Android署名鍵はSignerに置きます。
+- GitHubのリポジトリ変数 `RELEASE_AUTO_VERIFY=true` で、`main` の監査付きAABビルドが成功したときにVerifierを起動します。ActionsのサマリーにCloudflare承認画面のリンクが出ます。手動での `verify` と `finalize` も利用できます。
+- 署名・AAB登録の認可、承認期限、再取得時のハッシュ確認、署名・アップロード予約は引き続き使います。`dispatch_failed` や `dispatch_unknown` が残ったら、対象のVerifier run IDでActionsの起動履歴を確認してください。起動がなかったことを確認してから、期限内に手動で再開できます。
+
 ### 既存GitHubリポジトリで実行する順番
 
 - GitHub上の配置先は既存の `disnana/DisnanaMoneyManagement` です。この構成では独立したGitHub-hostedジョブを持つ `.github/workflows/release-authority.yml` を使います。Cloudflare側のVerifierとFinalizerポリシーに同じ `callerRef` と完全な `callerSha` を設定し、それぞれ個別のenvironment・audience・Secretを使います。署名鍵とWorkerの更新権限はCloudflareに残します。
