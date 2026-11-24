@@ -1,0 +1,193 @@
+name: Release Authority AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [verify, finalize]
+        required: true
+      build_run_id:
+        description: Android Play build run ID
+        type: string
+        required: true
+      verifier_run_id:
+        description: Verifier run ID, required for finalize
+        type: string
+        required: false
+      upload_to_play:
+        description: Upload the independently verified signed AAB to Play
+        type: boolean
+        default: false
+
+permissions: {}
+
+env:
+  RELEASE_SOURCE_SHA: ${{ vars.RELEASE_SOURCE_SHA || github.sha }}
+  RELEASE_VERSION_NAME: ${{ vars.RELEASE_VERSION_NAME }}
+  RELEASE_VERSION_CODE: ${{ vars.RELEASE_VERSION_CODE }}
+  RELEASE_UPLOAD_CERTIFICATE_PEM: ${{ vars.RELEASE_UPLOAD_CERTIFICATE_PEM }}
+  RELEASE_UPLOAD_CERTIFICATE_SHA256: ${{ vars.RELEASE_UPLOAD_CERTIFICATE_SHA256 }}
+  RELEASE_UPLOAD_KEY_ID: ${{ vars.RELEASE_UPLOAD_KEY_ID }}
+  RELEASE_TARGET_TRACK: ${{ vars.RELEASE_TARGET_TRACK }}
+  RELEASE_POLICY_VERSION: ${{ vars.RELEASE_POLICY_VERSION }}
+  BUILD_RUN_ID: ${{ inputs.build_run_id }}
+
+jobs:
+  verify:
+    if: inputs.operation == 'verify' && github.repository == 'disnana/DisnanaMoneyManagement' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: release-authority-verifier
+    permissions:
+      actions: read
+      contents: read
+      attestations: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21.0.13.1+2'
+      - name: Verify source artifacts and generate signing evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash release-authority/tools/aab-verifier/prepare-ci.sh
+          out="$RUNNER_TEMP/mane-authority"
+          digest=$(node release-authority/tools/aab-verifier/ci-manifest.mjs validate)
+          python3 release-authority/tools/aab-verifier/verify.py --bundletool "$out/tools/bundletool.jar" \
+            --package com.disnana.mane_chan --version-name "$RELEASE_VERSION_NAME" --version-code "$RELEASE_VERSION_CODE" \
+            --commit "$RELEASE_SOURCE_SHA" --unsigned "$out/app-release.aab" --sha256 "$digest"
+          export RELEASE_ISSUED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
+          java -cp "$out/classes:$out/tools/*" DeterministicAab capture \
+            "$out/app-release.aab" "$out/certificate.pem" "$RELEASE_ISSUED_AT" "$out/proof"
+          node release-authority/tools/aab-verifier/ci-manifest.mjs create
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Mane-chan-release-manifest
+          path: ${{ runner.temp }}/mane-authority/manifest.json
+          if-no-files-found: error
+          retention-days: 2
+      - name: Register the approval request
+        env:
+          RELEASE_VERIFIER_SECRET: ${{ secrets.RELEASE_VERIFIER_SECRET }}
+        run: |
+          node release-authority/tools/aab-verifier/register-staging.mjs "$RUNNER_TEMP/mane-authority/manifest.json" |
+            jq -r '"[承認画面](\(.approvalUrl))\n\nManifest SHA-256 `\(.releaseHash)`"' >> "$GITHUB_STEP_SUMMARY"
+
+  finalize:
+    if: inputs.operation == 'finalize' && github.repository == 'disnana/DisnanaMoneyManagement' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: release-authority-finalizer
+    permissions:
+      actions: read
+      contents: read
+      attestations: read
+      id-token: write
+    outputs:
+      signed_sha256: ${{ steps.finalize.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21.0.13.1+2'
+      - name: Recheck source artifacts and verifier run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIER_RUN_ID: ${{ inputs.verifier_run_id }}
+        run: |
+          [[ "$VERIFIER_RUN_ID" =~ ^[1-9][0-9]{0,19}$ && "$VERIFIER_RUN_ID" != "$GITHUB_RUN_ID" ]]
+          gh api "/repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIER_RUN_ID" |
+            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" \
+              '.conclusion == "success" and .event == "workflow_dispatch" and
+               .path == ".github/workflows/release-authority.yml" and .head_branch == "main" and
+               .head_sha == $sha and .head_repository.full_name == $repo' >/dev/null
+          bash release-authority/tools/aab-verifier/prepare-ci.sh
+      - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: Mane-chan-release-manifest
+          path: ${{ runner.temp }}/mane-authority
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.verifier_run_id }}
+      - name: Sign and verify the exact approved AAB
+        id: finalize
+        env:
+          RELEASE_FINALIZER_SECRET: ${{ secrets.RELEASE_FINALIZER_SECRET }}
+          VERIFIER_RUN_ID: ${{ inputs.verifier_run_id }}
+        run: |
+          out="$RUNNER_TEMP/mane-authority"
+          jq -e --arg id "$VERIFIER_RUN_ID" '.verifierRunId == $id' "$out/manifest.json" >/dev/null
+          issued_at=$(jq -er .issuedAt "$out/manifest.json")
+          digest=$(node release-authority/tools/aab-verifier/ci-manifest.mjs validate)
+          verify=(python3 release-authority/tools/aab-verifier/verify.py --bundletool "$out/tools/bundletool.jar"
+            --package com.disnana.mane_chan --version-name "$RELEASE_VERSION_NAME" --version-code "$RELEASE_VERSION_CODE"
+            --commit "$RELEASE_SOURCE_SHA" --unsigned "$out/app-release.aab" --sha256 "$digest")
+          "${verify[@]}"
+          assembly=(java -cp "$out/classes:$out/tools/*" DeterministicAab)
+          "${assembly[@]}" capture "$out/app-release.aab" "$out/certificate.pem" "$issued_at" "$out/proof"
+          node release-authority/tools/aab-verifier/ci-manifest.mjs compare
+          node release-authority/tools/remote-jarsigner/finalize-staging.mjs \
+            "$out/manifest.json" "$out/proof/input.bin" "$out/signature.bin"
+          "${assembly[@]}" finalize-signature "$out/app-release.aab" "$out/certificate.pem" "$issued_at" \
+            "$out/proof" "$out/mane-chan-signed.aab" "$out/signature.bin"
+          "${verify[@]}" --signed "$out/mane-chan-signed.aab"
+          LC_ALL=C jarsigner -verify "$out/mane-chan-signed.aab" > "$out/jarsigner.log"
+          grep -Fx 'jar verified.' "$out/jarsigner.log"
+          printf 'sha256=%s\n' "$(sha256sum "$out/mane-chan-signed.aab" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Mane-chan-authority-signed-aab
+          path: ${{ runner.temp }}/mane-authority/mane-chan-signed.aab
+          if-no-files-found: error
+          retention-days: 2
+
+  upload:
+    if: inputs.upload_to_play
+    needs: finalize
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: release-authority-play
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: android-play-closed-test
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: Mane-chan-authority-signed-aab
+          path: signed
+      - id: google
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.PLAY_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.PLAY_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/androidpublisher
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Register the bundle without changing a track
+        env:
+          PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
+          SIGNED_SHA256: ${{ needs.finalize.outputs.signed_sha256 }}
+        run: |
+          python3 scripts/android_play_draft.py --bundle-only \
+            signed/mane-chan-signed.aab "$RELEASE_VERSION_CODE" "$SIGNED_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"

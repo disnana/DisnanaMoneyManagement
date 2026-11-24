@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
+import java.security.Signature;
+import java.security.SignatureException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
@@ -130,9 +132,28 @@ public final class DeterministicAab {
         }
     }
 
+    private static RemoteAabSigner.SignOperation verifiedSignature(Path path, byte[] expected, RSAPublicKey key)
+            throws Exception {
+        int signatureSize = (key.getModulus().bitLength() + 7) / 8;
+        byte[] signature = boundedEvidence(path, signatureSize);
+        if (signature.length != signatureSize) throw new SignatureException("Unexpected RSA signature size");
+        return actual -> {
+            if (!MessageDigest.isEqual(expected, actual)) {
+                throw new SignatureException("Signing bytes differ from verifier evidence");
+            }
+            var verifier = Signature.getInstance(RemoteAabSigner.ALGORITHM);
+            verifier.initVerify(key);
+            verifier.update(actual);
+            if (!verifier.verify(signature)) {
+                throw new SignatureException("Signer output does not match the upload certificate");
+            }
+            return signature;
+        };
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length != 5 && args.length != 7) throw new IllegalArgumentException(
-                "capture AAB certificate.pem instant proof-dir OR finalize AAB certificate.pem instant proof-dir signed.aab loopback-url");
+                "capture AAB certificate.pem instant proof-dir OR finalize-signature AAB certificate.pem instant proof-dir signed.aab signature.bin");
         Path unsigned = Path.of(args[1]);
         X509Certificate certificate;
         try (var input = Files.newInputStream(Path.of(args[2]))) {
@@ -152,14 +173,18 @@ public final class DeterministicAab {
             });
             return;
         }
-        if (!"finalize".equals(args[0]) || args.length != 7) throw new IllegalArgumentException("Unexpected mode");
+        if (args.length != 7) throw new IllegalArgumentException("Unexpected mode");
         if (!MessageDigest.isEqual(metadata.manifest(), boundedEvidence(dir.resolve("MANIFEST.MF"), MAX_JAR_METADATA))
                 || !MessageDigest.isEqual(metadata.signatureFile(), boundedEvidence(dir.resolve("MANE.SF"), MAX_JAR_METADATA))) {
             throw new IllegalArgumentException("JAR metadata differs from verifier evidence");
         }
         byte[] input = boundedEvidence(dir.resolve("input.bin"), RemoteAabSigner.MAX_INPUT);
-        byte[] block = cms(metadata, certificate, time,
-                RemoteAabSigner.remoteOperation(URI.create(args[6]), input, key));
+        var signer = switch (args[0]) {
+            case "finalize" -> RemoteAabSigner.remoteOperation(URI.create(args[6]), input, key);
+            case "finalize-signature" -> verifiedSignature(Path.of(args[6]), input, key);
+            default -> throw new IllegalArgumentException("Unexpected mode");
+        };
+        byte[] block = cms(metadata, certificate, time, signer);
         Path output = Path.of(args[5]).toAbsolutePath();
         Path temporary = Files.createTempFile(output.getParent(), "signed-aab-", ".tmp");
         try {

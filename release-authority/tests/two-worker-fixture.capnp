@@ -17,11 +17,13 @@ const config :Workerd.Config = (
         (name = "APPROVAL_ORIGIN", text = "https://approval.fixture.invalid"),
         (name = "VERIFIER_ORIGIN", text = "https://verifier.fixture.invalid"),
         (name = "APPROVAL_INTAKE", service = (name = "signer", entrypoint = "ApprovalIntake")),
-        (name = "VERIFIER_INTAKE", service = (name = "signer", entrypoint = "VerifierIntake"))
+        (name = "VERIFIER_INTAKE", service = (name = "signer", entrypoint = "VerifierIntake")),
+        (name = "FINALIZER_INTAKE", service = (name = "signer", entrypoint = "FinalizerIntake"))
       ],
     )),
     (name = "signer", worker = (
       compatibilityDate = "2026-11-23",
+      compatibilityFlags = ["nodejs_compat"],
       modules = [(name = "signer.mjs", esModule = embed "signer.mjs")],
       globalOutbound = (name = "edge", entrypoint = "FixtureJwks"),
       bindings = [
@@ -30,7 +32,11 @@ const config :Workerd.Config = (
         (name = "RELEASE_POLICY", text = embed "release-policy.json"),
         (name = "ACCESS_POLICY", text = embed "access-policy.json"),
         (name = "VERIFIER_POLICY", text = embed "verifier-policy.json"),
+        (name = "FINALIZER_POLICY", text = embed "finalizer-policy.json"),
+        (name = "UPLOAD_CERTIFICATE_PEM", text = embed "fixture-upload-cert.pem"),
+        (name = "UPLOAD_PRIVATE_KEY_PEM", text = embed "fixture-upload-key.pem"),
         (name = "RELEASE_INTAKE_ENABLED", text = "true"),
+        (name = "RELEASE_SIGNING_ENABLED", text = "true"),
         (name = "RELEASE_LEDGER", durableObjectNamespace = "SignerLedger")
       ],
       durableObjectNamespaces = [(className = "SignerLedger", uniqueKey = "release-two-worker-test-only", enableSql = true)],

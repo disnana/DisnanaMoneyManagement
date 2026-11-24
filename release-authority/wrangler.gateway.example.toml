@@ -24,3 +24,8 @@ entrypoint = "ApprovalIntake"
 binding = "VERIFIER_INTAKE"
 service = "disnana-release-signer-staging"
 entrypoint = "VerifierIntake"
+
+[[services]]
+binding = "FINALIZER_INTAKE"
+service = "disnana-release-signer-staging"
+entrypoint = "FinalizerIntake"

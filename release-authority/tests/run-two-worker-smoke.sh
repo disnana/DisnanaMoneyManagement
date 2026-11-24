@@ -14,9 +14,11 @@ trap cleanup EXIT
 mkdir "$scratch/db"
 cd "$root"
 "$bun_bin" build workers/gateway/index.mjs --target=browser --outfile="$scratch/gateway.mjs"
-"$bun_bin" build workers/signer/index.mjs --target=browser --external=cloudflare:workers \
+"$bun_bin" build workers/signer/index.mjs --target=node --external=cloudflare:workers \
   --loader .txt:text --outfile="$scratch/signer.mjs"
 cp tests/two-worker-fixture.{mjs,capnp} "$scratch/"
+openssl req -new -newkey rsa:2048 -x509 -noenc -days 1 -subj '/CN=Local integration test' \
+  -keyout "$scratch/fixture-upload-key.pem" -out "$scratch/fixture-upload-cert.pem" 2>/dev/null
 node tests/two-worker-smoke.mjs prepare "$scratch"
 (cd "$scratch" && exec "$WORKERD" serve two-worker-fixture.capnp) > "$scratch/workerd.log" 2>&1 &
 workerd_pid=$!
@@ -33,7 +35,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-expected = ["registered", "approval_page_viewed", "armed", "approved"]
+expected = ["registered", "approval_page_viewed", "armed", "approved", "sign_started", "signed"]
 for path in Path(sys.argv[1]).rglob("*.sqlite"):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         if db.execute("SELECT 1 FROM sqlite_master WHERE name = 'audit'").fetchone():

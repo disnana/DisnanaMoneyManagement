@@ -11,17 +11,17 @@
 
 ## Wrangler / 環境設定の雛形
 
-[Gateway設定例](../wrangler.gateway.example.toml) と [Signer設定例](../wrangler.signer.example.toml) を使います。Signer側の `new_sqlite_classes` で台帳を作成し、Gateway側は `ApprovalIntake` と `VerifierIntake` のService Bindingのみ設定します。ステージングの名前は `disnana-release-gateway-staging` と `disnana-release-signer-staging` を使います。GatewayへCustom Domainを登録する前に、`release-stg.disnana.com` にAccessを設定してください。
+[Gateway設定例](../wrangler.gateway.example.toml) と [Signer設定例](../wrangler.signer.example.toml) を使います。Signer側の `new_sqlite_classes` で台帳を作成し、Gateway側は `ApprovalIntake`、`VerifierIntake`、`FinalizerIntake` のService Bindingを設定します。ステージングの名前は `disnana-release-gateway-staging` と `disnana-release-signer-staging` を使います。GatewayへCustom Domainを登録する前に、`release-stg.disnana.com` にAccessを設定してください。
 
-`RELEASE_INTAKE_ENABLED` は初期値 `false`。ローカル検証ではテスト設定でのみ `true` にしています。Signerの署名実行とPlay結果の記録は次の統合段階で接続します。
+`RELEASE_INTAKE_ENABLED` と `RELEASE_SIGNING_ENABLED` は初期値 `false`。固定CIのワークフローを確定してから、ステージングのテスト鍵で個別に有効化します。Play結果の台帳記録は未接続です。
 
 | 保存先 | 設定候補 |
 | --- | --- |
-| Gateway | `APPROVAL_ORIGIN`、`VERIFIER_ORIGIN`、二つの名前付きService Binding |
-| Signerの認証設定 | `ACCESS_POLICY` にAccessのteam、audience、管理者のsub allowlist。`VERIFIER_POLICY` に固定ref、repo/ownerの数値ID、reusable workflow SHA、個別audienceとSecretのSHA-256 |
+| Gateway | `APPROVAL_ORIGIN`、`VERIFIER_ORIGIN`、名前付きService Binding 3本 |
+| Signerの認証設定 | `ACCESS_POLICY` にAccessのteam、audience、管理者のsub allowlist。`VERIFIER_POLICY` と `FINALIZER_POLICY` にはそれぞれの固定ref、repo/ownerの数値ID、reusable workflow SHA、個別audienceとSecretのSHA-256 |
 | Signerのリリース設定 | `RELEASE_POLICY` にアプリID・package・repo・許可track・鍵IDと公開証明書SHA-256・ポリシーバージョン |
 | 台帳 | アプリ単位のSQLite DO、鍵とポリシーの版、署名停止フラグ、保持期間、外部アンカーの保存先 |
-| Signer | アップロード鍵のPKCS#8、公開証明書とSHA-256、鍵ID、固定アルゴリズム。同環境の隔離されたSecretsへ直接登録 |
+| Signer | 秘密鍵を `UPLOAD_PRIVATE_KEY_PEM`、対応する公開証明書を `UPLOAD_CERTIFICATE_PEM` に登録します。証明書のSHA-256とRSA鍵長（`rsaBits`、既定値3072）をポリシーで検証します |
 | Publisher | WIF provider、専用アカウント、Play APIのtrack ID、参照する信頼済みreceipt設定。長期のアカウント鍵JSONは作成しない |
 
 ## ログの保管期間案
@@ -37,3 +37,31 @@
 - 漏洩の疑いがあればSignerの緊急停止、CIのアプリ権限停止、WIFとAccessセッションの失効、未承認要求の失効を実施する。すでに配布された版への対応はPlay Consoleで判断する。
 - アップロード鍵の変更時はPlayの正式な鍵リセットで新しい公開証明書を登録。鍵ID・証明書指紋・ポリシー版を更新し、旧版の要求を作り直す。receipt鍵とCI Secretは独立に更新し、どの鍵で署名したかを監査する。
 - 監査の外部バックアップには署名付きチェックポイントを使う。JWTやCookie、秘密鍵は保存対象に含めない。
+
+## PlayへのAAB登録のみ
+
+新しいデプロイで有効化するときは、Signerの `RELEASE_POLICY` に `"releaseStatus": "upload-only"` を追加します。既存の `track` は承認時に確認する予定トラックです。Playへ割り当てるAPI呼び出しはありません。
+
+Release AuthorityのFinalizerから検証済みの署名済みAABを引き継いだら、署名済み成果物のSHA-256を固定して、`scripts/android_play_draft.py --bundle-only AAB VERSION_CODE SHA256` で登録します。認証は専用の短期Playアクセストークンを `PLAY_ACCESS_TOKEN` に渡します。実際の接続前にGitHub WIFとPlay権限を別途検証してください。
+
+このモードのEditにはAAB登録だけを含めます。レスポンスのバージョンコードとSHA-256を照合後、Editを検証し、審査に送らない指定でコミットします。トラック割り当てはPlay Consoleで担当者が行い、同じ画面で下書きを作成して審査を提出します。コミット結果が不明ならPlay Consoleで同じバージョンとSHA-256を確認してから再実行します。
+
+現時点ではモックでAPI呼び出しと異常時の停止を検証済みです。トラック未割り当てのAABが実際にApp Bundle Explorerに表示され、手動で選べるかはPlayの実環境で照合します。
+
+### 既存GitHubリポジトリで実行する順番
+
+- GitHub上の配置先は既存の `disnana/DisnanaMoneyManagement` です。この構成では独立したGitHub-hostedジョブを持つ `.github/workflows/release-authority.yml` を使います。Cloudflare側のVerifierとFinalizerポリシーに同じ `callerRef` と完全な `callerSha` を設定し、それぞれ個別のenvironment・audience・Secretを使います。署名鍵とWorkerの更新権限はCloudflareに残します。
+- `Release Authority Gradle baseline` は依存のチェックサムとロック候補を作ります。来歴と差分をレビューしたファイルを `apps/mobile/release-verification/{verification-metadata.xml,gradle.lockfile}` に反映してください。証明書や認証情報は含めません。候補を自動で受け入れる処理はありません。
+- 既存の `Android Play closed-test draft` を `release_authority_checks=true`、`upload_to_play=false` で実行します。Gradleの固定配布物、依存検証・ロック、Gradle依存監査、Bun監査、テストを通った場合にのみ、AABと品質証跡を保存して来歴を発行します。
+- `Release Authority AAB` を `operation=verify` で実行し、上のBuild run IDを渡します。Actions要約のリンクをiPhoneで開いてハッシュを照合し、Cloudflare側で承認します。
+- 同じワークフローを `operation=finalize` で実行します。Build run IDと先ほどのVerifier run IDを渡すと、AABを再取得して署名・検証まで進みます。Play権限と実アップロード証明書を確認した運用時にだけ `upload_to_play=true` を使います。初期運用のFinalizer起動は手動で、承認待ちのrunnerや定期ポーリングはありません。
+- Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、`workflow_ref`、`workflow_sha`、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
+- GitHubの変数は `RELEASE_VERSION_NAME`、`RELEASE_VERSION_CODE`、`RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
+- `Release Authority preflight` は、対象ビルドの完了状態、ソース、成果物ID・出所・アーカイブハッシュのメタデータを確認し、監査結果とSBOMを格納する成果物の欠落を検出します。来歴の暗号学的な検証、監査資料の検証、署名申請は後段です。
+- v6の既存run `45284819969` には未署名AABの成果物 `14874240148` だけがあり、必須の監査結果・SBOMに対応する成果物がありません。このrunは本番署名申請の前に停止します。
+- 元のv6のルートlockfileに対し、Bun 1.4.4の全依存監査は `glob` と `minimatch` のmoderate 2件を返して非ゼロ終了しました。Webとモバイルのlockfileを修正しました。監査結果を含むAABは修正後のコミットから再ビルドする必要があります。 [glob advisory](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) · [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
+- 検証済みcanonical manifestを `node tools/aab-verifier/register-staging.mjs MANIFEST` で登録します。独立VerifierのOIDCと `RELEASE_VERIFIER_SECRET` が必要です。
+- 承認後、別実行の固定FinalizerでAABとCMS属性を再検証して再生成し、`node tools/remote-jarsigner/finalize-staging.mjs MANIFEST CMS_INPUT RAW_SIGNATURE` で署名を受け取ります。Finalizer専用OIDCと `RELEASE_FINALIZER_SECRET` が必要です。受け取った署名はJava側でAABに組み込み、公開証明書で再検証します。
+- Java側では `DeterministicAab finalize-signature AAB CERTIFICATE ISSUED_AT PROOF_DIR OUTPUT SIGNATURE` を使用します。同じAABから再生成した署名対象とVerifierの証拠を比較し、署名と全エントリの証明書を確認してから出力します。
+- 過去のAABを後から追加したCIで処理する場合は、`RELEASE_POLICY.sourceCommitSha` にAABのソース完全SHA、各CI認証ポリシーの `callerSha` にその呼び出し元の完全SHAを固定します。各CIでは同じAABのソースSHAを `RELEASE_SOURCE_SHA` に設定して来歴を検証します。指定がない通常運用ではOIDCのソースSHAとAABのソースSHAの一致を要求します。
+- 上記の処理はリポジトリのワークフローファイルに接続済みです。GitHubとCloudflareの反映、レビュー済みGradleベースライン、Playへの実接続は環境側に残っています。

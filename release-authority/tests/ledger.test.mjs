@@ -3,6 +3,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { ReleaseLedger } from '../packages/protocol/ledger.mjs';
 import { manifestWire, readManifest, sha256Hex } from '../packages/protocol/manifest.mjs';
+import { registerStagingManifest } from '../tools/aab-verifier/register-staging.mjs';
+import { requestStagingSignature } from '../tools/remote-jarsigner/finalize-staging.mjs';
 
 const hashValue = 'e'.repeat(64);
 const commitSha = 'c'.repeat(40);
@@ -82,6 +84,102 @@ test('registration rejects mismatched verifier, unknown fields and duplicate key
   assert.throws(() => manifestWire({ ...f.manifest, unexpected: true }));
   await assert.rejects(f.ledger.register(f.wire, { ...verifier, workflowSha: '0'.repeat(40) }), /identity mismatch/);
   assert.equal(f.ledger.auditEvents().length, 0);
+});
+
+test('staging requester binds identity and sends credentials only to their intended hosts', async (t) => {
+  const f = await fixture(t);
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
+  const hash = await sha256Hex(wire);
+  const identity = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY_ID: f.manifest.repositoryId,
+    GITHUB_RUN_ID: f.manifest.verifierRunId,
+    GITHUB_SHA: f.manifest.commitSha,
+    RELEASE_VERIFIER_SECRET: 'x'.repeat(43),
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request?version=2',
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-runner-token',
+  };
+  const destinations = [];
+  const request = (url, init) => {
+    const endpoint = new URL(url);
+    destinations.push(endpoint.origin);
+    assert.equal(init.redirect, 'error');
+    if (endpoint.hostname === 'token.actions.githubusercontent.com') {
+      assert.equal(init.headers.Authorization, 'Bearer fixture-runner-token');
+      assert.equal(init.headers['X-Release-Secret'], undefined);
+      assert.equal(endpoint.searchParams.get('audience'), 'urn:disnana:release-authority:staging:verifier');
+      return Response.json({ value: 'fixture.jwt.token' });
+    }
+    assert.equal(endpoint.href, 'https://release-api-stg.disnana.com/v1/releases');
+    assert.equal(init.headers.Authorization, 'Bearer fixture.jwt.token');
+    assert.equal(init.headers['X-Release-Secret'], identity.RELEASE_VERIFIER_SECRET);
+    assert.equal(init.method, 'POST');
+    assert.equal(init.body, wire);
+    return Response.json({ releaseHash: hash });
+  };
+  await assert.rejects(
+    registerStagingManifest(wire, { ...identity, GITHUB_SHA: '0'.repeat(40) }, request),
+    /does not match/,
+  );
+  await assert.rejects(
+    registerStagingManifest(wire, { ...identity, ACTIONS_ID_TOKEN_REQUEST_URL: 'https://example.com' }, request),
+    /Unexpected GitHub/,
+  );
+  assert.deepEqual(destinations, []);
+  await assert.rejects(registerStagingManifest(f.wire, identity, request), /bundle-only/);
+  assert.deepEqual(await registerStagingManifest(wire, identity, request), {
+    releaseHash: hash,
+    approvalUrl: `https://release-stg.disnana.com/approve/${f.manifest.releaseId}`,
+  });
+  assert.deepEqual(destinations, ['https://token.actions.githubusercontent.com', 'https://release-api-stg.disnana.com']);
+});
+
+test('ledger requires the operation explicitly configured in the release policy', async (t) => {
+  const f = await fixture(t, { releaseStatus: 'upload-only' });
+  await assert.rejects(f.register(), /policy mismatch/);
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
+  assert.equal(await f.ledger.register(wire, verifier), await sha256Hex(wire));
+});
+
+test('a later CI commit may process only the historical source pinned by Signer', async (t) => {
+  const laterCommit = 'd'.repeat(40);
+  const fixedCaller = { ...verifier, commitSha: laterCommit };
+  const sameCommitOnly = await fixture(t);
+  await assert.rejects(sameCommitOnly.ledger.register(sameCommitOnly.wire, fixedCaller), /identity mismatch/);
+  const pinned = await fixture(t, { sourceCommitSha: commitSha });
+  assert.equal(await pinned.ledger.register(pinned.wire, fixedCaller), pinned.hash);
+  const differentSource = manifestWire({ ...pinned.manifest, commitSha: laterCommit });
+  await assert.rejects(pinned.ledger.register(differentSource, fixedCaller), /policy mismatch/);
+});
+
+test('staging finalizer rejects a reused verifier run and changed CMS input before requesting credentials', async (t) => {
+  const f = await fixture(t);
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
+  const env = {
+    GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY_ID: f.manifest.repositoryId,
+    GITHUB_SHA: f.manifest.commitSha, GITHUB_RUN_ID: '999',
+    RELEASE_FINALIZER_SECRET: 'g'.repeat(43), ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'fixture-runner-token',
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request',
+  };
+  const denied = () => assert.fail('Unexpected external request');
+  await assert.rejects(requestStagingSignature(wire, bytes, { ...env, GITHUB_RUN_ID: verifier.runId }, denied), /independent/);
+  await assert.rejects(requestStagingSignature(wire, bytes.slice(1), env, denied), /differs/);
+  const signature = Buffer.alloc(256, 1);
+  const signatureHash = await sha256Hex(signature);
+  const { releaseId } = f.manifest;
+  const result = await requestStagingSignature(wire, bytes, env, async (url, init) => {
+    if (new URL(url).hostname === 'token.actions.githubusercontent.com') {
+      assert.equal(new URL(url).searchParams.get('audience'), 'urn:disnana:release-authority:staging:finalizer');
+      return Response.json({ value: 'fixture.jwt.token' });
+    }
+    assert.equal(url, `https://release-api-stg.disnana.com/v1/releases/${releaseId}/result`);
+    assert.equal(init.headers['X-Release-Hash'], await sha256Hex(wire));
+    assert.equal(init.headers['X-Release-Secret'], env.RELEASE_FINALIZER_SECRET);
+    assert.equal(init.redirect, 'error');
+    assert.deepEqual(init.body, bytes);
+    return Response.json({ status: 'signed', signature: signature.toString('base64'), signatureHash });
+  });
+  assert.deepEqual(result, signature);
 });
 
 test('same immutable release can be registered once and cannot be rebound', async (t) => {

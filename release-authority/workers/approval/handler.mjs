@@ -16,7 +16,9 @@ function response(body, status, type = 'text/plain; charset=utf-8') {
 function approvalPage({ manifest: m, hash }) {
   const rows = [
     ['パッケージ', m.packageName], ['バージョン', `${m.versionName} (${m.versionCode})`],
-    ['配布先', `クローズドテスト・${m.targetTrack}・下書き`], ['コミット', m.commitSha],
+    ['操作', m.releaseStatus === 'upload-only'
+      ? `PlayにAABを登録。予定トラック ${m.targetTrack} の割り当ては手動`
+      : `クローズドテスト・${m.targetTrack}・下書き`], ['コミット', m.commitSha],
     ['ビルド実行', `${m.buildRunId} / ${m.buildRunAttempt}`], ['検証実行', m.verifierRunId],
     ['未署名AAB SHA-256', m.unsignedAabSha256], ['独立検証証明 SHA-256', m.artifactProofSha256],
     ['監査資料 SHA-256', m.auditReportSha256], ['SBOM SHA-256', m.sbomSha256],

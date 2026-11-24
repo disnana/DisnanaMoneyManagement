@@ -7,6 +7,10 @@ on:
         description: Sign and save a draft in Play Console
         type: boolean
         default: false
+      release_authority_checks:
+        description: Build an unsigned bundle with independently verifiable audit and SBOM evidence
+        type: boolean
+        default: false
       staging_auth:
         description: Connect Android login to the staging service
         type: boolean
@@ -34,6 +38,7 @@ jobs:
     uses: ./.github/workflows/android-play-bundle.yml
     with:
       staging_auth: ${{ inputs.staging_auth }}
+      release_authority_checks: ${{ inputs.release_authority_checks }}
 
   verify:
     needs: build
@@ -77,9 +82,19 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: bundle/app-release.aab
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: inputs.release_authority_checks
+        with:
+          name: Mane-chan-release-quality-evidence
+          path: quality
+      - name: Attest the quality evidence index
+        if: inputs.release_authority_checks
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: quality/quality.json
 
   play-draft:
-    if: inputs.upload_to_play
+    if: inputs.upload_to_play && !inputs.release_authority_checks
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15

@@ -22,7 +22,8 @@ const fields = {
   buildProofSha256: match(sha256), artifactProofSha256: match(sha256),
   auditReportSha256: match(sha256), sbomSha256: match(sha256),
   algorithm: equals('SHA256withRSA'), keyId: match(name), uploadCertificateSha256: match(sha256),
-  targetTrack: match(name), releaseStatus: equals('draft'), policyVersion: integer(1, 1_000_000),
+  targetTrack: match(name), releaseStatus: (value) => value === 'draft' || value === 'upload-only',
+  policyVersion: integer(1, 1_000_000),
   issuedAt: time, expiresAt: time,
 };
 const keys = Object.keys(fields).sort();

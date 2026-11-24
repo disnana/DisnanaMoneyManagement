@@ -73,6 +73,20 @@ test('unapproved repository, caller, reusable workflow, ref, event and runner ca
   }
 });
 
+test('same-repository release workflows require an exact SHA and reject a different reused job', async () => {
+  const { reusableRef, reusableSha, ...directPolicy } = policy;
+  const callerSha = base.workflow_sha;
+  const environment = 'release-authority-verifier';
+  const subject = 'repo:org/app:environment:release-authority-verifier';
+  const fixed = makeCiAuthenticator({ ...directPolicy, callerSha, environment, subject }, { resolveKey, equal: timingSafeEqual });
+  assert.throws(() => makeCiAuthenticator(directPolicy, { resolveKey }), /Incomplete/);
+  const claims = { ...base, sub: subject, environment, job_workflow_ref: undefined, job_workflow_sha: undefined };
+  assert.equal((await fixed(authorization(await signed(claims)))).workflowSha, callerSha);
+  await assert.rejects(fixed(authorization(await signed({ ...claims, workflow_sha: reusableSha }))));
+  await assert.rejects(fixed(authorization(await signed({ ...claims, environment: 'foreign' }))));
+  await assert.rejects(fixed(authorization(await signed({ ...claims, job_workflow_ref: reusableRef, job_workflow_sha: reusableSha }))));
+});
+
 test('Access requires a valid token scoped to the app and a configured admin subject', async () => {
   const access = makeAccessAuthenticator({ team: 'fixture-team', audience: 'admin-audience', administrators: ['allowed'] }, { resolveKey });
   const admin = { iss: 'https://fixture-team.cloudflareaccess.com', aud: ['admin-audience'], sub: 'allowed', iat: now, exp: now + 240 };

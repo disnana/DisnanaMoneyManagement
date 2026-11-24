@@ -16,13 +16,13 @@
 | CI Gateway | OIDCと用途別Secret・検証証明 → 登録要求 | CI用ホスト。未認証のリクエストは台帳に書かない。実行IDとartifactを束縛 |
 | Approval | Access JWT・管理者・固定manifest → 承認 | 管理者用ホスト、Access JWTをWorkerでも照合。ブラウザの長押しと台帳の8秒制限を併用 |
 | Private Signer | 承認されたCMS属性 → RSA署名とハッシュ | 署名開始と監査を同時に保存し、署名と鍵指紋を検証。鍵はSignerに限定。GatewayにSignerのBindingを配布しない |
-| Finalizer / Publisher | 同じAABと署名 → 検証済みAAB・Play下書き・receipt | 固定CI、WIF、手動再開。Playで返されたハッシュと下書きの状態を照合し、提出操作はPlay Console |
+| Finalizer / Publisher | 同じAABと署名 → 検証済みAAB・PlayへのAAB登録・receipt | 固定CI、WIF、手動再開。Playのハッシュを照合し、トラック割り当て、下書き、審査提出はPlay Console |
 
 ## Cloudflareは2 Worker
 
 - GatewayはCI APIと承認画面の入口を担当し、ホストと経路で振り分けます。Accessは承認ホスト全体に適用します。
-- Signerのデプロイ単位にSQLite Durable Objectを置きます。GatewayのService Bindingは名前付き `ApprovalIntake` と `VerifierIntake` だけです。Cloudflare AccessとCIの署名付き認証情報は各Intakeで照合し、主体のIDをリクエストJSONから受け付けません。公開用の既定エントリポイントは常に404を返します。
-- 認可済みの申請、承認、署名、将来のPlay操作の監査は、同じリリースIDでSigner側の台帳に集約します。現段階で接続したのは申請と承認です。ローカルworkerd結合テストで、テスト用JWKSからの署名検証、承認の再送拒否、同じSQLite台帳への4イベントの記録、署名・監査閲覧経路の404を確認しました。Wrangler 4.167.0で両設定例のdry-runも成功しました。署名鍵、台帳を直接読む権限、署名の予約・確定操作はGatewayに渡しません。
+- Signerのデプロイ単位にSQLite Durable Objectを置きます。Gatewayは名前付き `ApprovalIntake`、`VerifierIntake`、`FinalizerIntake` を呼びます。Cloudflare AccessとCIの署名付き認証情報は各Intakeで照合し、主体のIDをリクエストJSONから受け付けません。Signerの公開用既定エントリポイントは常に404を返します。
+- 認可済みの申請、承認、署名、将来のPlay操作の監査は、同じリリースIDでSigner側の台帳に集約します。固定Finalizerは申請ID付きの結果経路に、再生成したCMS署名入力と承認済みmanifestのハッシュを送ります。独立したCI認証、承認・期限、入力ハッシュ・長さをSigner内で照合し、署名結果を台帳に保持します。署名鍵、台帳を直接読む権限、署名の予約・確定操作はGatewayに渡しません。申請から署名再取得まではNode、SQLite、模擬サービスBinding／JWKSで通しており、新しい接続の実workerd・Cloudflareでの検証は残っています。
 - Gatewayで実行されるコードには、経由したAccess JWTやCIの認証情報が見えます。有効な認証情報の窃取や再送による代理操作は残余リスクです。短い有効期間、固定CI、別管理のデプロイ権限とAccessの監査を使い、Gateway侵害まで耐える追加の認証境界はステージングで別途判断します。
 
 D1やScyllaDBの追加は初期運用に不要です。SQLiteで状態と監査をトランザクション保存し、Web Cryptoで算出した次の監査ハッシュは台帳ヘッドと比較してから同時に書き込みます。外部署名をトランザクションに含めず、結果が不明なら隔離する設計です。通知と自動dispatchの導入前は手動でFinalizeを開始できます。
@@ -33,8 +33,8 @@ D1やScyllaDBの追加は初期運用に不要です。SQLiteで状態と監査�
 | --- | --- | --- |
 | 0 | v6の独立した形式・内容検査、実workerdで別プロセス署名、JDKとOpenSSLで検証 | 実アップロード証明書との互換、Cloudflare実環境 |
 | 1 | バージョン固定のツールと依存ハッシュ、ZIP/AAB検証、canonical manifest、JOSEのOIDC/Access検査、ローカル監査とテスト専用CI設定 | 固定独立CIからの実OIDC登録、GitHub来歴の受入検証とartifact/runの取得、アプリのBun/Gradle監査・SBOMを必須化するゲート |
-| 2 | SQLiteの承認・署名予約・追記監査（ローカルの実workerdで2 WorkerとDOを接続して確認）、署名の再取得と異常時隔離、承認UI、ローカルの非公開署名処理、Chromium/WebKitのiPhone相当の画面での操作確認 | CFのホスト、WAF、Access、実環境でのDOと個別Binding、Signerの署名接続、失効・監査閲覧・外部アンカー、Bark、iPhone実機のSafariとAccessセッション |
-| 3 | AABの再構成・厳格検証・全エントリ比較、テスト鍵による別鍵JWSのdraft receipt、既存Playコードのモックテスト | Finalizerの証跡束縛、Play API `edits.validate`、結果不明の照合、アップロード結果の台帳記録、WIF実測と受入試験 |
+| 2 | SQLiteの承認・署名予約・追記監査、署名の再取得と異常時隔離、承認UI、テスト鍵でのリリース単位の署名接続、Chromium/WebKitのiPhone相当の画面での操作確認 | CFのホスト、WAF、Access、実環境でのDOと個別Binding、失効・監査閲覧・外部アンカー、Bark、iPhone実機のSafariとAccessセッション |
+| 3 | AABの再構成・厳格検証・全エントリ比較、別鍵JWSによる下書き用receiptのPoC、AAB登録専用Play APIのモックテスト | 固定Finalizerの統合、トラック未割り当て登録のPlay実測、アップロード結果の台帳記録、WIF実測と受入試験 |
 | 4 | JWT・ZIP・承認・署名・receiptの拒否テスト、ローカルworkerdのHTTP計測 | CFでのCPU・JWKS miss・DOストレージ・Free枠、実ルーティング環境での境界と並行処理の検証 |
 
 `makeCiAuthenticator` は用途別に別インスタンスで構成します。VerifierとFinalizerのrun IDを流用せず、信頼済みartifact/commit/manifestへ別々の本人性を結合します。GitHubの署名付き来歴、独立Verifierの結果、管理者承認は別証拠です。ローカルのreceiptは署名形式と値の束縛の実証であり、Googleの応答を独自に認証するものではありません。

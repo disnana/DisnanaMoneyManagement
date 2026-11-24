@@ -75,6 +75,8 @@ export class ReleaseLedger {
     const p = this.policy;
     requireRule(
       !p.disabled() && !trackBlacklist.has(p.track.toLowerCase()) && manifest.targetTrack === p.track
+      && manifest.releaseStatus === (p.releaseStatus ?? 'draft')
+      && (!p.sourceCommitSha || manifest.commitSha === p.sourceCommitSha)
       && manifest.appId === p.appId && manifest.packageName === p.packageName
       && manifest.keyId === p.keyId && manifest.uploadCertificateSha256 === p.certificate
       && manifest.policyVersion === p.version && manifest.repositoryId === p.repositoryId,
@@ -89,7 +91,8 @@ export class ReleaseLedger {
     const manifest = readManifest(wire);
     requireRule(principal.role === 'verifier' && principal.repositoryId === manifest.repositoryId
       && principal.runId === manifest.verifierRunId && principal.workflowSha === manifest.verifierWorkflowSha
-      && principal.commitSha === manifest.commitSha, 'Verifier proof identity mismatch');
+      && (principal.commitSha === manifest.commitSha || this.policy.sourceCommitSha === manifest.commitSha),
+    'Verifier proof identity mismatch');
     const hash = await sha256Hex(wire);
     this.checkPolicy(manifest, this.clock());
     const candidates = this.sql.exec(
@@ -196,6 +199,12 @@ export class ReleaseLedger {
     return this.mutate(releaseId, (record, now) => {
       requireRule(record?.hash === hash && record.manifest.signingInputSha256 === inputHash
         && record.manifest.signingInputLength === actualInput.length, 'Signing input does not match verifier evidence');
+      if (this.policy.requireFinalizer) {
+        const finalizer = principal.finalizer;
+        requireRule(finalizer?.role === 'finalizer' && finalizer.repositoryId === record.manifest.repositoryId
+          && (finalizer.commitSha === record.manifest.commitSha || this.policy.sourceCommitSha === record.manifest.commitSha)
+          && finalizer.runId !== record.manifest.verifierRunId, 'Finalizer does not match release');
+      }
       requireRule(!this.policy.disabled(), 'Signing is disabled');
       if (record.state === 'SIGNED') {
         this.checkPolicy(record.manifest, now);
@@ -214,7 +223,11 @@ export class ReleaseLedger {
       requireRule(!busy, 'Another signature is in progress');
       return {
         record: { ...record, state: 'SIGNING', attemptId, signingUntil: now + minute },
-        event: { type: 'sign_started', attemptId, inputHash, keyId: record.manifest.keyId },
+        event: {
+          type: 'sign_started', attemptId, inputHash, keyId: record.manifest.keyId,
+          finalizerRunId: principal.finalizer?.runId, finalizerRunAttempt: principal.finalizer?.runAttempt,
+          finalizerWorkflowSha: principal.finalizer?.workflowSha,
+        },
         response: { status: 'reserved', attemptId },
       };
     });

@@ -6,6 +6,9 @@ on:
       staging_auth:
         type: boolean
         default: false
+      release_authority_checks:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       staging_auth:
@@ -52,6 +55,32 @@ jobs:
           java-version: '17'
       - run: bun install --frozen-lockfile
       - run: bunx expo prebuild --platform android --no-install
+      - name: Audit and prepare the reviewed release build inputs
+        if: inputs.release_authority_checks
+        working-directory: .
+        run: |
+          gradle="$RUNNER_TEMP/gradle-9.4.1"
+          evidence="$RUNNER_TEMP/release-quality"
+          mkdir "$evidence"
+          for input in verification-metadata.xml gradle.lockfile; do
+            test -s "apps/mobile/release-verification/$input" || {
+              echo "Missing reviewed Gradle input: $input" >&2
+              exit 1
+            }
+          done
+          install -m 644 apps/mobile/release-verification/verification-metadata.xml apps/mobile/android/gradle/
+          install -m 644 apps/mobile/release-verification/gradle.lockfile apps/mobile/android/app/
+          curl --fail --silent --show-error --location --max-time 180 \
+            https://services.gradle.org/distributions/gradle-9.4.1-bin.zip -o "$RUNNER_TEMP/mane-gradle.zip"
+          printf '%s  %s\n' '2ab2958f2a1e51120c326cad6f385153bb11ee93b3c216c5fccebfdfbb7ec6cb' \
+            "$RUNNER_TEMP/mane-gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/mane-gradle.zip" -d "$RUNNER_TEMP"
+          bun audit --json > "$evidence/bun-root.json"
+          (cd apps/mobile && bun audit --json) > "$evidence/bun-mobile.json"
+          (cd release-authority && bun audit --json) > "$evidence/bun-authority.json"
+          bun install --frozen-lockfile
+          bun run test
+          printf 'RELEASE_GRADLE=%s\nRELEASE_EVIDENCE_DIR=%s\n' "$gradle/bin/gradle" "$evidence" >> "$GITHUB_ENV"
       - name: Build the bundle without Expo's development signing key
         working-directory: apps/mobile/android
         run: |
@@ -66,7 +95,13 @@ jobs:
               raise RuntimeError('Expo release signing template changed')
           path.write_text(before + release.replace(generated, '            signingConfig = null\n'))
           PY
-          ./gradlew bundleRelease --no-daemon
+          if [[ -n "${RELEASE_GRADLE:-}" ]]; then
+            "$RELEASE_GRADLE" --no-daemon --dependency-verification=strict \
+              --init-script "$GITHUB_WORKSPACE/release-authority/tools/aab-verifier/release-dependencies.init.gradle" \
+              :app:releaseDependencyInventory bundleRelease
+          else
+            ./gradlew bundleRelease --no-daemon
+          fi
       - name: Check that the bundle has no development signature
         working-directory: apps/mobile/android
         run: |
@@ -79,6 +114,20 @@ jobs:
               if signed:
                   raise RuntimeError('Expected an unsigned App Bundle')
           PY
+      - name: Audit Gradle dependencies and prepare release evidence
+        if: inputs.release_authority_checks
+        working-directory: .
+        run: bun release-authority/tools/aab-verifier/build-quality.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: inputs.release_authority_checks
+        with:
+          name: Mane-chan-release-quality-evidence
+          path: |
+            ${{ runner.temp }}/release-quality/quality.json
+            ${{ runner.temp }}/release-quality/audit.json
+            ${{ runner.temp }}/release-quality/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Mane-chan-unsigned-app-bundle

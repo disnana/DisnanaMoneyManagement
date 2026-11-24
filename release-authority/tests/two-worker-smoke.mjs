@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { verify, X509Certificate } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as timers } from 'node:timers/promises';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -12,6 +13,8 @@ const keyId = 'fixture-key';
 const team = 'fixture-team';
 const administrator = 'fixture-admin';
 const hash = 'c'.repeat(64);
+const signingInput = Buffer.from('31050403010203', 'hex');
+const certificate = new X509Certificate(await readFile(scratch + '/fixture-upload-cert.pem'));
 
 if (mode === 'prepare') {
   const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
@@ -19,7 +22,8 @@ if (mode === 'prepare') {
   const secret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   const release = {
     appId: 'moneychan', packageName: 'com.disnana.mane_chan', repositoryId: '101',
-    track: 'alpha', keyId: 'upload-fixture', certificate: hash, version: 1,
+    track: 'alpha', keyId: 'upload-fixture', certificate: await sha256Hex(certificate.raw),
+    version: 1, rsaBits: 2048, releaseStatus: 'upload-only',
   };
   const policy = {
     repositoryId: release.repositoryId, ownerId: '102', ref: 'refs/heads/main',
@@ -29,16 +33,23 @@ if (mode === 'prepare') {
     reusableSha: 'd'.repeat(40), secretSha256: await sha256Hex(secret),
   };
   const access = { team, audience: 'fixture-audience', administrators: [administrator] };
+  const finalizerSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+  const finalizer = {
+    ...policy, audience: 'urn:release:test:finalize', secretSha256: await sha256Hex(finalizerSecret),
+    reusableRef: `fixture/authority/.github/workflows/finalize.yml@${'a'.repeat(40)}`, reusableSha: 'a'.repeat(40),
+  };
   const commitSha = 'e'.repeat(40);
   const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
+  const issueToken = (profile, runId) => new SignJWT({
     repository_id: release.repositoryId, repository_owner_id: policy.ownerId,
-    ref: policy.ref, workflow_ref: policy.callerRef, workflow_sha: commitSha,
-    sha: commitSha, job_workflow_ref: policy.reusableRef, job_workflow_sha: policy.reusableSha,
-    event_name: 'workflow_dispatch', runner_environment: 'github-hosted', run_id: '103', run_attempt: '1',
+    ref: profile.ref, workflow_ref: profile.callerRef, workflow_sha: commitSha,
+    sha: commitSha, job_workflow_ref: profile.reusableRef, job_workflow_sha: profile.reusableSha,
+    event_name: 'workflow_dispatch', runner_environment: 'github-hosted', run_id: runId, run_attempt: '1',
   }).setProtectedHeader({ alg: 'RS256', kid: keyId }).setIssuer('https://token.actions.githubusercontent.com')
-    .setAudience(policy.audience).setSubject(policy.subject).setIssuedAt(now).setNotBefore(now)
+    .setAudience(profile.audience).setSubject(profile.subject).setIssuedAt(now).setNotBefore(now)
     .setJti(randomId()).setExpirationTime(now + 180).sign(privateKey);
+  const token = await issueToken(policy, '103');
+  const finalizerToken = await issueToken(finalizer, '105');
   const jwt = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: keyId })
     .setIssuer(`https://${team}.cloudflareaccess.com`).setAudience(access.audience)
     .setSubject(administrator).setIssuedAt(now).setExpirationTime(now + 180).sign(privateKey);
@@ -49,24 +60,26 @@ if (mode === 'prepare') {
     versionName: '1.0.0', versionCode: 6, commitSha, buildRunId: '99', buildRunAttempt: 1,
     buildWorkflowSha: 'f'.repeat(40), verifierRunId: '103', verifierWorkflowSha: policy.reusableSha,
     artifactId: '104', unsignedAabSha256: hash, manifestSha256: hash, signatureFileSha256: hash,
-    signingInputSha256: hash, signingInputLength: 153, buildProofSha256: hash, artifactProofSha256: hash,
+    signingInputSha256: await sha256Hex(signingInput), signingInputLength: signingInput.length,
+    buildProofSha256: hash, artifactProofSha256: hash,
     auditReportSha256: hash, sbomSha256: hash, algorithm: 'SHA256withRSA', keyId: release.keyId,
-    uploadCertificateSha256: hash, targetTrack: release.track, releaseStatus: 'draft',
+    uploadCertificateSha256: release.certificate, targetTrack: release.track, releaseStatus: release.releaseStatus,
     policyVersion: 1, issuedAt: new Date(now * 1000).toISOString(),
     expiresAt: new Date((now + 120) * 1000).toISOString(),
   });
   for (const [name, value] of Object.entries({
-    'jwks.json': { keys: [jwk] }, 'release-policy.json': release, 'access-policy.json': access, 'verifier-policy.json': policy,
+    'jwks.json': { keys: [jwk] }, 'release-policy.json': release, 'access-policy.json': access,
+    'verifier-policy.json': policy, 'finalizer-policy.json': finalizer,
   })) await writeFile(`${scratch}/${name}`, JSON.stringify(value));
-  await writeFile(statePath, JSON.stringify({ releaseId, wire, secret, token, jwt }));
+  await writeFile(statePath, JSON.stringify({ releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken }));
 } else if (mode === 'exercise') {
-  const { releaseId, wire, secret, token, jwt } = JSON.parse(await readFile(statePath, 'utf8'));
+  const { releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken } = JSON.parse(await readFile(statePath, 'utf8'));
   const verifyHeaders = { authorization: `Bearer ${token}`, 'x-release-secret': secret };
   const accessHeaders = { 'cf-access-jwt-assertion': jwt, origin: approvalOrigin };
   const page = `${approvalOrigin}/approve/${releaseId}`;
   const registration = verifierOrigin + '/v1/releases';
   const edge = (target, headers = {}, body, entry = '/') => fetch('http://127.0.0.1:45919' + entry, {
-    headers: { ...headers, 'x-fixture-target': target, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...headers, 'x-fixture-target': target },
     method: body ? 'POST' : 'GET', body,
   });
   assert.equal((await edge(page)).status, 404);
@@ -82,6 +95,13 @@ if (mode === 'prepare') {
   const registered = await edge(registration, verifyHeaders, wire);
   assert.equal(registered.status, 200);
   const { releaseHash } = await registered.json();
+  const resultUrl = `${registration}/${releaseId}/result`;
+  const finalizerHeaders = {
+    authorization: `Bearer ${finalizerToken}`, 'x-release-secret': finalizerSecret,
+    'content-type': 'application/octet-stream', 'x-release-hash': releaseHash,
+  };
+  assert.equal((await edge(resultUrl, finalizerHeaders, signingInput)).status, 409);
+  assert.equal((await edge(resultUrl, { ...finalizerHeaders, ...verifyHeaders }, signingInput)).status, 404);
   assert.equal(releaseHash, await sha256Hex(wire));
   assert.equal((await edge(registration, verifyHeaders, wire)).status, 200);
   const view = await edge(page, accessHeaders);
@@ -98,7 +118,16 @@ if (mode === 'prepare') {
   assert.equal((await edge(page + '/confirm', accessHeaders, confirmBody)).status, 409);
   assert.equal((await edge(registration + '/sign', verifyHeaders, wire)).status, 404);
   assert.equal((await edge(page + '/audit', accessHeaders)).status, 404);
-  console.log('Gateway routes, signed identities, one SQLite approval, and private operations verified.');
+  assert.equal((await edge(resultUrl, finalizerHeaders, Buffer.from('31050403010204', 'hex'))).status, 409);
+  const signed = await edge(resultUrl, finalizerHeaders, signingInput);
+  assert.equal(signed.status, 200);
+  const result = await signed.json();
+  assert.equal(result.status, 'signed');
+  assert.equal(verify('sha256', signingInput, certificate.publicKey, Buffer.from(result.signature, 'base64')), true);
+  const cached = await edge(resultUrl, finalizerHeaders, signingInput);
+  assert.equal(cached.status, 200);
+  assert.deepEqual(await cached.json(), { ...result, status: 'cached' });
+  console.log('Gateway routes, authenticated approval, and a single verified RSA signature.');
 } else {
   throw new Error('Expected prepare or exercise');
 }

@@ -32,14 +32,16 @@ function githubClaimsContainIds(claims) {
     && typeof claims.jti === 'string' && claims.jti.length > 0 && claims.jti.length <= 256;
 }
 
-/** Configure this separately for each fixed reusable Verifier or Finalizer workflow. */
+/** Configure this separately for each fixed Verifier or Finalizer workflow. */
 export function makeCiAuthenticator(policy, {
   resolveKey = createRemoteJWKSet(new URL(`${githubIssuer}/.well-known/jwks`), jwksOptions),
   equal = (left, right) => crypto.subtle.timingSafeEqual(left, right),
 } = {}) {
+  const reusable = policy.reusableRef !== undefined || policy.reusableSha !== undefined;
+  const fixedWorkflow = reusable ? policy.reusableRef && shaPattern.test(policy.reusableSha) : shaPattern.test(policy.callerSha);
   if (!digestPattern.test(policy.secretSha256) || ![policy.repositoryId, policy.ownerId].every((id) => idPattern.test(id))
-    || !shaPattern.test(policy.reusableSha) || !policy.audience || !policy.ref || !policy.callerRef
-    || !policy.reusableRef || !policy.subject || (policy.callerSha && !shaPattern.test(policy.callerSha)) || !['verifier', 'finalizer', 'publisher'].includes(policy.role)) {
+    || !fixedWorkflow || !policy.audience || !policy.ref || !policy.callerRef
+    || !policy.subject || (policy.callerSha && !shaPattern.test(policy.callerSha)) || !['verifier', 'finalizer', 'publisher'].includes(policy.role)) {
     throw new Error('Incomplete CI identity policy');
   }
   const expected = Uint8Array.from(policy.secretSha256.match(/../g), (pair) => parseInt(pair, 16));
@@ -53,17 +55,21 @@ export function makeCiAuthenticator(policy, {
       issuer: githubIssuer, audience: policy.audience, maxTokenAge: '5m',
       requiredClaims: ['sub', 'iat', 'nbf', 'exp', 'jti'],
     });
+    const expectedJobRef = reusable ? policy.reusableRef : policy.callerRef;
+    const expectedJobSha = reusable ? policy.reusableSha : policy.callerSha;
+    const hasJobIdentity = claims.job_workflow_ref !== undefined || claims.job_workflow_sha !== undefined;
     if (!githubClaimsContainIds(claims) || claims.aud !== policy.audience || claims.sub !== policy.subject
       || claims.repository_id !== policy.repositoryId || claims.repository_owner_id !== policy.ownerId
       || claims.ref !== policy.ref || claims.workflow_ref !== policy.callerRef || !shaPattern.test(claims.workflow_sha ?? '')
       || (policy.callerSha && claims.workflow_sha !== policy.callerSha)
-      || claims.job_workflow_sha !== policy.reusableSha || claims.job_workflow_ref !== policy.reusableRef
+      || ((reusable || hasJobIdentity)
+        && (claims.job_workflow_sha !== expectedJobSha || claims.job_workflow_ref !== expectedJobRef))
       || claims.event_name !== 'workflow_dispatch' || claims.runner_environment !== 'github-hosted'
       || (policy.environment && claims.environment !== policy.environment)
       || claims.exp <= claims.iat || claims.exp - claims.iat > 305) deny();
     return Object.freeze({
       role: policy.role, repositoryId: claims.repository_id, commitSha: claims.sha,
-      runId: claims.run_id, runAttempt: Number(claims.run_attempt), workflowSha: claims.job_workflow_sha,
+      runId: claims.run_id, runAttempt: Number(claims.run_attempt), workflowSha: expectedJobSha,
     });
   };
 }
