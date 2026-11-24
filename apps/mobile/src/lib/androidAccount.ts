@@ -86,7 +86,7 @@ async function request(op: Parameters<typeof submitDeviceProof>[2], credentials:
     try {
       response = await send(current);
     } catch (error) {
-      if (!current?.origin || !(error instanceof IssuerUnavailable) || error.mayHaveCommitted || controller.signal.aborted) throw error;
+      if (!current || !(error instanceof IssuerUnavailable) || error.mayHaveCommitted || controller.signal.aborted) throw error;
       const assignment = await fetch(settings!.entry + '/auth/node', {
         method: 'POST', redirect: 'error', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
