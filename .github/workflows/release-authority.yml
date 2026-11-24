@@ -98,6 +98,7 @@ jobs:
           retention-days: 2
       - name: Register the approval request
         if: steps.release_evidence.outputs.available != 'false'
+        shell: bash
         env:
           RELEASE_VERIFIER_SECRET: ${{ secrets.RELEASE_VERIFIER_SECRET }}
         run: |
@@ -137,7 +138,7 @@ jobs:
                .path == ".github/workflows/release-authority.yml" and .head_branch == "main" and
                .head_sha == $sha and .head_repository.full_name == $repo' >/dev/null
           bash release-authority/tools/aab-verifier/prepare-ci.sh
-      - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: Mane-chan-release-manifest
           path: ${{ runner.temp }}/mane-authority
@@ -203,7 +204,7 @@ jobs:
       - name: Install the pinned receipt verifier
         working-directory: release-authority
         run: bun install --frozen-lockfile --ignore-scripts
-      - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: Mane-chan-authority-signed-aab
           path: signed

@@ -38,7 +38,7 @@ export function makeDispatcher(env, request = fetch) {
       });
       if (installation.status !== 201) return 409;
       const { token } = await installation.json();
-      if (typeof token !== 'string' || !/^[A-Za-z0-9_]{20,512}$/.test(token)) return 409;
+      if (typeof token !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) return 409;
       const verifier = await call(`${repo}/actions/runs/${verifierRunId}`, token);
       if (!verifier.ok) return 409;
       const run = await verifier.json();
