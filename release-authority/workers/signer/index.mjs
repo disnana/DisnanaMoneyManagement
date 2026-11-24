@@ -1,6 +1,7 @@
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { createPrivateKey, createPublicKey, X509Certificate } from 'node:crypto';
 import { ReleaseLedger } from '../../packages/protocol/ledger.mjs';
+import { sha256Hex } from '../../packages/protocol/manifest.mjs';
 import { makeAccessAuthenticator, makeCiAuthenticator } from '../../packages/verification/identity.mjs';
 import { makeApprovalHandler } from '../approval/handler.mjs';
 import approveScript from '../approval/approve.js.txt';
@@ -123,6 +124,7 @@ export class SignerLedger extends DurableObject {
       throw new Error('Upload certificate does not match release policy');
     }
     const spki = certificate.publicKey.export({ type: 'spki', format: 'der' });
+    const publicKeyHash = await sha256Hex(spki);
     const publicKey = await crypto.subtle.importKey('spki', spki, signingAlgorithm, false, ['verify']);
     let privateKey;
     return {
@@ -130,7 +132,8 @@ export class SignerLedger extends DurableObject {
       loadPrivateKey: () => {
         privateKey ??= (async () => {
           const key = createPrivateKey(this.env.UPLOAD_PRIVATE_KEY_PEM);
-          if (!createPublicKey(key).equals(certificate.publicKey)) {
+          const derivedSpki = createPublicKey(key).export({ type: 'spki', format: 'der' });
+          if (await sha256Hex(derivedSpki) !== publicKeyHash) {
             throw new Error('Upload private key does not match the configured certificate');
           }
           const pkcs8 = key.export({ type: 'pkcs8', format: 'der' });

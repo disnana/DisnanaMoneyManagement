@@ -35,7 +35,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
-expected = ["registered", "approval_page_viewed", "armed", "approved", "sign_started", "signed"]
+expected = ["registered", "approval_page_viewed", "armed", "approved", "sign_started", "signed", "upload_started", "upload_result"]
 for path in Path(sys.argv[1]).rglob("*.sqlite"):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as db:
         if db.execute("SELECT 1 FROM sqlite_master WHERE name = 'audit'").fetchone():

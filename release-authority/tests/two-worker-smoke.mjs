@@ -39,6 +39,11 @@ if (mode === 'prepare') {
     reusableRef: `fixture/authority/.github/workflows/finalize.yml@${'a'.repeat(40)}`, reusableSha: 'a'.repeat(40),
   };
   const commitSha = 'e'.repeat(40);
+  const publisherSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
+  const publisher = {
+    ...finalizer, callerSha: commitSha, audience: 'urn:release:test:publish',
+    secretSha256: await sha256Hex(publisherSecret),
+  };
   const now = Math.floor(Date.now() / 1000);
   const issueToken = (profile, runId) => new SignJWT({
     repository_id: release.repositoryId, repository_owner_id: policy.ownerId,
@@ -50,6 +55,7 @@ if (mode === 'prepare') {
     .setJti(randomId()).setExpirationTime(now + 180).sign(privateKey);
   const token = await issueToken(policy, '103');
   const finalizerToken = await issueToken(finalizer, '105');
+  const publisherToken = await issueToken(publisher, '105');
   const jwt = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: keyId })
     .setIssuer(`https://${team}.cloudflareaccess.com`).setAudience(access.audience)
     .setSubject(administrator).setIssuedAt(now).setExpirationTime(now + 180).sign(privateKey);
@@ -69,11 +75,15 @@ if (mode === 'prepare') {
   });
   for (const [name, value] of Object.entries({
     'jwks.json': { keys: [jwk] }, 'release-policy.json': release, 'access-policy.json': access,
-    'verifier-policy.json': policy, 'finalizer-policy.json': finalizer,
+    'verifier-policy.json': policy, 'finalizer-policy.json': finalizer, 'publisher-policy.json': publisher,
   })) await writeFile(`${scratch}/${name}`, JSON.stringify(value));
-  await writeFile(statePath, JSON.stringify({ releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken }));
+  await writeFile(statePath, JSON.stringify({
+    releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken, publisherSecret, publisherToken,
+  }));
 } else if (mode === 'exercise') {
-  const { releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken } = JSON.parse(await readFile(statePath, 'utf8'));
+  const {
+    releaseId, wire, secret, token, jwt, finalizerSecret, finalizerToken, publisherSecret, publisherToken,
+  } = JSON.parse(await readFile(statePath, 'utf8'));
   const verifyHeaders = { authorization: `Bearer ${token}`, 'x-release-secret': secret };
   const accessHeaders = { 'cf-access-jwt-assertion': jwt, origin: approvalOrigin };
   const page = `${approvalOrigin}/approve/${releaseId}`;
@@ -127,7 +137,17 @@ if (mode === 'prepare') {
   const cached = await edge(resultUrl, finalizerHeaders, signingInput);
   assert.equal(cached.status, 200);
   assert.deepEqual(await cached.json(), { ...result, status: 'cached' });
-  console.log('Gateway routes, authenticated approval, and a single verified RSA signature.');
+  const upload = `${registration}/${releaseId}/upload`;
+  const publisherHeaders = { authorization: `Bearer ${publisherToken}`, 'x-release-secret': publisherSecret };
+  const report = { phase: 'start', releaseHash, signatureHash: result.signatureHash, signedAabSha256: hash, versionCode: 6 };
+  assert.equal((await edge(upload, verifyHeaders, JSON.stringify(report))).status, 404);
+  assert.deepEqual(await (await edge(upload, publisherHeaders, JSON.stringify(report))).json(), { status: 'reserved' });
+  assert.equal((await edge(upload, publisherHeaders, JSON.stringify(report))).status, 409);
+  const completed = JSON.stringify({ ...report, phase: 'finish', result: 'stored' });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(await (await edge(upload, publisherHeaders, completed)).json(), { status: 'recorded' });
+  }
+  console.log('Gateway routes, authenticated approval, one RSA signature, and upload audit verified.');
 } else {
   throw new Error('Expected prepare or exercise');
 }
