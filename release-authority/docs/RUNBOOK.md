@@ -56,6 +56,7 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - Signerに `GITHUB_DISPATCHER` Service Bindingを接続し、検証が済んだ運用環境で `RELEASE_AUTO_DISPATCH=true` にします。Signerが承認と同時に台帳へ起動待ちを記録し、DOアラームからDispatcherを呼びます。Dispatcherは対象リポジトリの短命installation tokenでVerifierの成功とSHAを確認し、固定ワークフローの `finalize` を起動します。GitHubの書き込み権限はDispatcherに、Android署名鍵はSignerに置きます。
 - GitHubのリポジトリ変数 `RELEASE_AUTO_VERIFY=true` で、`main` の監査付きAABビルドが成功したときにVerifierを起動します。ActionsのサマリーにCloudflare承認画面のリンクが出ます。手動での `verify` と `finalize` も利用できます。
 - 署名・AAB登録の認可、承認期限、再取得時のハッシュ確認、署名・アップロード予約は引き続き使います。`dispatch_failed` や `dispatch_unknown` が残ったら、対象のVerifier run IDでActionsの起動履歴を確認してください。起動がなかったことを確認してから、期限内に手動で再開できます。
+- Dispatcherのログ `release_dispatch_failed` にある `stage` と `githubStatus` で、Appの認証、Verifier実行の確認、起動APIのどこで止まったかを確認できます。ログにトークンや秘密鍵、GitHubから受け取った本文は含まれません。
 
 ### アプリの更新と独立した認証ピン
 
