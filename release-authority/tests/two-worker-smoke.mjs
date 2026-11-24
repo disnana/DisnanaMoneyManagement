@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { verify, X509Certificate } from 'node:crypto';
+import { createPublicKey, verify, X509Certificate } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as timers } from 'node:timers/promises';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { exportJWK, generateKeyPair, importSPKI, SignJWT } from 'jose';
 import { manifestWire, randomId, sha256Hex } from '../packages/protocol/manifest.mjs';
+import { verifyUploadReceipt } from '../packages/protocol/receipt.mjs';
 
 const [mode, scratch] = process.argv.slice(2);
 const statePath = scratch + '/test-state.json';
@@ -139,13 +140,25 @@ if (mode === 'prepare') {
   assert.deepEqual(await cached.json(), { ...result, status: 'cached' });
   const upload = `${registration}/${releaseId}/upload`;
   const publisherHeaders = { authorization: `Bearer ${publisherToken}`, 'x-release-secret': publisherSecret };
-  const report = { phase: 'start', releaseHash, signatureHash: result.signatureHash, signedAabSha256: hash, versionCode: 6 };
+  const receiptPem = await readFile(scratch + '/fixture-receipt-public.pem', 'utf8');
+  const receiptSpki = createPublicKey(receiptPem).export({ type: 'spki', format: 'der' });
+  const report = {
+    phase: 'start', releaseHash, signatureHash: result.signatureHash, signedAabSha256: hash, versionCode: 6,
+    receiptKeyId: 'fixture-receipt', receiptPublicKeySha256: await sha256Hex(receiptSpki),
+  };
   assert.equal((await edge(upload, verifyHeaders, JSON.stringify(report))).status, 404);
+  assert.equal((await edge(upload, publisherHeaders, JSON.stringify({ ...report, receiptPublicKeySha256: hash }))).status, 409);
   assert.deepEqual(await (await edge(upload, publisherHeaders, JSON.stringify(report))).json(), { status: 'reserved' });
   assert.equal((await edge(upload, publisherHeaders, JSON.stringify(report))).status, 409);
-  const completed = JSON.stringify({ ...report, phase: 'finish', result: 'stored' });
+  const completed = { ...report, phase: 'finish', result: 'stored' };
+  const receiptKey = await importSPKI(receiptPem, 'ES256');
   for (let attempt = 0; attempt < 2; attempt++) {
-    assert.deepEqual(await (await edge(upload, publisherHeaders, completed)).json(), { status: 'recorded' });
+    const stored = await (await edge(upload, publisherHeaders, JSON.stringify(completed))).json();
+    assert.equal(stored.status, 'recorded');
+    await verifyUploadReceipt(stored.receipt, {
+      keyId: 'fixture-receipt', publicKey: receiptKey, manifest: JSON.parse(wire),
+      report: completed, runId: '105', runAttempt: 1,
+    });
   }
   console.log('Gateway routes, authenticated approval, one RSA signature, and upload audit verified.');
 } else {

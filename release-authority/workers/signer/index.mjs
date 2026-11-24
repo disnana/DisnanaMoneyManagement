@@ -1,7 +1,9 @@
 import { DurableObject, WorkerEntrypoint } from 'cloudflare:workers';
 import { createPrivateKey, createPublicKey, X509Certificate } from 'node:crypto';
+import { importPKCS8 } from 'jose';
 import { ReleaseLedger } from '../../packages/protocol/ledger.mjs';
 import { sha256Hex } from '../../packages/protocol/manifest.mjs';
+import { issueUploadReceipt } from '../../packages/protocol/receipt.mjs';
 import { makeAccessAuthenticator, makeCiAuthenticator } from '../../packages/verification/identity.mjs';
 import { makeApprovalHandler } from '../approval/handler.mjs';
 import approveScript from '../approval/approve.js.txt';
@@ -95,6 +97,7 @@ export class SignerLedger extends DurableObject {
   #ledger;
   #signers = new WeakSet();
   #keyPair;
+  #receiptKey;
   constructor(ctx, env) {
     super(ctx, env);
     const { release, access } = signerPolicy(env);
@@ -114,7 +117,25 @@ export class SignerLedger extends DurableObject {
   arm(id, hash, administrator) { return this.#ledger.arm(id, hash, administrator); }
   confirm(id, hash, administrator, nonce) { return this.#ledger.confirm(id, hash, administrator, nonce); }
   reject(id, hash, administrator) { return this.#ledger.reject(id, hash, administrator); }
-  recordPlayUpload(id, report, publisher) { return this.#ledger.recordPlayUpload(id, report, publisher); }
+  async recordPlayUpload(id, report, publisher) {
+    const keyId = this.env.RELEASE_RECEIPT_KEY_ID;
+    if (!/^[a-zA-Z0-9._-]{1,96}$/.test(keyId ?? '') || keyId === this.#ledger.policy.keyId || keyId !== report.receiptKeyId) {
+      throw new Error('Independent receipt key ID required');
+    }
+    this.#receiptKey ??= (async () => {
+      const pem = this.env.RELEASE_RECEIPT_PKCS8_PEM;
+      const publicSpki = createPublicKey(createPrivateKey(pem)).export({ type: 'spki', format: 'der' });
+      return { receiptKey: await importPKCS8(pem, 'ES256'), fingerprint: await sha256Hex(publicSpki) };
+    })();
+    const { receiptKey, fingerprint } = await this.#receiptKey;
+    if (fingerprint !== report.receiptPublicKeySha256) throw new Error('CI receipt public key does not match signer');
+    const result = await this.#ledger.recordPlayUpload(id, report, publisher);
+    if (result.status !== 'recorded') return result;
+    const receipt = await issueUploadReceipt(this.#ledger.read(id), {
+      issuer: 'disnana-release-authority', keyId, receiptKey,
+    });
+    return { ...result, receipt };
+  }
 
   async #loadSigningKeys() {
     const certificate = new X509Certificate(this.env.UPLOAD_CERTIFICATE_PEM);

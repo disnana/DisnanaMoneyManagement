@@ -19,10 +19,12 @@ export function makePublisherIntake({ origin, authenticate, ledger }) {
     }
     try {
       const report = JSON.parse(await readManifestBody(request));
-      const start = report?.phase === 'start' && Object.keys(report).length === 5;
-      const finish = report?.phase === 'finish' && Object.keys(report).length === 6
+      const start = report?.phase === 'start' && Object.keys(report).length === 7;
+      const finish = report?.phase === 'finish' && Object.keys(report).length === 8
         && ['stored', 'already_present'].includes(report.result);
-      if ((!start && !finish) || ![report.releaseHash, report.signatureHash, report.signedAabSha256].every(hash)
+      if ((!start && !finish)
+        || ![report.releaseHash, report.signatureHash, report.signedAabSha256, report.receiptPublicKeySha256].every(hash)
+        || typeof report.receiptKeyId !== 'string' || !/^[a-zA-Z0-9._-]{1,96}$/.test(report.receiptKeyId)
         || !Number.isSafeInteger(report.versionCode) || report.versionCode < 1 || report.versionCode > 2_100_000_000) {
         throw new Error('Invalid upload evidence');
       }

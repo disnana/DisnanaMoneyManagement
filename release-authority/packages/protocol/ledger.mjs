@@ -277,7 +277,7 @@ export class ReleaseLedger {
       }
       requireRule(record.state === 'UPLOADING', 'No matching upload reservation');
       return {
-        record: { ...record, state: 'UPLOADED', uploadResult: report.result },
+        record: { ...record, state: 'UPLOADED', uploadResult: report.result, uploadedAt: now },
         event: { type: 'upload_result', result: report.result, signedAabSha256: report.signedAabSha256,
           versionCode: report.versionCode, runId: publisher.runId, runAttempt: publisher.runAttempt },
         response: { status: 'recorded' },

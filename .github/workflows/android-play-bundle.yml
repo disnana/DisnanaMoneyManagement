@@ -96,7 +96,7 @@ jobs:
           path.write_text(before + release.replace(generated, '            signingConfig = null\n'))
           PY
           if [[ -n "${RELEASE_GRADLE:-}" ]]; then
-            "$RELEASE_GRADLE" --no-daemon --dependency-verification=strict \
+            "$RELEASE_GRADLE" --no-daemon --no-configuration-cache --dependency-verification=strict \
               --init-script "$GITHUB_WORKSPACE/release-authority/tools/aab-verifier/release-dependencies.init.gradle" \
               :app:releaseDependencyInventory bundleRelease
           else

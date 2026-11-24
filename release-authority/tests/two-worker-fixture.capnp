@@ -34,6 +34,8 @@ const config :Workerd.Config = (
         (name = "VERIFIER_POLICY", text = embed "verifier-policy.json"),
         (name = "FINALIZER_POLICY", text = embed "finalizer-policy.json"),
         (name = "PUBLISHER_POLICY", text = embed "publisher-policy.json"),
+        (name = "RELEASE_RECEIPT_KEY_ID", text = "fixture-receipt"),
+        (name = "RELEASE_RECEIPT_PKCS8_PEM", text = embed "fixture-receipt-key.pem"),
         (name = "UPLOAD_CERTIFICATE_PEM", text = embed "fixture-upload-cert.pem"),
         (name = "UPLOAD_PRIVATE_KEY_PEM", text = embed "fixture-upload-key.pem"),
         (name = "RELEASE_INTAKE_ENABLED", text = "true"),

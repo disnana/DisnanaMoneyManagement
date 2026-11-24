@@ -5,7 +5,7 @@ import org.gradle.api.artifacts.dsl.LockMode
 
 def releaseConfigurations = ['releaseCompileClasspath', 'releaseRuntimeClasspath'] as Set
 gradle.beforeProject { project ->
-    if (project.path == ':app') {
+    if (gradle.parent == null && project.path == ':app') {
         project.dependencyLocking.lockMode = LockMode.STRICT
         project.configurations.configureEach {
             if (releaseConfigurations.contains(name)) resolutionStrategy.activateDependencyLocking()
@@ -14,7 +14,8 @@ gradle.beforeProject { project ->
 }
 
 gradle.projectsEvaluated {
-    def app = gradle.rootProject.project(':app')
+    def app = gradle.parent == null ? gradle.rootProject.findProject(':app') : null
+    if (app == null) return
     app.tasks.register('releaseDependencyInventory') {
         doLast {
             def configurations = releaseConfigurations.collect { app.configurations.getByName(it) }

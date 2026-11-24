@@ -38,7 +38,7 @@ jobs:
           export RELEASE_EVIDENCE_DIR="$RUNNER_TEMP/mane-gradle-baseline"
           mkdir "$RELEASE_EVIDENCE_DIR"
           cd android
-          "$RUNNER_TEMP/gradle-9.4.1/bin/gradle" --no-daemon --write-locks --write-verification-metadata sha256 \
+          "$RUNNER_TEMP/gradle-9.4.1/bin/gradle" --no-daemon --no-configuration-cache --write-locks --write-verification-metadata sha256 \
             --init-script "$GITHUB_WORKSPACE/release-authority/tools/aab-verifier/release-dependencies.init.gradle" \
             :app:releaseDependencyInventory bundleRelease
           install -m 644 gradle/verification-metadata.xml app/gradle.lockfile "$RELEASE_EVIDENCE_DIR/"

@@ -177,6 +177,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+      - name: Install the pinned receipt verifier
+        working-directory: release-authority
+        run: bun install --frozen-lockfile --ignore-scripts
       - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
         with:
           name: Mane-chan-authority-signed-aab
@@ -195,6 +201,8 @@ jobs:
           PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
           SIGNED_SHA256: ${{ needs.finalize.outputs.signed_sha256 }}
           RELEASE_PUBLISHER_SECRET: ${{ secrets.RELEASE_PUBLISHER_SECRET }}
+          RELEASE_RECEIPT_PUBLIC_SPKI_PEM: ${{ vars.RELEASE_RECEIPT_PUBLIC_SPKI_PEM }}
+          RELEASE_RECEIPT_KEY_ID: ${{ vars.RELEASE_RECEIPT_KEY_ID }}
         run: |
           printf '%s  %s\n' "$SIGNED_SHA256" signed/mane-chan-signed.aab | sha256sum -c -
           audit=(node release-authority/tools/remote-jarsigner/record-play-upload.mjs)
@@ -207,5 +215,11 @@ jobs:
             'Bundle already_present:'*) status=already_present ;;
             *) echo 'Unexpected upload outcome. Inspect Play Console before retrying.' >&2; exit 1 ;;
           esac
-          "${audit[@]}" finish "${evidence[@]}" "$status"
+          "${audit[@]}" finish "${evidence[@]}" "$status" > signed/release-receipt.jws
           printf '%s\n' "$result" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Mane-chan-Play-upload-receipt
+          path: signed/release-receipt.jws
+          if-no-files-found: error
+          retention-days: 30

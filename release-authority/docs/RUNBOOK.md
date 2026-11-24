@@ -22,6 +22,7 @@
 | Signerのリリース設定 | `RELEASE_POLICY` にアプリID・package・repo・許可track・鍵IDと公開証明書SHA-256・ポリシーバージョン |
 | 台帳 | アプリ単位のSQLite DO、鍵とポリシーの版、署名停止フラグ、保持期間、外部アンカーの保存先 |
 | Signer | 秘密鍵を `UPLOAD_PRIVATE_KEY_PEM`、対応する公開証明書を `UPLOAD_CERTIFICATE_PEM` に登録します。証明書のSHA-256とRSA鍵長（`rsaBits`、既定値3072）をポリシーで検証します |
+| 受領証 | 署名鍵と独立したP-256秘密鍵をSignerの `RELEASE_RECEIPT_PKCS8_PEM` に登録します。鍵IDの `RELEASE_RECEIPT_KEY_ID` はSignerとPlay用GitHub Environmentに同じ値を入れ、対応する公開鍵だけをEnvironmentの `RELEASE_RECEIPT_PUBLIC_SPKI_PEM` に登録します |
 | Publisher | WIF provider、専用アカウント、Play APIのtrack ID、参照する信頼済みreceipt設定。長期のアカウント鍵JSONは作成しない |
 
 ## ログの保管期間案
@@ -58,6 +59,7 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - 同じワークフローを `operation=finalize` で実行します。Build run IDと先ほどのVerifier run IDを渡すと、AABを再取得して署名・検証まで進みます。Play権限と実アップロード証明書を確認した運用時にだけ `upload_to_play=true` を使います。初期運用のFinalizer起動は手動で、承認待ちのrunnerや定期ポーリングはありません。
 - Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、`workflow_ref`、`workflow_sha`、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
 - 同じjobが `RELEASE_PUBLISHER_SECRET` と専用audience `urn:disnana:release-authority:staging:publisher` でSigner台帳に登録開始と確定結果を記録します。Playの認証や応答を受け取れるのはこのjobです。
+- Playへ送る前に、受領証の公開鍵と鍵IDの一致をSignerで確認します。登録後、Signerが台帳の結果にES256で署名し、Actionsが検証した受領証を成果物 `Mane-chan-Play-upload-receipt` に保存します。
 - GitHubの変数は `RELEASE_VERSION_NAME`、`RELEASE_VERSION_CODE`、`RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
 - `Release Authority preflight` は、対象ビルドの完了状態、ソース、成果物ID・出所・アーカイブハッシュのメタデータを確認し、監査結果とSBOMを格納する成果物の欠落を検出します。来歴の暗号学的な検証、監査資料の検証、署名申請は後段です。
 - v6の既存run `45284819969` には未署名AABの成果物 `14874240148` だけがあり、必須の監査結果・SBOMに対応する成果物がありません。このrunは本番署名申請の前に停止します。

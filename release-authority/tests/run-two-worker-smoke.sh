@@ -19,6 +19,8 @@ cd "$root"
 cp tests/two-worker-fixture.{mjs,capnp} "$scratch/"
 openssl req -new -newkey rsa:2048 -x509 -noenc -days 1 -subj '/CN=Local integration test' \
   -keyout "$scratch/fixture-upload-key.pem" -out "$scratch/fixture-upload-cert.pem" 2>/dev/null
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$scratch/fixture-receipt-key.pem"
+openssl pkey -in "$scratch/fixture-receipt-key.pem" -pubout -out "$scratch/fixture-receipt-public.pem"
 node tests/two-worker-smoke.mjs prepare "$scratch"
 (cd "$scratch" && exec "$WORKERD" serve two-worker-fixture.capnp) > "$scratch/workerd.log" 2>&1 &
 workerd_pid=$!
