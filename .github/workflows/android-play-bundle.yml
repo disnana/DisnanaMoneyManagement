@@ -19,6 +19,8 @@ on:
     paths:
       - '.github/workflows/android-play-bundle.yml'
       - 'apps/mobile/app.json'
+      - 'apps/mobile/release-verification/**'
+      - 'release-authority/tools/aab-verifier/**'
       - 'apps/mobile/plugins/with-android-build-commit.js'
       - 'apps/mobile/modules/build-info/**'
       - 'apps/mobile/plugins/with-optional-portrait-feature.js'
@@ -56,7 +58,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx expo prebuild --platform android --no-install
       - name: Audit and prepare the reviewed release build inputs
-        if: inputs.release_authority_checks
+        id: audited_inputs
+        if: >-
+          inputs.release_authority_checks ||
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+           hashFiles('apps/mobile/release-verification/gradle.lockfile', 'apps/mobile/release-verification/verification-metadata.xml') != '')
         working-directory: .
         run: |
           gradle="$RUNNER_TEMP/gradle-9.4.1"
@@ -117,11 +123,11 @@ jobs:
                   raise RuntimeError('Expected an unsigned App Bundle')
           PY
       - name: Audit Gradle dependencies and prepare release evidence
-        if: inputs.release_authority_checks
+        if: steps.audited_inputs.outcome == 'success'
         working-directory: .
         run: bun release-authority/tools/aab-verifier/build-quality.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: inputs.release_authority_checks
+        if: steps.audited_inputs.outcome == 'success'
         with:
           name: Mane-chan-release-quality-evidence
           path: |
