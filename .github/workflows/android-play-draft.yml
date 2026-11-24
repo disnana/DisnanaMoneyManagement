@@ -175,7 +175,9 @@ jobs:
           python3 scripts/android_play_draft.py bundle/mane-chan-signed.aab "$VERSION_CODE" "$release_name"
           {
             echo "### Google Play draft saved"
+            # shellcheck disable=SC2016 # Backticks are literal Markdown delimiters.
             printf '\n- Release: `%s`\n- Track: `%s`\n- Source commit: `%s`\n' "$release_name" "$PLAY_CLOSED_TRACK" "$GITHUB_SHA"
+            # shellcheck disable=SC2016
             printf -- '- Unsigned AAB SHA-256: `%s`\n- Signed AAB SHA-256: `%s`\n- Upload certificate SHA-256: `%s`\n' "$UNSIGNED_SHA" "$SIGNED_SHA" "$CERT_SHA"
             printf -- '- [Signed build provenance](%s)\n\nOpen Play Console to review and submit the draft.\n' "$ATTESTATION_URL"
           } >> "$GITHUB_STEP_SUMMARY"

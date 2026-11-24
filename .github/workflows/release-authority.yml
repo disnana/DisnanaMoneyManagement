@@ -65,7 +65,8 @@ jobs:
           python3 release-authority/tools/aab-verifier/verify.py --bundletool "$out/tools/bundletool.jar" \
             --package com.disnana.mane_chan --version-name "$RELEASE_VERSION_NAME" --version-code "$RELEASE_VERSION_CODE" \
             --commit "$RELEASE_SOURCE_SHA" --unsigned "$out/app-release.aab" --sha256 "$digest"
-          export RELEASE_ISSUED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
+          RELEASE_ISSUED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
+          export RELEASE_ISSUED_AT
           java -cp "$out/classes:$out/tools/*" DeterministicAab capture \
             "$out/app-release.aab" "$out/certificate.pem" "$RELEASE_ISSUED_AT" "$out/proof"
           node release-authority/tools/aab-verifier/ci-manifest.mjs create
