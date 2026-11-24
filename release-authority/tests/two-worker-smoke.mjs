@@ -42,7 +42,7 @@ if (mode === 'prepare') {
   const commitSha = 'e'.repeat(40);
   const publisherSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   const publisher = {
-    ...finalizer, callerSha: commitSha, audience: 'urn:release:test:publish',
+    ...finalizer, audience: 'urn:release:test:publish',
     secretSha256: await sha256Hex(publisherSecret),
   };
   const now = Math.floor(Date.now() / 1000);

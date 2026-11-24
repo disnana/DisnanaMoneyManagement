@@ -69,7 +69,6 @@ export class FinalizerIntake extends WorkerEntrypoint {
       if (!this.env.PUBLISHER_POLICY) return new Response('Not found', { status: 404 });
       if (!state.publisher) {
         const policy = JSON.parse(this.env.PUBLISHER_POLICY);
-        if (!policy.callerSha) throw new Error('Upload requires a fixed publisher caller');
         state.publisher = makePublisherIntake({
           origin: this.env.VERIFIER_ORIGIN, ledger: state.ledger,
           authenticate: makeCiAuthenticator({ ...policy, role: 'publisher' }),

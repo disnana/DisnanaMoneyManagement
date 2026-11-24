@@ -105,6 +105,16 @@ test('a completed-build event can authenticate only as the verifier', async () =
   }
 });
 
+test('the same authority revision authenticates jobs from consecutive main commits', async () => {
+  for (const callerWorkflowSha of ['c'.repeat(40), 'd'.repeat(40)]) {
+    const claims = { ...base, sha: callerWorkflowSha, workflow_sha: callerWorkflowSha };
+    const principal = await ci(authorization(await signed(claims)));
+    assert.equal(principal.commitSha, callerWorkflowSha);
+    assert.equal(principal.callerWorkflowSha, callerWorkflowSha);
+    assert.equal(principal.workflowSha, policy.reusableSha);
+  }
+});
+
 test('Access requires a valid token scoped to the app and a configured admin subject', async () => {
   const access = makeAccessAuthenticator({ team: 'fixture-team', audience: 'admin-audience', administrators: ['allowed'] }, { resolveKey });
   const admin = { iss: 'https://fixture-team.cloudflareaccess.com', aud: ['admin-audience'], sub: 'allowed', iat: now, exp: now + 240 };

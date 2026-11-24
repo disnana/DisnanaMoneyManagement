@@ -22,7 +22,7 @@ export const FixtureDispatcher = {
   async fetch(request) {
     const data = await request.json();
     const matched = request.url === 'https://release-dispatch.internal/finalize' && request.method === 'POST'
-      && data.buildRunId === '99' && data.verifierRunId === '103' && data.workflowSha === 'd'.repeat(40);
+      && data.buildRunId === '99' && data.verifierRunId === '103' && data.workflowSha === 'e'.repeat(40);
     return new Response(null, { status: matched ? 204 : 409 });
   },
 };
