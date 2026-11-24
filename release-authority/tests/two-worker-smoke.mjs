@@ -26,18 +26,20 @@ if (mode === 'prepare') {
     track: 'alpha', keyId: 'upload-fixture', certificate: await sha256Hex(certificate.raw),
     version: 1, rsaBits: 2048, releaseStatus: 'upload-only',
   };
+  const workflow = {
+    callerRef: 'fixture/app/.github/workflows/ci.yml@refs/heads/main',
+    reusableWorkflow: 'fixture/authority/.github/workflows/release.yml',
+    reusableSha: 'd'.repeat(40),
+  };
   const policy = {
     repositoryId: release.repositoryId, ownerId: '102', ref: 'refs/heads/main',
     subject: 'repo:fixture/app:ref:refs/heads/main', audience: 'urn:release:test:verify',
-    callerRef: 'fixture/app/.github/workflows/ci.yml@refs/heads/main',
-    reusableRef: `fixture/authority/.github/workflows/verify.yml@${'d'.repeat(40)}`,
-    reusableSha: 'd'.repeat(40), secretSha256: await sha256Hex(secret),
+    secretSha256: await sha256Hex(secret),
   };
   const access = { team, audience: 'fixture-audience', administrators: [administrator] };
   const finalizerSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   const finalizer = {
     ...policy, audience: 'urn:release:test:finalize', secretSha256: await sha256Hex(finalizerSecret),
-    reusableRef: `fixture/authority/.github/workflows/finalize.yml@${'a'.repeat(40)}`, reusableSha: 'a'.repeat(40),
   };
   const commitSha = 'e'.repeat(40);
   const publisherSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
@@ -48,8 +50,9 @@ if (mode === 'prepare') {
   const now = Math.floor(Date.now() / 1000);
   const issueToken = (profile, runId) => new SignJWT({
     repository_id: release.repositoryId, repository_owner_id: policy.ownerId,
-    ref: profile.ref, workflow_ref: profile.callerRef, workflow_sha: commitSha,
-    sha: commitSha, job_workflow_ref: profile.reusableRef, job_workflow_sha: profile.reusableSha,
+    ref: profile.ref, workflow_ref: workflow.callerRef, workflow_sha: commitSha,
+    sha: commitSha, job_workflow_ref: `${workflow.reusableWorkflow}@${workflow.reusableSha}`,
+    job_workflow_sha: workflow.reusableSha,
     event_name: 'workflow_dispatch', runner_environment: 'github-hosted', run_id: runId, run_attempt: '1',
   }).setProtectedHeader({ alg: 'RS256', kid: keyId }).setIssuer('https://token.actions.githubusercontent.com')
     .setAudience(profile.audience).setSubject(profile.subject).setIssuedAt(now).setNotBefore(now)
@@ -65,7 +68,7 @@ if (mode === 'prepare') {
     schema: 'disnana.release-manifest.v1', releaseId, nonce: randomId(),
     appId: release.appId, packageName: release.packageName, repositoryId: release.repositoryId,
     versionName: '1.0.0', versionCode: 6, commitSha, buildRunId: '99', buildRunAttempt: 1,
-    buildWorkflowSha: 'f'.repeat(40), verifierRunId: '103', verifierWorkflowSha: policy.reusableSha,
+    buildWorkflowSha: 'f'.repeat(40), verifierRunId: '103', verifierWorkflowSha: workflow.reusableSha,
     artifactId: '104', unsignedAabSha256: hash, manifestSha256: hash, signatureFileSha256: hash,
     signingInputSha256: await sha256Hex(signingInput), signingInputLength: signingInput.length,
     buildProofSha256: hash, artifactProofSha256: hash,
@@ -76,6 +79,7 @@ if (mode === 'prepare') {
   });
   for (const [name, value] of Object.entries({
     'jwks.json': { keys: [jwk] }, 'release-policy.json': release, 'access-policy.json': access,
+    'ci-workflow-policy.json': workflow,
     'verifier-policy.json': policy, 'finalizer-policy.json': finalizer, 'publisher-policy.json': publisher,
   })) await writeFile(`${scratch}/${name}`, JSON.stringify(value));
   await writeFile(statePath, JSON.stringify({

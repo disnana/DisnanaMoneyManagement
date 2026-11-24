@@ -63,7 +63,16 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 
 この切り替えは旧構成の承認・署名・登録を完了してから行います。この変更をマージするときは、固定コミットを履歴に残すためマージコミットを使用してください。
 
-- Signerの `VERIFIER_POLICY`、`FINALIZER_POLICY`、`PUBLISHER_POLICY` から `callerSha` を除き、`reusableSha` を `d4eac0c42a98a93aa772474a50f7b8df2ca55898`、`reusableRef` を `disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@d4eac0c42a98a93aa772474a50f7b8df2ca55898` に設定します。`callerRef`、リポジトリID、環境、audienceとSecretの条件は維持します。
+- Signerに変数 `CI_WORKFLOW_POLICY` を作り、以下のJSONを登録します。`VERIFIER_POLICY`、`FINALIZER_POLICY`、`PUBLISHER_POLICY` からワークフローの項目（`callerRef`、`callerSha`、`reusableRef`、`reusableSha`）を除きます。環境、OIDC subjectとaudience、Secretの条件は各ポリシーに残します。共通設定と個別設定にワークフローの項目を重複して指定すると、Signerは受け付けません。
+
+  ```json
+  {
+    "callerRef": "disnana/DisnanaMoneyManagement/.github/workflows/release-authority.yml@refs/heads/main",
+    "reusableWorkflow": "disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml",
+    "reusableSha": "d4eac0c42a98a93aa772474a50f7b8df2ca55898"
+  }
+  ```
+
 - Google WIFの既存条件から `assertion.workflow_sha == '旧mainのSHA'` を除き、`assertion.job_workflow_sha == 'd4eac0c42a98a93aa772474a50f7b8df2ca55898'` と `assertion.job_workflow_ref == 'disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@d4eac0c42a98a93aa772474a50f7b8df2ca55898'` を加えます。その他の条件は維持します。
 - v6で履歴上のAABを使うために設定した GitHubの `RELEASE_SOURCE_SHA` とSignerの `RELEASE_POLICY.sourceCommitSha` を取り除きます。以後はAABのソースを検証・署名・登録を行う `main` のコミットと照合します。
 - Release Authorityのツールを更新した場合は、新しい固定コミットを入口と両方の認証ポリシーに反映します。通常のアプリ変更ではこの更新は不要です。申請後に別のコミットが `main` に入った場合は、現在のコミットの監査付きAABで申請し直してください。
@@ -85,5 +94,5 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - 検証済みcanonical manifestを `node tools/aab-verifier/register-staging.mjs MANIFEST` で登録します。独立VerifierのOIDCと `RELEASE_VERIFIER_SECRET` が必要です。
 - 承認後、別実行の固定FinalizerでAABとCMS属性を再検証して再生成し、`node tools/remote-jarsigner/finalize-staging.mjs MANIFEST CMS_INPUT RAW_SIGNATURE` で署名を受け取ります。Finalizer専用OIDCと `RELEASE_FINALIZER_SECRET` が必要です。受け取った署名はJava側でAABに組み込み、公開証明書で再検証します。
 - Java側では `DeterministicAab finalize-signature AAB CERTIFICATE ISSUED_AT PROOF_DIR OUTPUT SIGNATURE` を使用します。同じAABから再生成した署名対象とVerifierの証拠を比較し、署名と全エントリの証明書を確認してから出力します。
-- 過去のAABを後から追加したCIで処理する場合は、`RELEASE_POLICY.sourceCommitSha` にAABのソース完全SHA、各CI認証ポリシーの `callerSha` にその呼び出し元の完全SHAを固定します。各CIでは同じAABのソースSHAを `RELEASE_SOURCE_SHA` に設定して来歴を検証します。指定がない通常運用ではOIDCのソースSHAとAABのソースSHAの一致を要求します。
+- 過去のAABを後から追加したCIで処理する場合は、`RELEASE_POLICY.sourceCommitSha` にAABのソース完全SHA、`CI_WORKFLOW_POLICY.callerSha` に呼び出し元の完全SHAを固定します。各CIでは同じAABのソースSHAを `RELEASE_SOURCE_SHA` に設定して来歴を検証します。指定がない通常運用ではOIDCのソースSHAとAABのソースSHAの一致を要求します。
 - 上記の処理はリポジトリのワークフローファイルに接続済みです。GitHubとCloudflareの反映、レビュー済みGradleベースライン、Playへの実接続は環境側に残っています。

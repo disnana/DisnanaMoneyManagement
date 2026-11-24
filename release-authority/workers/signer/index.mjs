@@ -32,14 +32,29 @@ function signerPolicy(env) {
   };
 }
 
+function ciPolicy(env, role) {
+  const policy = JSON.parse(env[`${role.toUpperCase()}_POLICY`]);
+  if (env.CI_WORKFLOW_POLICY === undefined) return { ...policy, role };
+  const { callerRef, callerSha, reusableWorkflow, reusableSha } = JSON.parse(env.CI_WORKFLOW_POLICY);
+  const reusable = reusableWorkflow !== undefined || reusableSha !== undefined;
+  if (typeof callerRef !== 'string' || !callerRef
+    || ['callerRef', 'callerSha', 'reusableRef', 'reusableSha'].some((field) => Object.hasOwn(policy, field))
+    || (reusable && (typeof reusableWorkflow !== 'string' || !reusableWorkflow || reusableWorkflow.includes('@')
+      || !/^[a-f0-9]{40}$/.test(reusableSha ?? '')))) {
+    throw new Error('Invalid shared CI workflow policy');
+  }
+  const reusableRef = reusable ? `${reusableWorkflow}@${reusableSha}` : undefined;
+  return { ...policy, role, callerRef, callerSha, reusableRef, reusableSha };
+}
+
 function getHandlers(env) {
   if (!instances.has(env)) {
     if (env.APPROVAL_ORIGIN === env.VERIFIER_ORIGIN) throw new Error('Release authority origins must be distinct');
     const { access, ledger, release } = signerPolicy(env);
     const authenticateAdmin = makeAccessAuthenticator(access);
-    const verifierPolicy = JSON.parse(env.VERIFIER_POLICY);
+    const verifierPolicy = ciPolicy(env, 'verifier');
     if (release.sourceCommitSha && !verifierPolicy.callerSha) throw new Error('Historical source requires a fixed verifier caller');
-    const authenticateVerifier = makeCiAuthenticator({ ...verifierPolicy, role: 'verifier' });
+    const authenticateVerifier = makeCiAuthenticator(verifierPolicy);
     const approval = makeApprovalHandler({
       origin: env.APPROVAL_ORIGIN, authenticate: authenticateAdmin, assets,
       ledger: {
@@ -68,23 +83,22 @@ export class FinalizerIntake extends WorkerEntrypoint {
     if (new URL(request.url).pathname.endsWith('/upload')) {
       if (!this.env.PUBLISHER_POLICY) return new Response('Not found', { status: 404 });
       if (!state.publisher) {
-        const policy = JSON.parse(this.env.PUBLISHER_POLICY);
         state.publisher = makePublisherIntake({
           origin: this.env.VERIFIER_ORIGIN, ledger: state.ledger,
-          authenticate: makeCiAuthenticator({ ...policy, role: 'publisher' }),
+          authenticate: makeCiAuthenticator(ciPolicy(this.env, 'publisher')),
         });
       }
       return state.publisher(request);
     }
     if (!this.env.FINALIZER_POLICY) return new Response('Not found', { status: 404 });
     if (!state.finalizer) {
-      const finalizerPolicy = JSON.parse(this.env.FINALIZER_POLICY);
+      const finalizerPolicy = ciPolicy(this.env, 'finalizer');
       if (state.release.sourceCommitSha && !finalizerPolicy.callerSha) {
         throw new Error('Historical source requires a fixed finalizer caller');
       }
       state.finalizer = makeFinalizeIntake({
         origin: this.env.VERIFIER_ORIGIN, ledger: state.ledger,
-        authenticate: makeCiAuthenticator({ ...finalizerPolicy, role: 'finalizer' }),
+        authenticate: makeCiAuthenticator(finalizerPolicy),
       });
     }
     return state.finalizer(request);

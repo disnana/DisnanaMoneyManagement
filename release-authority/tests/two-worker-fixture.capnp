@@ -31,6 +31,7 @@ const config :Workerd.Config = (
         (name = "VERIFIER_ORIGIN", text = "https://verifier.fixture.invalid"),
         (name = "RELEASE_POLICY", text = embed "release-policy.json"),
         (name = "ACCESS_POLICY", text = embed "access-policy.json"),
+        (name = "CI_WORKFLOW_POLICY", text = embed "ci-workflow-policy.json"),
         (name = "VERIFIER_POLICY", text = embed "verifier-policy.json"),
         (name = "FINALIZER_POLICY", text = embed "finalizer-policy.json"),
         (name = "PUBLISHER_POLICY", text = embed "publisher-policy.json"),
