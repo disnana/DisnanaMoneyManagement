@@ -73,6 +73,16 @@ func (m *memoryPendingQueue) page(_ context.Context, shard int, after JobKey, li
 	return keys[:min(limit, len(keys))], nil
 }
 
+func (m *memoryPendingQueue) clearBody(_ context.Context, key JobKey) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if row, exists := m.rows[key]; exists {
+		row.data = nil
+		m.rows[key] = row
+	}
+	return nil
+}
+
 func (m *memoryPendingQueue) remove(_ context.Context, key JobKey) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

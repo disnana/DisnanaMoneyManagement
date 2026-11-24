@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
-import type { ReceiptConfig, ReceiptJobInput } from './androidReceiptClient';
+import { getReceiptMode, quoteReceiptCredits, type ReceiptConfig, type ReceiptJobInput, type ReceiptMode } from './androidReceiptClient';
 
 export type ReceiptMimeType = 'image/jpeg' | 'image/png';
 export type ReceiptPage = { id: string; uri: string; name: string; type: ReceiptMimeType; bytes: number };
@@ -56,7 +56,7 @@ export function removeReceiptFile(uri: string) {
   }
 }
 
-export function buildReceiptInput(groups: readonly ReceiptGroup[], config: ReceiptConfig) {
+export function buildReceiptInput(groups: readonly ReceiptGroup[], config: ReceiptConfig, mode?: ReceiptMode) {
   const pages = groups.flatMap((group) => group.pages);
   if (!groups.length || groups.length > config.max_groups ||
       groups.some((group) => !group.pages.length || group.pages.length > config.max_images_per_group) ||
@@ -68,11 +68,11 @@ export function buildReceiptInput(groups: readonly ReceiptGroup[], config: Recei
     throw new Error('画像のファイルサイズが上限を超えています。');
   }
 
-  const maximumCredit = pages.length * config.credits_per_image;
-  if (!Number.isSafeInteger(maximumCredit)) throw new Error('最大CRを計算できませんでした。');
+  const tariff = getReceiptMode(config, mode);
   const input: ReceiptJobInput = {
-    maximum_credit: maximumCredit,
-    price_version: config.price_version,
+    maximum_credit: quoteReceiptCredits(config, pages.length, tariff.id),
+    price_version: tariff.price_version,
+    ...(config.modes ? { mode: tariff.id } : {}),
     request: {
       groups: groups.map((group, groupIndex) => ({
         id: group.id,

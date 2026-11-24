@@ -22,11 +22,14 @@ type JobKey struct {
 }
 
 type ReceiptIntake struct {
-	BodySHA256      string
-	PriceVersion    string
-	MaximumCredit   int64
-	Deadline        time.Time
-	ResultRetention time.Duration
+	BodySHA256           string
+	PriceVersion         string
+	Mode                 string
+	ProviderProfile      string
+	MillicreditsPerImage int64
+	MaximumCredit        int64
+	Deadline             time.Time
+	ResultRetention      time.Duration
 }
 
 type SavedGroup struct {
@@ -40,20 +43,22 @@ type SavedGroup struct {
 // ReceiptJob groups the states and immutable quote for one accepted upload. Actual
 // input images are kept separately so that image retention can be enforced.
 type ReceiptJob struct {
-	Revision        int64
-	Intake          ReceiptIntake
-	Accepted        bool
-	Abandoned       bool
-	FinalCredit     *int64
-	Settled         bool
-	ResultExpiresAt time.Time
-	ResultExpired   bool
-	Groups          []SavedGroup
+	Revision                int64
+	Intake                  ReceiptIntake
+	Accepted                bool
+	Abandoned               bool
+	FinalCredit             *int64
+	Settled                 bool
+	ResultExpiresAt         time.Time
+	ResultExpired           bool
+	DeferredCleanupPrepared bool
+	Groups                  []SavedGroup
 }
 
 func newReceiptJob(intake ReceiptIntake, groups []Group) (ReceiptJob, error) {
 	if !resultDigest.MatchString(intake.BodySHA256) || !identifier.MatchString(intake.PriceVersion) ||
-		intake.MaximumCredit <= 0 || intake.Deadline.IsZero() || intake.ResultRetention < 0 || len(groups) == 0 {
+		intake.MaximumCredit <= 0 || !validMode(intake.Mode) || intake.MillicreditsPerImage < 0 ||
+		intake.Deadline.IsZero() || intake.ResultRetention < 0 || len(groups) == 0 {
 		return ReceiptJob{}, ErrJobTransition
 	}
 	intake.Deadline = intake.Deadline.UTC()

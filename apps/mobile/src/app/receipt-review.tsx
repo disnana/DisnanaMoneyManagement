@@ -4,8 +4,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { accountAvailable, refreshAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
 import {
-  getReceiptConfig, isReceiptJobTerminal, ReceiptAPIError, submitReceiptJob,
-  type ReceiptConfig, type ReceiptDocument, type ReceiptJob,
+  getReceiptConfig, getReceiptModes, isReceiptJobTerminal, quoteReceiptCredits, ReceiptAPIError, submitReceiptJob,
+  type ReceiptConfig, type ReceiptDocument, type ReceiptJob, type ReceiptMode,
 } from '@/lib/androidReceiptClient';
 import {
   attachReceiptImages, buildReceiptInput, inspectReceiptFile, newReceiptID,
@@ -14,6 +14,7 @@ import {
 import { metrics, usePalette } from '@/lib/theme';
 import { canImportReceipt, initialReceiptItems, receiptImportDraft } from '@/lib/receiptImport';
 import { ReceiptExpenseReview } from '@/ui/ReceiptExpenseReview';
+import { openReceiptCamera, openReceiptGallery, ReceiptImageEditor, type ReceiptImageSource } from '@/ui/ReceiptImageEditor';
 import {
   deleteLocalReceiptResult, listLocalReceiptResults, readLocalReceiptResult, readPendingReceipt,
   receivePendingReceiptResult, subscribeLocalReceiptResults, writePendingReceipt,
@@ -31,7 +32,14 @@ const JOB_STATUS: Record<string, string> = {
   CLAIMED: '準備中', SUBMITTING: '解析を開始中', SUBMISSION_UNKNOWN: '解析先の受付を確認中',
   PARTIAL: '一部の解析が完了', FAILED: '解析に失敗', CANCELLED: '取り消し済み', EXPIRED: '受付期限切れ',
 };
+const RECEIPT_MODES: Record<ReceiptMode, { name: string; description: string }> = {
+  standard: { name: '通常', description: 'すぐ解析を始める' },
+  background: { name: 'おまかせ', description: '時間に余裕があるとき' },
+  batch: { name: '一括', description: '急がない書類をまとめる' },
+};
 const resultDate = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo' });
+type ReceiptSourceTarget = { groupId?: string };
+type ReceiptEditorQueue = ReceiptSourceTarget & { sources: ReceiptImageSource[] };
 
 function cr(amount: number) {
   return `${amount.toLocaleString('ja-JP')} CR`;
@@ -99,8 +107,11 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   const [configLoading, setConfigLoading] = useState(true);
   const [configError, setConfigError] = useState('');
   const [configRefresh, setConfigRefresh] = useState(0);
+  const [mode, setMode] = useState<ReceiptMode>('standard');
   const [pollRefresh, setPollRefresh] = useState(0);
   const [groups, setGroups] = useState<ReceiptGroup[]>([]);
+  const [sourceTarget, setSourceTarget] = useState<ReceiptSourceTarget>();
+  const [editorQueue, setEditorQueue] = useState<ReceiptEditorQueue>();
   const [preview, setPreview] = useState<ReceiptPage>();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -193,54 +204,123 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   }, [pending, accountId, pollRefresh]);
 
   const pages = groups.flatMap((group) => group.pages);
-  const estimate = config && pages.length ? pages.length * config.credits_per_image : undefined;
-  const canPick = Boolean(config && !configLoading && !configError && !busy);
+  const modes = config ? getReceiptModes(config) : [];
+  const selectedMode = modes.find((item) => item.id === mode) ?? modes[0];
+  const selectedModeInfo = selectedMode ? RECEIPT_MODES[selectedMode.id] : undefined;
+  const estimate = config && selectedMode && pages.length ? quoteReceiptCredits(config, pages.length, selectedMode.id) : undefined;
+  const canPick = Boolean(config && !configLoading && !configError && !busy && !editorQueue);
+  const imageSource = editorQueue?.sources[0];
 
-  function removeFile(page: ReceiptPage) {
-    cachedFiles.current.delete(page.uri);
-    removeReceiptFile(page.uri);
+  function removeTemporary(uri: string) {
+    cachedFiles.current.delete(uri);
+    removeReceiptFile(uri);
   }
 
-  async function selectPages(groupId?: string) {
+  function followEditorQueue() {
+    if (!editorQueue || !imageSource) return;
+    removeTemporary(imageSource.uri);
+    const sources = editorQueue.sources.slice(1);
+    setEditorQueue(sources.length ? { ...editorQueue, sources } : undefined);
+  }
+
+  async function readSources(kind: ReceiptImageSource['kind'], limit: number): Promise<ReceiptImageSource[]> {
+    if (kind === 'camera') return openReceiptCamera();
+    if (kind === 'gallery') return openReceiptGallery(limit);
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: ['image/jpeg', 'image/png'], multiple: limit > 1, copyToCacheDirectory: true,
+    });
+    if (picked.canceled) return [];
+    try {
+      if (picked.assets.length > limit) throw new Error(`一度に追加できる画像はあと ${limit} 枚です。`);
+      const sources: ReceiptImageSource[] = [];
+      for (const asset of picked.assets) {
+        await inspectReceiptFile(asset.uri);
+        const { width, height } = await Image.getSize(asset.uri);
+        sources.push({ uri: asset.uri, name: asset.name, width, height, kind: 'file' });
+      }
+      return sources;
+    } catch (error) {
+      picked.assets.forEach((asset) => removeReceiptFile(asset.uri));
+      throw error;
+    }
+  }
+
+  async function selectPages(kind: ReceiptImageSource['kind'], groupId?: string) {
     if (!config || !canPick || busyRef.current) return;
+    const limit = Math.min(config.max_total_images - pages.length, groupId
+      ? config.max_images_per_group - (groups.find((group) => group.id === groupId)?.pages.length ?? 0)
+      : config.max_groups - groups.length);
+    if (limit < 1) return;
+    setSourceTarget(undefined);
     busyRef.current = true;
     setBusy(true);
     setMessage('');
-    let selected: DocumentPicker.DocumentPickerAsset[] = [];
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/jpeg', 'image/png'], multiple: true, copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-      selected = result.assets;
-      if (!open.current) return;
-      const permitted = Math.min(config.max_total_images - pages.length, groupId
-        ? config.max_images_per_group - (groups.find((group) => group.id === groupId)?.pages.length ?? 0)
-        : config.max_groups - groups.length);
-      if (selected.length > permitted) throw new Error(`一度に追加できる画像はあと ${permitted} 枚です。`);
-      const added: ReceiptPage[] = [];
-      for (const asset of selected) {
-        const { type, bytes } = await inspectReceiptFile(asset.uri);
-        if (bytes > config.max_image_bytes) throw new Error('1枚あたりのファイルサイズの上限を超えています。');
-        const { width, height } = await Image.getSize(asset.uri).catch(() => { throw new Error('画像の大きさを確認できませんでした。'); });
-        if (width <= 0 || height <= 0 || width * height > config.max_image_pixels) throw new Error('画像の縦横サイズが上限を超えています。');
-        if (!open.current) return;
-        added.push({ id: newReceiptID(), uri: asset.uri, name: asset.name, type, bytes });
+      const sources = await readSources(kind, limit);
+      if (!open.current || sources.length > limit) {
+        sources.forEach((source) => removeReceiptFile(source.uri));
+        if (open.current) throw new Error(`一度に追加できる画像はあと ${limit} 枚です。`);
+        return;
       }
-      const next = groupId
-        ? groups.map((group) => group.id === groupId ? { ...group, pages: [...group.pages, ...added] } : group)
-        : [...groups, ...added.map((page) => ({ id: newReceiptID(), pages: [page] }))];
-      buildReceiptInput(next, config);
-      added.forEach((page) => cachedFiles.current.add(page.uri));
-      selected = [];
-      setGroups(next);
+      if (sources.length === 0) return;
+      sources.forEach((source) => cachedFiles.current.add(source.uri));
+      setEditorQueue({ groupId, sources });
     } catch (error) {
       if (open.current) setMessage(error instanceof Error ? error.message : '画像を読み込めませんでした。');
     } finally {
-      selected.forEach((asset) => removeReceiptFile(asset.uri));
       busyRef.current = false;
       if (open.current) setBusy(false);
     }
+  }
+
+  async function replacePage() {
+    if (!editorQueue || !imageSource) return;
+    const [replacement] = await readSources(imageSource.kind, 1);
+    if (!replacement) return;
+    if (!open.current) {
+      removeReceiptFile(replacement.uri);
+      return;
+    }
+    if (imageSource.uri !== replacement.uri) removeTemporary(imageSource.uri);
+    cachedFiles.current.add(replacement.uri);
+    setEditorQueue({ ...editorQueue, sources: [replacement, ...editorQueue.sources.slice(1)] });
+    return replacement;
+  }
+
+  async function addEditedPage(uri: string) {
+    if (!config || !editorQueue || !imageSource || busyRef.current) {
+      removeReceiptFile(uri);
+      return;
+    }
+    busyRef.current = true;
+    try {
+      const { type, bytes } = await inspectReceiptFile(uri);
+      if (!open.current) {
+        removeReceiptFile(uri);
+        return;
+      }
+      const id = newReceiptID();
+      const page = { id, uri, name: imageSource.name || 'レシート画像', type, bytes };
+      const next = editorQueue.groupId
+        ? groups.map((group) => group.id === editorQueue.groupId ? { ...group, pages: [...group.pages, page] } : group)
+        : [...groups, { id: newReceiptID(), pages: [page] }];
+      buildReceiptInput(next, config, selectedMode?.id);
+      cachedFiles.current.add(uri);
+      setGroups(next);
+      setMessage('');
+      followEditorQueue();
+    } catch (error) {
+      removeReceiptFile(uri);
+      if (open.current) {
+        Alert.alert('この画像を追加できませんでした', error instanceof Error ? error.message : '画像の容量を確認してください。');
+      }
+    } finally {
+      busyRef.current = false;
+    }
+  }
+
+  function removeFile(page: ReceiptPage) {
+    removeTemporary(page.uri);
   }
 
   function removePage(groupId: string, page: ReceiptPage) {
@@ -270,7 +350,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
     setMessage('');
     const id = newReceiptID();
     try {
-      const input = await attachReceiptImages(buildReceiptInput(groups, config), groups);
+      const input = await attachReceiptImages(buildReceiptInput(groups, config, selectedMode?.id), groups);
       if (!open.current) return;
       // Store the ID before the POST so a process restart can resume by GET even if the reply is lost.
       const pointer = { id, startedAt: Date.now() };
@@ -340,7 +420,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
       <Surface>
         <Heading>{viewedId ? '解析結果' : '画像を確認して送信'}</Heading>
         <Copy>{viewedId ? '支出を登録する前に、元の書類と内容を見比べてください。' :
-          'レシート・領収書・請求書などを選んでください。反射や影を避け、文字と四隅が写った画像を使うと読み取りやすくなります。長い書類は、前後が少し重なるように分けて選んでください。'}</Copy>
+          'レシートや領収書を撮影するか、画像を選んでください。長い書類は、続きが少し重なるように分けて撮影できます。'}</Copy>
         {!viewedId && config?.result_retention_seconds ? <Copy>
           解析・精算後の受信期間は{resultWindow(config.result_retention_seconds)}です。期間内に通信できる状態でアプリを開くと、結果を端末に保存します。
         </Copy> : null}
@@ -362,6 +442,9 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
             : selectedLocalId ? '端末の結果を読み込めません' : notFound ? '受付を確認できません' : '受付を確認中'}</Heading>
           <Copy>{viewedJob ? `最大 ${cr(viewedJob.maximum_credit)}　確定 ${viewedJob.final_credit == null ? '精算待ち' : cr(viewedJob.final_credit)}`
             : selectedLocalId ? '一覧から別の結果を開くことができます。' : '画面を閉じても、ここから受付状況を確認できます。'}</Copy>
+          {viewedJob?.mode ? <Copy>解析モード {RECEIPT_MODES[viewedJob.mode].name}</Copy> : null}
+          {viewedJob?.deadline && !isReceiptJobTerminal(viewedJob.state)
+            ? <Copy>処理期限 {resultDate.format(new Date(viewedJob.deadline))}（日本時間）</Copy> : null}
           {localResult ? <Copy>端末に保存済み</Copy> : viewedJob?.result_expired ? <Notice text="解析結果の受信期限を過ぎました。" />
             : viewedJob?.result_expires_at ? <Copy>受信期限 {resultDate.format(new Date(viewedJob.result_expires_at))}（日本時間）</Copy> : null}
           {!selectedLocalId && message ? <Notice text={message} /> : null}
@@ -404,18 +487,48 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
                   onPress={() => removePage(group.id, page)} disabled={busy} />
               </View>
             ))}
-            <Action label="同じ書類のページを追加" onPress={() => void selectPages(group.id)}
+            <Action label="同じ書類のページを追加" onPress={() => setSourceTarget({ groupId: group.id })}
               disabled={!canPick || group.pages.length >= (config?.max_images_per_group ?? 0) ||
                 pages.length >= (config?.max_total_images ?? 0)} />
           </Surface>
         ))}
-        <Action label={groups.length ? '別の書類の画像を追加' : 'JPEG・PNGの画像を選ぶ'}
-          onPress={() => void selectPages()} disabled={!canPick || groups.length >= (config?.max_groups ?? 0) ||
-            pages.length >= (config?.max_total_images ?? 0)} />
-        {config ? <Surface>
+        {groups.length ? <>
+          <Action label="別の書類を追加"
+            onPress={() => setSourceTarget({})} disabled={!canPick || groups.length >= (config?.max_groups ?? 0) ||
+              pages.length >= (config?.max_total_images ?? 0)} />
+          <Copy>別の書類はそれぞれの書類としてまとめて送信します。</Copy>
+        </> : <Surface>
+          <Action primary label="カメラで撮影" onPress={() => void selectPages('camera')} disabled={!canPick} />
+          <Action label="写真から選ぶ" onPress={() => void selectPages('gallery')} disabled={!canPick} />
+          <Action label="ファイルから選ぶ" onPress={() => void selectPages('file')} disabled={!canPick} />
+        </Surface>}
+        {modes.length > 1 && pages.length > 0 ? <Surface>
+          <Heading>解析モード</Heading>
+          {modes.map((item) => {
+            const info = RECEIPT_MODES[item.id];
+            const selected = item.id === selectedMode?.id;
+            return (
+              <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{ checked: selected }}
+                disabled={busy} onPress={() => setMode(item.id)} style={[styles.modeOption, {
+                  backgroundColor: selected ? p.fill : p.card, borderColor: selected ? p.tint : p.outline,
+                }]}>
+                <View style={styles.modeTitle}>
+                  <Text style={{ color: p.text, fontSize: 16, fontWeight: '700' }}>{info.name}</Text>
+                  <Text style={{ color: p.text, fontSize: 15, fontWeight: '700' }}>
+                    {config ? cr(quoteReceiptCredits(config, pages.length, item.id)) : ''}
+                  </Text>
+                </View>
+                <Copy>{info.description}{item.max_wait_seconds && item.id !== 'standard'
+                  ? ` · ${item.max_wait_seconds % 3600 === 0 ? `${item.max_wait_seconds / 3600}時間` : resultWindow(item.max_wait_seconds)}枠` : ''}</Copy>
+              </Pressable>
+            );
+          })}
+        </Surface> : null}
+        {config && selectedMode ? <Surface>
           <Heading>送信時の最大CR</Heading>
           <Text style={[styles.estimate, { color: p.text }]}>{estimate == null ? '—' : cr(estimate)}</Text>
-          <Copy>{pages.length}枚 · 画像1枚につき {cr(config.credits_per_image)}。{credits == null ? '' : `利用可能 ${cr(credits)}。`}</Copy>
+          <Copy>書類 {groups.length}件 · 画像 {pages.length}枚 · {selectedModeInfo?.name}{credits == null ? '' : ` · 利用可能 ${cr(credits)}`}</Copy>
+          {selectedMode.millicredits_per_image % 1000 !== 0 ? <Copy>画像全体の料金を合計し、1 CR単位に切り上げます。</Copy> : null}
           <Copy>対象外や不鮮明と判定された画像も、解析できた分はCRを消費します。送信前に画像とページ順をご確認ください。</Copy>
           <Copy>カード番号の全桁など、読み取りに不要な情報は隠してください。</Copy>
           {credits !== null && estimate != null && estimate > credits ? <>
@@ -427,7 +540,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
             disabled={!canPick || estimate == null || (credits !== null && estimate > credits)}
             onPress={() => {
               if (estimate == null) return;
-              Alert.alert('画像を送信しますか？', `画像を解析用サーバーに送信し、最大 ${cr(estimate)} を確保します。対象外・不鮮明の判定も精算対象になります。`, [
+              Alert.alert('画像を送信しますか？', `書類${groups.length}件の画像${pages.length}枚を${selectedModeInfo?.name ?? '選択したモード'}で解析し、最大 ${cr(estimate)} を確保します。対象外・不鮮明の判定も精算対象になります。`, [
                 { text: 'キャンセル', style: 'cancel' }, { text: '送信', onPress: () => void send() },
               ]);
             }} />
@@ -445,6 +558,23 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
           </View>
         </Surface> : null}
       </>}
+      <Modal visible={Boolean(sourceTarget)} transparent animationType="fade" onRequestClose={() => setSourceTarget(undefined)}>
+        <View style={styles.sourceBackdrop}>
+          <View style={[styles.sourcePanel, { backgroundColor: p.card }]}>
+            <Heading>{sourceTarget?.groupId ? '同じ書類のページを追加' : '別の書類を追加'}</Heading>
+            <Action primary label="カメラで撮影" onPress={() => void selectPages('camera', sourceTarget?.groupId)} />
+            <Action label="写真から選ぶ" onPress={() => void selectPages('gallery', sourceTarget?.groupId)} />
+            <Action label="ファイルから選ぶ" onPress={() => void selectPages('file', sourceTarget?.groupId)} />
+            <Action label="キャンセル" onPress={() => setSourceTarget(undefined)} />
+          </View>
+        </View>
+      </Modal>
+      {config && imageSource ? <ReceiptImageEditor
+        source={imageSource} maxPixels={config.max_image_pixels}
+        maxBytes={Math.max(1, Math.min(config.max_image_bytes,
+          config.max_total_image_bytes - pages.reduce((bytes, page) => bytes + page.bytes, 0)))}
+        onConfirm={addEditedPage} onReplace={replacePage}
+        onClose={() => { if (!busyRef.current) followEditorQueue(); }} /> : null}
       <Modal visible={Boolean(preview)} onRequestClose={() => setPreview(undefined)} animationType="fade">
         <View style={[styles.modal, { backgroundColor: p.bg }]}>
           {preview ? <Image source={{ uri: preview.uri }} style={styles.fullPreview} resizeMode="contain"
@@ -529,6 +659,10 @@ const styles = StyleSheet.create({
   surface: { padding: 16, gap: 10 },
   heading: { fontSize: 17, fontWeight: '700' },
   estimate: { fontSize: 27, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  modeOption: { borderRadius: 15, borderWidth: 1, padding: 11, gap: 4 },
+  modeTitle: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  sourceBackdrop: { flex: 1, justifyContent: 'flex-end', padding: 14, backgroundColor: '#102c2588' },
+  sourcePanel: { borderRadius: 24, padding: 18, paddingBottom: 22, gap: 10 },
   policyLinks: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, rowGap: 12, paddingVertical: 6 },
   copy: { fontSize: 14, lineHeight: 21 },
   small: { fontSize: 12, lineHeight: 16 },

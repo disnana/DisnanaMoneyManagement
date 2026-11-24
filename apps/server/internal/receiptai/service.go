@@ -74,7 +74,8 @@ func (s *Service) AcceptDurableInput(ctx context.Context, key JobKey, intake Rec
 		if err != nil {
 			return ReceiptJob{}, err
 		}
-		if current.Intake.BodySHA256 != intake.BodySHA256 || !sameGroupInputs(current.Groups, candidate.Groups) {
+		if current.Intake.BodySHA256 != intake.BodySHA256 || receiptMode(current.Intake.Mode) != receiptMode(intake.Mode) ||
+			!sameGroupInputs(current.Groups, candidate.Groups) {
 			return ReceiptJob{}, ErrJobConflict
 		}
 		if current.Accepted {
@@ -148,6 +149,11 @@ func (s *Service) changeGroup(ctx context.Context, key JobKey, groupID, digest s
 // RunStandardGroup allows the provider request only after an acknowledged CAS
 // into SUBMITTING. If the CAS status is uncertain it stops without sending.
 func (s *Service) RunStandardGroup(ctx context.Context, key JobKey, input Group, attemptID string, claimUntil, acknowledgeUntil time.Time) error {
+	return s.runGroup(ctx, key, input, attemptID, claimUntil, acknowledgeUntil, s.analyzer.Analyze)
+}
+
+func (s *Service) runGroup(ctx context.Context, key JobKey, input Group, attemptID string, claimUntil, acknowledgeUntil time.Time,
+	submit func(context.Context, Group) (LunaResponse, error)) error {
 	if !key.valid() {
 		return ErrJobTransition
 	}
@@ -168,7 +174,7 @@ func (s *Service) RunStandardGroup(ctx context.Context, key JobKey, input Group,
 		return err
 	}
 
-	response, err := s.analyzer.Analyze(ctx, input)
+	response, err := submit(ctx, input)
 	if err == nil && response.ProviderID == "" {
 		err = ErrLunaSubmissionUnknown
 	}
@@ -186,6 +192,36 @@ func (s *Service) RunStandardGroup(ctx context.Context, key JobKey, input Group,
 			return next, "", err
 		})
 	}
+	if response.ProviderID != "" && response.Pending {
+		return nil
+	}
+	return s.recordProviderResult(ctx, key, input, digest, attemptID, response, err)
+}
+
+func (s *Service) pollGroup(ctx context.Context, key JobKey, input Group, analyzer AsyncAnalyzer, interval time.Duration) error {
+	digest, err := groupDigest(input)
+	if err != nil {
+		return err
+	}
+	var attemptID, providerID string
+	if err := s.changeGroup(ctx, key, input.ID, digest, func(job Job) (Job, string, error) {
+		next, err := job.SchedulePoll(s.now(), interval)
+		attemptID, providerID = job.AttemptID, job.ProviderID
+		return next, "", err
+	}); err != nil {
+		return err
+	}
+	response, err := analyzer.Poll(ctx, providerID, input)
+	if (err == nil || response.ProviderID != "") && response.ProviderID != providerID {
+		return ErrJobConflict
+	}
+	if response.Pending || (err != nil && !errors.Is(err, ErrLunaResultUnavailable)) {
+		return nil
+	}
+	return s.recordProviderResult(ctx, key, input, digest, attemptID, response, err)
+}
+
+func (s *Service) recordProviderResult(ctx context.Context, key JobKey, input Group, digest, attemptID string, response LunaResponse, err error) error {
 	outcome := Outcome{State: JobFailed, ErrorCode: "provider_failed"}
 	var payload []byte
 	if err == nil {

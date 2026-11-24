@@ -55,16 +55,18 @@ func (o Outcome) valid() bool {
 // against the original revision. In particular, only a caller whose BeginSubmission
 // update commits may send the request. A lost write response may not authorize a send.
 type Job struct {
-	GroupID          string
-	Revision         int64
-	State            JobState
-	Deadline         time.Time
-	AttemptID        string
-	ClaimUntil       time.Time
-	AcknowledgeUntil time.Time
-	ProviderID       string
-	SettlementID     string
-	Outcome          Outcome
+	GroupID             string
+	Revision            int64
+	State               JobState
+	Deadline            time.Time
+	AttemptID           string
+	ClaimUntil          time.Time
+	AcknowledgeUntil    time.Time
+	ProviderID          string
+	NextPollAt          time.Time
+	ProviderCleanupDone bool
+	SettlementID        string
+	Outcome             Outcome
 }
 
 func NewJob(groupID string, deadline time.Time) (Job, error) {
@@ -147,6 +149,17 @@ func (j Job) RecordProviderID(attemptID, id string) (Job, error) {
 		return j, ErrJobTransition
 	}
 	j.ProviderID = id
+	return j.transition(JobProcessing), nil
+}
+
+// SchedulePoll fences the next provider lookup across nodes. A lost CAS
+// acknowledgement also postpones retry until the next interval.
+func (j Job) SchedulePoll(now time.Time, interval time.Duration) (Job, error) {
+	if j.State != JobProcessing || j.ProviderID == "" || interval <= 0 ||
+		now.Before(j.NextPollAt) || !now.Before(j.Deadline) {
+		return j, ErrJobTransition
+	}
+	j.NextPollAt = now.Add(interval).UTC()
 	return j.transition(JobProcessing), nil
 }
 

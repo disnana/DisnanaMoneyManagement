@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -5,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   device: { loadSession: vi.fn(), saveSession: vi.fn(), signChallenge: vi.fn(), clearGoogleState: vi.fn() },
 }));
 vi.mock('expo', () => ({ requireOptionalNativeModule: () => mocks.device }));
+vi.mock('expo-file-system', () => ({}));
 vi.mock('expo/fetch', () => ({ fetch: mocks.fetch }));
 vi.mock('expo-constants', () => ({
   default: { expoConfig: { extra: { maneAuth: { entry: 'https://auth.test' } } } },
@@ -27,6 +29,11 @@ const config = {
   price_version: 'staging-1', credits_per_image: 2, max_groups: 4, max_images_per_group: 4, max_total_images: 8,
   max_image_bytes: 100_000, max_total_image_bytes: 500_000, max_image_pixels: 200_000, max_json_bytes: 700_000,
 };
+const modes = [
+  { id: 'standard', price_version: 'staging-1', max_wait_seconds: 300, millicredits_per_image: 2_000 },
+  { id: 'background', price_version: 'staging-background', max_wait_seconds: 28_800, millicredits_per_image: 750 },
+  { id: 'batch', price_version: 'staging-batch', max_wait_seconds: 86_400, millicredits_per_image: 400 },
+];
 const input = {
   maximum_credit: 2, price_version: 'staging-1', request: {
     groups: [{ id: 'folder-1', images: [{ id: 'image-1', mime_type: 'image/jpeg', data: 'abcd' }] }],
@@ -172,5 +179,61 @@ describe('authenticated Android receipt jobs', () => {
     await account.signOutAndroidAccount();
     expect(account.getAndroidAccountSnapshot()).toMatchObject({ signedIn: false, accountId: null });
     expect(mocks.device.saveSession.mock.lastCall[0]).toBeNull();
+  });
+
+  it('quotes and signs the selected mode once across separate documents', async () => {
+    const modern = { ...config, modes };
+    const groups = [
+      { id: 'document-a', pages: [{ bytes: 3, type: 'image/png' }, { bytes: 4, type: 'image/jpeg' }] },
+      { id: 'document-b', pages: [{ bytes: 5, type: 'image/jpeg' }] },
+    ];
+    const api = await import('./androidReceiptClient');
+    const { buildReceiptInput } = await import('./receiptDraftFiles');
+    const body = buildReceiptInput(groups, modern, 'batch');
+    expect(body).toMatchObject({
+      maximum_credit: 2, price_version: 'staging-batch', mode: 'batch',
+      request: { groups: [
+        { id: 'document-a', images: [{ id: 'g1-p1', mime_type: 'image/png', data: '' },
+          { id: 'g1-p2', mime_type: 'image/jpeg', data: '' }] },
+        { id: 'document-b', images: [{ id: 'g2-p1', mime_type: 'image/jpeg', data: '' }] },
+      ] },
+    });
+    expect(api.quoteReceiptCredits(modern, 4, 'background')).toBe(3);
+    expect(api.quoteReceiptCredits(modern, 1, 'batch')).toBe(1);
+    expect(api.quoteReceiptCredits(modern, 0, 'batch')).toBe(0);
+    expect(api.quoteReceiptCredits(modern, 3)).toBe(6);
+    expect(() => api.quoteReceiptCredits(modern, 1.5, 'batch')).toThrow();
+    expect(() => api.quoteReceiptCredits(modern, Number.MAX_SAFE_INTEGER, 'batch')).toThrow();
+    const modeJob = { ...job, mode: 'batch', price_version: 'staging-batch' };
+    mocks.fetch.mockImplementation(async (url, init) => {
+      if (url.endsWith('/auth/challenge')) {
+        const { operation } = JSON.parse(init.body);
+        if (operation.method === 'POST') {
+          expect(operation.body_sha256).toBe(createHash('sha256').update(JSON.stringify(body)).digest('hex'));
+        }
+        return challenge(init, 'a');
+      }
+      if (url.endsWith('/receipt-config')) return Response.json(modern);
+      expect(init.body).toBe(JSON.stringify(body));
+      return Response.json(modeJob, { status: 202 });
+    });
+    expect(api.getReceiptModes(await api.getReceiptConfig())).toEqual(modes);
+    await expect(api.submitReceiptJob(jobID, body)).resolves.toEqual(modeJob);
+    expect(api.isReceiptJob({ ...job, mode: 'unsupported' }, jobID)).toBe(false);
+  });
+
+  it('omits mode for legacy nodes and rejects invalid or duplicate tariffs', async () => {
+    const api = await import('./androidReceiptClient');
+    const { buildReceiptInput } = await import('./receiptDraftFiles');
+    const groups = [{ id: 'document-a', pages: [{ bytes: 5, type: 'image/jpeg' }] }];
+    expect(api.getReceiptModes(config)).toEqual([{ id: 'standard', price_version: 'staging-1', millicredits_per_image: 2_000 }]);
+    expect(buildReceiptInput(groups, config, 'standard')).not.toHaveProperty('mode');
+    expect(() => buildReceiptInput(groups, config, 'background')).toThrow();
+    mocks.fetch.mockImplementation(async (url, init) => url.endsWith('/auth/challenge')
+      ? challenge(init, 'a') : Response.json({ ...config, modes: [modes[0], modes[0]] }));
+    await expect(api.getReceiptConfig()).rejects.toMatchObject({ code: 'invalid_receipt_response' });
+    mocks.fetch.mockImplementation(async (url, init) => url.endsWith('/auth/challenge')
+      ? challenge(init, 'a') : Response.json({ ...config, modes: [{ ...modes[0], millicredits_per_image: 1.5 }] }));
+    await expect(api.getReceiptConfig()).rejects.toMatchObject({ code: 'invalid_receipt_response' });
   });
 });

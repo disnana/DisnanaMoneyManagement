@@ -35,19 +35,21 @@ type RuntimeConfig struct {
 	AcknowledgeTimeout time.Duration
 	PollInterval       time.Duration
 	PollBatchSize      int
+	Modes              []RuntimeModeConfig
 }
 
 type ConfigView struct {
-	PriceVersion           string `json:"price_version"`
-	CreditPerImage         int64  `json:"credits_per_image"`
-	ResultRetentionSeconds int64  `json:"result_retention_seconds"`
-	MaxJSONBytes           int    `json:"max_json_bytes"`
-	MaxGroups              int    `json:"max_groups"`
-	MaxImagesPerGroup      int    `json:"max_images_per_group"`
-	MaxTotalImages         int    `json:"max_total_images"`
-	MaxImageBytes          int    `json:"max_image_bytes"`
-	MaxTotalImageBytes     int    `json:"max_total_image_bytes"`
-	MaxImagePixels         int64  `json:"max_image_pixels"`
+	PriceVersion           string     `json:"price_version"`
+	CreditPerImage         int64      `json:"credits_per_image"`
+	ResultRetentionSeconds int64      `json:"result_retention_seconds"`
+	MaxJSONBytes           int        `json:"max_json_bytes"`
+	MaxGroups              int        `json:"max_groups"`
+	MaxImagesPerGroup      int        `json:"max_images_per_group"`
+	MaxTotalImages         int        `json:"max_total_images"`
+	MaxImageBytes          int        `json:"max_image_bytes"`
+	MaxTotalImageBytes     int        `json:"max_total_image_bytes"`
+	MaxImagePixels         int64      `json:"max_image_pixels"`
+	Modes                  []ModeView `json:"modes"`
 }
 
 type JobView struct {
@@ -56,6 +58,7 @@ type JobView struct {
 	Accepted        bool        `json:"accepted"`
 	Settled         bool        `json:"settled"`
 	PriceVersion    string      `json:"price_version"`
+	Mode            string      `json:"mode"`
 	MaximumCredit   int64       `json:"maximum_credit"`
 	FinalCredit     *int64      `json:"final_credit"`
 	Deadline        time.Time   `json:"deadline"`
@@ -91,6 +94,7 @@ type pendingQueue interface {
 	load(context.Context, JobKey) (pendingReceipt, error)
 	body(context.Context, JobKey) ([]byte, error)
 	page(context.Context, int, JobKey, int) ([]JobKey, error)
+	clearBody(context.Context, JobKey) error
 	remove(context.Context, JobKey) error
 }
 
@@ -111,7 +115,7 @@ func NewRuntime(service *Service, db *gocql.Session, config RuntimeConfig) (*Run
 
 func newRuntime(service *Service, queue pendingQueue, results resultExpiryIndex, config RuntimeConfig) (*Runtime, error) {
 	if service == nil || queue == nil || results == nil || !identifier.MatchString(config.PriceVersion) ||
-		config.CreditPerImage <= 0 || config.JobTimeout <= 0 || config.ResultRetention < time.Second || config.ClaimDuration <= 0 ||
+		config.CreditPerImage <= 0 || config.CreditPerImage > math.MaxInt64/1_000 || config.JobTimeout <= 0 || config.ResultRetention < time.Second || config.ClaimDuration <= 0 ||
 		config.ClaimDuration >= config.JobTimeout || config.AcknowledgeTimeout <= 0 ||
 		config.AcknowledgeTimeout >= config.JobTimeout || config.PollInterval <= 0 ||
 		config.PollBatchSize <= 0 || config.PollBatchSize > 100 {
@@ -120,28 +124,51 @@ func newRuntime(service *Service, queue pendingQueue, results resultExpiryIndex,
 	l := service.limits
 	if l.MaxJSONBytes <= 0 || l.MaxGroups <= 0 || l.MaxImagesPerGroup <= 0 || l.MaxTotalImages <= 0 ||
 		l.MaxImageBytes <= 0 || l.MaxTotalImageBytes <= 0 || l.MaxImagePixels <= 0 ||
-		int64(l.MaxTotalImages) > math.MaxInt64/config.CreditPerImage {
+		int64(l.MaxTotalImages) > math.MaxInt64/(config.CreditPerImage*1_000) {
 		return nil, errors.New("invalid receipt runtime limits")
 	}
+	seen := map[string]bool{ModeStandard: true}
+	for _, mode := range config.Modes {
+		if !validMode(mode.ID) || mode.ID == "" || seen[mode.ID] || mode.Analyzer == nil ||
+			!identifier.MatchString(mode.PriceVersion) || !identifier.MatchString(mode.ProviderProfile) ||
+			mode.MillicreditsPerImage <= 0 ||
+			int64(l.MaxTotalImages) > math.MaxInt64/mode.MillicreditsPerImage ||
+			mode.PollInterval < config.AcknowledgeTimeout || mode.MaxWait <= mode.PollInterval {
+			return nil, errors.New("invalid deferred receipt mode")
+		}
+		seen[mode.ID] = true
+	}
+	config.Modes = append([]RuntimeModeConfig(nil), config.Modes...)
 	return &Runtime{service: service, queue: queue, results: results, config: config, wake: make(chan struct{}, 1)}, nil
 }
 
 func (r *Runtime) Config() ConfigView {
 	l := r.service.limits
+	standard, _ := r.mode(ModeStandard)
+	modes := make([]ModeView, 0, len(r.config.Modes)+1)
+	for _, mode := range append([]RuntimeModeConfig{standard}, r.config.Modes...) {
+		modes = append(modes, ModeView{ID: mode.ID, PriceVersion: mode.PriceVersion,
+			MillicreditsPerImage: mode.MillicreditsPerImage, MaxWaitSeconds: int64(mode.MaxWait / time.Second)})
+	}
 	return ConfigView{
 		PriceVersion: r.config.PriceVersion, CreditPerImage: r.config.CreditPerImage,
 		ResultRetentionSeconds: int64(r.config.ResultRetention / time.Second),
 		MaxJSONBytes:           l.MaxJSONBytes, MaxGroups: l.MaxGroups, MaxImagesPerGroup: l.MaxImagesPerGroup,
 		MaxTotalImages: l.MaxTotalImages, MaxImageBytes: l.MaxImageBytes,
-		MaxTotalImageBytes: l.MaxTotalImageBytes, MaxImagePixels: l.MaxImagePixels,
+		MaxTotalImageBytes: l.MaxTotalImageBytes, MaxImagePixels: l.MaxImagePixels, Modes: modes,
 	}
 }
 
 func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, priceVersion string, raw []byte) (JobView, error) {
+	return r.SubmitMode(ctx, key, expectedMax, priceVersion, ModeStandard, raw)
+}
+
+func (r *Runtime) SubmitMode(ctx context.Context, key JobKey, expectedMax int64, priceVersion, modeID string, raw []byte) (JobView, error) {
+	modeID = receiptMode(modeID)
 	if !key.valid() || len(raw) == 0 {
 		return JobView{}, ErrReceiptInput
 	}
-	if expectedMax <= 0 || !identifier.MatchString(priceVersion) {
+	if expectedMax <= 0 || !validMode(modeID) || !identifier.MatchString(priceVersion) {
 		return JobView{}, ErrReceiptQuote
 	}
 
@@ -151,7 +178,7 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 		return JobView{}, jobErr
 	}
 	if jobErr == nil {
-		if !matchIntake(job.Intake, digest, expectedMax, priceVersion) {
+		if !matchIntake(job.Intake, digest, expectedMax, priceVersion, modeID) {
 			return JobView{}, ErrJobConflict
 		}
 		if job.Accepted {
@@ -162,12 +189,16 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 		}
 	}
 
+	mode, enabled := r.mode(modeID)
+	if !enabled {
+		return JobView{}, ErrReceiptQuote
+	}
 	staged, err := r.queue.load(ctx, key)
 	if errors.Is(err, ErrReceiptNotFound) {
 		if jobErr == nil {
 			return JobView{}, errors.New("receipt input missing for existing intake")
 		}
-		if priceVersion != r.config.PriceVersion {
+		if priceVersion != mode.PriceVersion {
 			return JobView{}, ErrReceiptQuote
 		}
 		decoded, decodeErr := DecodeRequest(raw, r.service.limits)
@@ -188,13 +219,17 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 			images += len(ids)
 			groups = append(groups, pendingGroup{ID: group.ID, Digest: digest, ImageIDs: ids})
 		}
-		if expectedMax != int64(images)*r.config.CreditPerImage {
+		quote, quoteErr := priceImages(images, mode.MillicreditsPerImage)
+		if quoteErr != nil || expectedMax != quote {
 			return JobView{}, ErrReceiptQuote
 		}
 		staged = pendingReceipt{
-			Intake: ReceiptIntake{BodySHA256: digest, PriceVersion: priceVersion, MaximumCredit: expectedMax,
-				Deadline: r.service.now().Add(r.config.JobTimeout).UTC(), ResultRetention: r.config.ResultRetention},
-			CreditPerImage: r.config.CreditPerImage, Limits: r.service.limits, Groups: groups,
+			Intake: ReceiptIntake{
+				BodySHA256: digest, PriceVersion: priceVersion, Mode: modeID, MaximumCredit: expectedMax,
+				ProviderProfile: mode.ProviderProfile, MillicreditsPerImage: mode.MillicreditsPerImage,
+				Deadline: r.service.now().Add(mode.MaxWait).UTC(), ResultRetention: r.config.ResultRetention,
+			},
+			Limits: r.service.limits, Groups: groups,
 		}
 		inserted, insertErr := r.queue.insert(ctx, key, staged, raw)
 		if insertErr != nil {
@@ -208,8 +243,11 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 	if err != nil {
 		return JobView{}, err
 	}
-	if !matchIntake(staged.Intake, digest, expectedMax, priceVersion) {
+	if !matchIntake(staged.Intake, digest, expectedMax, priceVersion, modeID) {
 		return JobView{}, ErrJobConflict
+	}
+	if staged.Intake.ProviderProfile != mode.ProviderProfile {
+		return JobView{}, ErrReceiptQuote
 	}
 
 	service := *r.service
@@ -225,8 +263,9 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 	return r.visibleJob(ctx, key, accepted)
 }
 
-func matchIntake(intake ReceiptIntake, digest string, maximum int64, version string) bool {
-	return intake.BodySHA256 == digest && intake.MaximumCredit == maximum && intake.PriceVersion == version
+func matchIntake(intake ReceiptIntake, digest string, maximum int64, version, mode string) bool {
+	return intake.BodySHA256 == digest && intake.MaximumCredit == maximum && intake.PriceVersion == version &&
+		receiptMode(intake.Mode) == receiptMode(mode)
 }
 
 func (r *Runtime) Job(ctx context.Context, key JobKey) (JobView, error) {
@@ -250,8 +289,9 @@ func (r *Runtime) visibleJob(ctx context.Context, key JobKey, job ReceiptJob) (J
 
 func publicJob(key JobKey, job ReceiptJob, now time.Time) (JobView, error) {
 	view := JobView{RequestID: key.RequestID, State: receiptState(job), Accepted: job.Accepted,
-		Settled: job.Settled, PriceVersion: job.Intake.PriceVersion, MaximumCredit: job.Intake.MaximumCredit,
-		FinalCredit: job.FinalCredit, Deadline: job.Intake.Deadline,
+		Settled: job.Settled, PriceVersion: job.Intake.PriceVersion, Mode: receiptMode(job.Intake.Mode),
+		MaximumCredit: job.Intake.MaximumCredit,
+		FinalCredit:   job.FinalCredit, Deadline: job.Intake.Deadline,
 		ResultExpired: job.ResultExpired, Groups: make([]GroupView, 0, len(job.Groups))}
 	if !job.ResultExpiresAt.IsZero() {
 		expires := job.ResultExpiresAt
@@ -390,7 +430,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return err
 	}
 	if job.Settled {
-		return r.cleanSettledInput(ctx, key, job)
+		return r.cleanSettledInput(ctx, key, job, allowSend)
 	}
 	pending, err := r.queue.load(ctx, key)
 	if err != nil {
@@ -416,18 +456,22 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return input, nil
 	}
 	if job.Revision != 0 && (!matchIntake(job.Intake, pending.Intake.BodySHA256,
-		pending.Intake.MaximumCredit, pending.Intake.PriceVersion) || !job.Intake.Deadline.Equal(pending.Intake.Deadline) ||
-		job.Intake.ResultRetention != pending.Intake.ResultRetention) {
+		pending.Intake.MaximumCredit, pending.Intake.PriceVersion, pending.Intake.Mode) || !job.Intake.Deadline.Equal(pending.Intake.Deadline) ||
+		job.Intake.ResultRetention != pending.Intake.ResultRetention || job.Intake.ProviderProfile != pending.Intake.ProviderProfile ||
+		job.Intake.MillicreditsPerImage != pending.Intake.MillicreditsPerImage) {
 		return errors.New("stored receipt quote does not match the job")
 	}
 	if !job.Accepted {
 		return r.recoverIntake(ctx, key, job, pending)
 	}
+	mode, enabled := r.mode(job.Intake.Mode)
 	for i, saved := range job.Groups {
 		state := saved.Job.State
 		now := r.service.now()
-		if allowSend && now.Before(job.Intake.Deadline) &&
-			(state == JobQueued || (state == JobClaimed && !now.Before(saved.Job.ClaimUntil))) {
+		submit := state == JobQueued || (state == JobClaimed && !now.Before(saved.Job.ClaimUntil))
+		poll := state == JobProcessing && mode.Analyzer != nil && !now.Before(saved.Job.NextPollAt)
+		canSubmit := submit && mode.ProviderProfile == job.Intake.ProviderProfile
+		if allowSend && enabled && now.Before(job.Intake.Deadline) && (canSubmit || poll) {
 			input, err := request()
 			if err != nil {
 				return err
@@ -435,8 +479,12 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 			if i >= len(input.Groups) || input.Groups[i].ID != saved.Job.GroupID {
 				return errors.New("stored receipt group does not match the accepted job")
 			}
-			if err := r.runGroup(ctx, key, input.Groups[i], job.Intake.Deadline); err != nil &&
-				!errors.Is(err, ErrJobConflict) && !errors.Is(err, ErrJobTransition) {
+			if canSubmit {
+				err = r.runGroup(ctx, key, input.Groups[i], job.Intake.Deadline, mode.Analyzer)
+			} else {
+				err = r.service.pollGroup(ctx, key, input.Groups[i], mode.Analyzer, mode.PollInterval)
+			}
+			if err != nil && !errors.Is(err, ErrJobConflict) && !errors.Is(err, ErrJobTransition) {
 				return err
 			}
 		} else if state != JobSettling && (!now.Before(job.Intake.Deadline) ||
@@ -453,7 +501,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return err
 	}
 	if job.Settled {
-		return r.cleanSettledInput(ctx, key, job)
+		return r.cleanSettledInput(ctx, key, job, allowSend)
 	}
 	for _, group := range job.Groups {
 		if group.Job.State != JobSettling {
@@ -471,7 +519,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 	}
 	final, err := r.service.SettleReceipt(ctx, key, used)
 	if err == nil && final.Settled {
-		return r.cleanSettledInput(ctx, key, final)
+		return r.cleanSettledInput(ctx, key, final, allowSend)
 	}
 	return err
 }
@@ -502,7 +550,7 @@ func (r *Runtime) recoverIntake(ctx context.Context, key JobKey, job ReceiptJob,
 	return r.queue.remove(ctx, key)
 }
 
-func (r *Runtime) runGroup(ctx context.Context, key JobKey, group Group, deadline time.Time) error {
+func (r *Runtime) runGroup(ctx context.Context, key JobKey, group Group, deadline time.Time, analyzer AsyncAnalyzer) error {
 	now := r.service.now()
 	claimUntil := now.Add(r.config.ClaimDuration)
 	if deadline.Before(claimUntil) {
@@ -516,12 +564,19 @@ func (r *Runtime) runGroup(ctx context.Context, key JobKey, group Group, deadlin
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
 	}
-	return r.service.RunStandardGroup(ctx, key, group, hex.EncodeToString(nonce[:]), claimUntil, acknowledgeUntil)
+	attemptID := hex.EncodeToString(nonce[:])
+	if analyzer == nil {
+		return r.service.RunStandardGroup(ctx, key, group, attemptID, claimUntil, acknowledgeUntil)
+	}
+	return r.service.runGroup(ctx, key, group, attemptID, claimUntil, acknowledgeUntil, analyzer.Submit)
 }
 
 func eligibleImageCredits(job ReceiptJob, pending pendingReceipt) (int64, error) {
-	perImage := pending.CreditPerImage
-	if perImage <= 0 || len(job.Groups) != len(pending.Groups) {
+	unit := pending.Intake.MillicreditsPerImage
+	if unit == 0 && pending.CreditPerImage > 0 && pending.CreditPerImage <= math.MaxInt64/1_000 {
+		unit = pending.CreditPerImage * 1_000
+	}
+	if unit <= 0 || len(job.Groups) != len(pending.Groups) {
 		return 0, ErrJobConflict
 	}
 	eligible := make(map[string]bool)
@@ -553,10 +608,11 @@ func eligibleImageCredits(job ReceiptJob, pending pendingReceipt) (int64, error)
 			}
 		}
 	}
-	if int64(len(eligible)) > job.Intake.MaximumCredit/perImage {
+	used, err := priceImages(len(eligible), unit)
+	if err != nil || used > job.Intake.MaximumCredit {
 		return 0, ErrJobConflict
 	}
-	return int64(len(eligible)) * perImage, nil
+	return used, nil
 }
 
 func eligibleDocument(document Document) bool {
@@ -604,7 +660,8 @@ func (s scyllaPending) load(ctx context.Context, key JobKey) (pendingReceipt, er
 	var pending pendingReceipt
 	if err := json.Unmarshal([]byte(details), &pending); err != nil || len(pending.Groups) == 0 ||
 		!resultDigest.MatchString(pending.Intake.BodySHA256) || !identifier.MatchString(pending.Intake.PriceVersion) ||
-		pending.Intake.MaximumCredit <= 0 || pending.Intake.Deadline.IsZero() || pending.CreditPerImage <= 0 {
+		pending.Intake.MaximumCredit <= 0 || pending.Intake.Deadline.IsZero() || !validMode(pending.Intake.Mode) ||
+		(pending.Intake.MillicreditsPerImage <= 0 && pending.CreditPerImage <= 0) {
 		return pendingReceipt{}, errors.New("invalid pending receipt details")
 	}
 	return pending, nil
@@ -614,7 +671,7 @@ func (s scyllaPending) body(ctx context.Context, key JobKey) ([]byte, error) {
 	var body []byte
 	err := s.db.Query("SELECT body FROM receipt_ai_pending WHERE shard = ? AND subject = ? AND request_id = ?",
 		shardFor(key), key.Subject, key.RequestID).WithContext(ctx).Consistency(gocql.LocalQuorum).Scan(&body)
-	if errors.Is(err, gocql.ErrNotFound) {
+	if errors.Is(err, gocql.ErrNotFound) || (err == nil && len(body) == 0) {
 		return nil, ErrReceiptNotFound
 	}
 	return body, err
@@ -633,6 +690,13 @@ func (s scyllaPending) page(ctx context.Context, shard int, after JobKey, limit 
 		keys = append(keys, key)
 	}
 	return keys, rows.Close()
+}
+
+func (s scyllaPending) clearBody(ctx context.Context, key JobKey) error {
+	_, err := s.db.Query("UPDATE receipt_ai_pending SET body = null WHERE shard = ? AND subject = ? AND request_id = ? IF EXISTS",
+		shardFor(key), key.Subject, key.RequestID).WithContext(ctx).
+		Consistency(gocql.LocalQuorum).SerialConsistency(gocql.LocalSerial).Idempotent(false).MapScanCAS(map[string]any{})
+	return err
 }
 
 func (s scyllaPending) remove(ctx context.Context, key JobKey) error {

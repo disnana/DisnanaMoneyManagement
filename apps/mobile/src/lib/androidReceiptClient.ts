@@ -1,6 +1,15 @@
 import { requestAndroidReceipt } from './androidAccount';
 import { DeviceProofHTTPError, IssuerUnavailable, type ReceiptJobPath, type ReceiptOperation } from './androidProof';
 
+export type ReceiptMode = 'standard' | 'background' | 'batch';
+type ReceiptModeTariff = {
+  id: ReceiptMode;
+  price_version: string;
+  max_wait_seconds: number;
+  millicredits_per_image: number;
+};
+export type ReceiptModeOption = Omit<ReceiptModeTariff, 'max_wait_seconds'> & { max_wait_seconds?: number };
+
 export type ReceiptConfig = {
   price_version: string;
   credits_per_image: number;
@@ -12,11 +21,13 @@ export type ReceiptConfig = {
   max_image_pixels: number;
   max_json_bytes: number;
   result_retention_seconds?: number;
+  modes?: ReceiptModeTariff[];
 };
 
 export type ReceiptJobInput = {
   maximum_credit: number;
   price_version: string;
+  mode?: ReceiptMode;
   request: {
     groups: { id: string; images: { id: string; mime_type: string; data: string }[] }[];
   };
@@ -55,6 +66,7 @@ export type ReceiptJob = {
   accepted: boolean;
   settled: boolean;
   price_version: string;
+  mode?: ReceiptMode;
   maximum_credit: number;
   final_credit: number | null;
   deadline?: string;
@@ -81,6 +93,7 @@ const openStates = new Set<ReceiptJobState>([
   'QUEUED', 'CLAIMED', 'SUBMITTING', 'SUBMISSION_UNKNOWN', 'PROCESSING', 'SETTLING',
 ]);
 const documentStates = new Set(['success', 'partial', 'out_of_scope', 'unreadable']);
+const receiptModes = new Set<ReceiptMode>(['standard', 'background', 'batch']);
 
 export function isReceiptJobTerminal(state: ReceiptJobState) {
   return terminalStates.has(state);
@@ -99,11 +112,46 @@ function integer(value: unknown, minimum: number) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
 }
 
+function isReceiptMode(value: unknown): value is ReceiptMode {
+  return receiptModes.has(value as ReceiptMode);
+}
+
+function isReceiptModeTariff(value: unknown): value is ReceiptModeTariff {
+  return object(value) && isReceiptMode(value.id) &&
+    typeof value.price_version === 'string' && identifier.test(value.price_version) &&
+    integer(value.max_wait_seconds, 1) && integer(value.millicredits_per_image, 1);
+}
+
 function isReceiptConfig(value: unknown): value is ReceiptConfig {
   if (!object(value) || typeof value.price_version !== 'string' || !identifier.test(value.price_version)) return false;
   if (value.result_retention_seconds !== undefined && !integer(value.result_retention_seconds, 1)) return false;
+  const modes = value.modes;
+  if (modes !== undefined && (!Array.isArray(modes) || modes.length === 0 || modes.length > receiptModes.size ||
+    !modes.every(isReceiptModeTariff) || new Set(modes.map(mode => mode.id)).size !== modes.length)) return false;
   return ['credits_per_image', 'max_groups', 'max_images_per_group', 'max_total_images', 'max_image_bytes',
     'max_total_image_bytes', 'max_image_pixels', 'max_json_bytes'].every(key => integer(value[key], 1));
+}
+
+export function getReceiptModes(config: ReceiptConfig): readonly ReceiptModeOption[] {
+  if (config.modes) return config.modes;
+  return [{ id: 'standard', price_version: config.price_version, millicredits_per_image: config.credits_per_image * 1000 }];
+}
+
+export function getReceiptMode(config: ReceiptConfig, mode?: ReceiptMode): ReceiptModeOption {
+  const options = getReceiptModes(config);
+  const tariff = mode ? options.find(option => option.id === mode) : options.find(option => option.id === 'standard') ?? options[0];
+  if (!tariff) throw new Error('選んだ解析方法は現在利用できません。料金を更新してください。');
+  return tariff;
+}
+
+export function quoteReceiptCredits(config: ReceiptConfig, imageCount: number, mode?: ReceiptMode): number {
+  const tariff = getReceiptMode(config, mode);
+  const rate = config.modes ? tariff.millicredits_per_image : config.credits_per_image;
+  const cost = imageCount * rate;
+  if (!integer(imageCount, 0) || !integer(rate, 1) || !integer(cost, 0)) {
+    throw new Error('最大CRを計算できませんでした。');
+  }
+  return config.modes ? Math.ceil(cost / 1000) : cost;
 }
 
 function optionalStrings(value: Record<string, unknown>, fields: string[]) {
@@ -136,6 +184,7 @@ export function isReceiptJob(value: unknown, id: string): value is ReceiptJob {
   return object(value) && value.id === id && isJobState(value.state) &&
     typeof value.accepted === 'boolean' && typeof value.settled === 'boolean' &&
     typeof value.price_version === 'string' && identifier.test(value.price_version) && integer(value.maximum_credit, 0) &&
+    (value.mode === undefined || isReceiptMode(value.mode)) &&
     (value.deadline === undefined || timestamp(value.deadline)) &&
     (value.result_expires_at === undefined || value.result_expires_at === null || timestamp(value.result_expires_at)) &&
     (value.result_expired === undefined || typeof value.result_expired === 'boolean') &&

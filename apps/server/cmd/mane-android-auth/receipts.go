@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -62,10 +63,14 @@ func openReceipts(ctx context.Context, wallet *credits.Wallet) (*receiptai.Runti
 	if err != nil {
 		return nil, err
 	}
+	modes, err := deferredReceiptModes(luna)
+	if err != nil {
+		return nil, err
+	}
 	runtime, err := receiptai.NewRuntime(service, wallet.Session(), receiptai.RuntimeConfig{
 		PriceVersion: priceVersion, CreditPerImage: unit, JobTimeout: 20 * time.Minute, ResultRetention: retention,
 		ClaimDuration: 10 * time.Second, AcknowledgeTimeout: 55 * time.Second,
-		PollInterval: 3 * time.Second, PollBatchSize: 16,
+		PollInterval: 3 * time.Second, PollBatchSize: 16, Modes: modes,
 	})
 	if err != nil {
 		return nil, err
@@ -93,4 +98,45 @@ func openReceipts(ctx context.Context, wallet *credits.Wallet) (*receiptai.Runti
 		return nil, errors.New("cannot read receipt_ai_result_expiry at LOCAL_QUORUM")
 	}
 	return runtime, nil
+}
+
+// Deferred modes are offered only when their independently versioned staging
+// tariff is configured. Their public mode IDs do not expose the provider tier.
+func deferredReceiptModes(luna *receiptai.Luna) ([]receiptai.RuntimeModeConfig, error) {
+	var modes []receiptai.RuntimeModeConfig
+	for _, option := range []struct {
+		mode, profile, envPrefix string
+		wait, interval           time.Duration
+	}{
+		{receiptai.ModeBackground, receiptai.LunaBackground2h, "MANE_RECEIPT_BACKGROUND", 2 * time.Hour, time.Minute},
+		{receiptai.ModeBatch, receiptai.LunaBatch24h, "MANE_RECEIPT_BATCH", 24 * time.Hour, 5 * time.Minute},
+	} {
+		version := os.Getenv(option.envPrefix + "_PRICE_VERSION")
+		unitValue := os.Getenv(option.envPrefix + "_MILLICREDITS_PER_IMAGE")
+		if version == "" && unitValue == "" {
+			continue
+		}
+		unit, err := strconv.ParseInt(unitValue, 10, 64)
+		if version == "" || err != nil || unit <= 0 || unit > 1_000_000 {
+			return nil, fmt.Errorf("%s requires a price version and positive millicredits per image", option.envPrefix)
+		}
+		if option.mode == receiptai.ModeBackground {
+			switch os.Getenv("MANE_RECEIPT_BACKGROUND_WINDOW") {
+			case "", "2h":
+			case "8h":
+				option.profile, option.wait = receiptai.LunaBackground8h, 8*time.Hour
+			default:
+				return nil, errors.New("MANE_RECEIPT_BACKGROUND_WINDOW must be 2h or 8h")
+			}
+		}
+		analyzer, err := receiptai.NewLunaDeferred(luna, option.profile)
+		if err != nil {
+			return nil, err
+		}
+		modes = append(modes, receiptai.RuntimeModeConfig{ID: option.mode, ProviderProfile: option.profile,
+			PriceVersion: version, MillicreditsPerImage: unit, MaxWait: option.wait, PollInterval: option.interval,
+			Analyzer: analyzer,
+		})
+	}
+	return modes, nil
 }

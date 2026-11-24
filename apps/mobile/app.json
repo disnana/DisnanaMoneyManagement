@@ -18,6 +18,7 @@
     "android": {
       "package": "com.disnana.mane_chan",
       "versionCode": 6,
+      "blockedPermissions": ["android.permission.READ_EXTERNAL_STORAGE"],
       "adaptiveIcon": {
         "backgroundColor": "#0F766E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -51,8 +52,17 @@
       ],
       "expo-sqlite",
       "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "レシートを撮影するためにカメラを使用します",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "./plugins/with-finance-backup",
       "./plugins/with-launcher-icons",
+      "./plugins/with-optional-receipt-camera",
       "./plugins/with-optional-portrait-feature"
     ],
     "experiments": {

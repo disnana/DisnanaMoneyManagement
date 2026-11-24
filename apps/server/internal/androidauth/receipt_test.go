@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,29 @@ type fixtureReceiptAPI struct{}
 
 func (fixtureReceiptAPI) Config() receiptai.ConfigView {
 	return receiptai.ConfigView{PriceVersion: "test-1", CreditPerImage: 1, MaxJSONBytes: 4096}
+}
+
+type fixtureReceiptModes struct{ fixtureReceiptAPI }
+
+func (fixtureReceiptModes) SubmitMode(_ context.Context, key receiptai.JobKey, maximum int64, version, mode string, raw []byte) (receiptai.JobView, error) {
+	if key.Subject != "google-account-sub" || key.RequestID != "fixture" || version != "test-modes" ||
+		maximum != 2 || mode != "background" || string(raw) != `{"groups":[{"id":"first"},{"id":"second"}]}` {
+		return receiptai.JobView{}, receiptai.ErrReceiptInput
+	}
+	return receiptai.JobView{}, nil
+}
+
+func TestReceiptUploadBindsModeAndForwardsSeparateGroups(t *testing.T) {
+	sessions := NewMemorySessions()
+	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptModes{})
+	session := f.login()
+	path := receiptJobsPrefix + "fixture"
+	source := `{"maximum_credit":2,"price_version":"test-modes","mode":"background","request":{"groups":[{"id":"first"},{"id":"second"}]}}`
+	altered := strings.Replace(source, "background", "batch", 1)
+	upload := f.challenge(f.a.URL, http.MethodPost, path, source, session.Access, "")
+	f.want(f.a.URL, http.MethodPost, path, altered, session.Access, upload, f.device, 401)
+	upload = f.challenge(f.a.URL, http.MethodPost, path, source, session.Access, "")
+	f.want(f.a.URL, http.MethodPost, path, source, session.Access, upload, f.device, 202)
 }
 
 func (fixtureReceiptAPI) Submit(_ context.Context, key receiptai.JobKey, maximum int64, version string, raw []byte) (receiptai.JobView, error) {

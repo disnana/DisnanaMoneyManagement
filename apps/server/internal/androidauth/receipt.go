@@ -24,6 +24,10 @@ type ReceiptAPI interface {
 	Job(context.Context, receiptai.JobKey) (receiptai.JobView, error)
 }
 
+type receiptModeAPI interface {
+	SubmitMode(context.Context, receiptai.JobKey, int64, string, string, []byte) (receiptai.JobView, error)
+}
+
 func receiptOperation(op operation) bool {
 	if op.Method == http.MethodGet && op.BodySHA256 == digest(nil) && op.Path == receiptConfigPath {
 		return true
@@ -56,6 +60,7 @@ func (n *Node) receiptConfig(w http.ResponseWriter, r *http.Request) {
 type receiptSubmission struct {
 	MaximumCredit int64           `json:"maximum_credit"`
 	PriceVersion  string          `json:"price_version"`
+	Mode          string          `json:"mode"`
 	Request       json.RawMessage `json:"request"`
 }
 
@@ -120,8 +125,21 @@ func (n *Node) receiptJob(w http.ResponseWriter, r *http.Request) {
 		receiptError(w, 400, "invalid_receipt_request")
 		return
 	}
-	view, err := n.cfg.Receipts.Submit(r.Context(), key, input.MaximumCredit, input.PriceVersion, input.Request)
-	replyReceipt(w, 202, view, err)
+	switch input.Mode {
+	case "", "standard":
+		view, err := n.cfg.Receipts.Submit(r.Context(), key, input.MaximumCredit, input.PriceVersion, input.Request)
+		replyReceipt(w, 202, view, err)
+	case "background", "batch":
+		modes, ok := n.cfg.Receipts.(receiptModeAPI)
+		if !ok {
+			replyReceipt(w, 202, receiptai.JobView{}, receiptai.ErrReceiptQuote)
+			return
+		}
+		view, err := modes.SubmitMode(r.Context(), key, input.MaximumCredit, input.PriceVersion, input.Mode, input.Request)
+		replyReceipt(w, 202, view, err)
+	default:
+		receiptError(w, 400, "invalid_receipt_request")
+	}
 }
 
 func replyReceipt(w http.ResponseWriter, status int, view receiptai.JobView, err error) {

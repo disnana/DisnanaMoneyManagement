@@ -30,8 +30,8 @@ func resultExpiry(now time.Time, retention time.Duration) time.Time {
 	return rounded
 }
 
-func (r *Runtime) cleanSettledInput(ctx context.Context, key JobKey, job ReceiptJob) error {
-	if job.hasResults() && !job.ResultExpired {
+func (r *Runtime) cleanSettledInput(ctx context.Context, key JobKey, job ReceiptJob, allowProvider bool) error {
+	if job.hasResults() && !job.ResultExpired && !job.DeferredCleanupPrepared {
 		var err error
 		if job.ResultExpiresAt.IsZero() {
 			_, err = r.adoptLegacyResults(ctx, key, job)
@@ -39,6 +39,25 @@ func (r *Runtime) cleanSettledInput(ctx context.Context, key JobKey, job Receipt
 			err = r.results.schedule(ctx, resultExpiryEntry{Key: key, ExpiresAt: job.ResultExpiresAt})
 		}
 		if err != nil {
+			return err
+		}
+	}
+	if needsProviderCleanup(job) {
+		// Keep the recovery key after discarding uploaded images. Batch cleanup
+		// needs only the acknowledged provider ID recorded in the settled job.
+		if !job.DeferredCleanupPrepared {
+			if err := r.queue.clearBody(ctx, key); err != nil {
+				return err
+			}
+			if err := r.markDeferredCleanupPrepared(ctx, key); err != nil {
+				return err
+			}
+		}
+		if !allowProvider {
+			return nil
+		}
+		done, err := r.cleanupProvider(ctx, key, job)
+		if err != nil || !done {
 			return err
 		}
 	}
