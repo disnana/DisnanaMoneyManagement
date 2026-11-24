@@ -1,0 +1,31 @@
+name = "disnana-release-gateway-staging"
+main = "workers/gateway/index.mjs"
+compatibility_date = "2026-11-23"
+workers_dev = false
+preview_urls = false
+
+# Add these Custom Domains only when the staging deployment is approved.
+# The Approval hostname must be protected by Access first.
+# routes = [
+#   { pattern = "release-stg.disnana.com", custom_domain = true },
+#   { pattern = "release-api-stg.disnana.com", custom_domain = true }
+# ]
+
+[vars]
+APPROVAL_ORIGIN = "https://release-stg.disnana.com"
+VERIFIER_ORIGIN = "https://release-api-stg.disnana.com"
+
+[[services]]
+binding = "APPROVAL_INTAKE"
+service = "disnana-release-signer-staging"
+entrypoint = "ApprovalIntake"
+
+[[services]]
+binding = "VERIFIER_INTAKE"
+service = "disnana-release-signer-staging"
+entrypoint = "VerifierIntake"
+
+[[services]]
+binding = "FINALIZER_INTAKE"
+service = "disnana-release-signer-staging"
+entrypoint = "FinalizerIntake"

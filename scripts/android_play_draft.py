@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upload a signed bundle and save a draft on an existing closed-test track."""
+"""Store a signed bundle in Play, with an optional legacy closed-test draft."""
 import hashlib
 import json
 import os
@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 PACKAGE = "com.disnana.mane_chan"
 ROOT = "https://androidpublisher.googleapis.com"
 SCOPE_PATH = f"/androidpublisher/v3/applications/{PACKAGE}/edits"
+COMMIT_WITHOUT_REVIEW = "?changesNotSentForReview=true&changesInReviewBehavior=ERROR_IF_IN_REVIEW"
 
 
 class PlayError(RuntimeError):
@@ -42,6 +43,60 @@ def publisher_request(method, path, body=None, *, media=None):
     return json.loads(content) if content else {}
 
 
+def upload_bundle(bundle, version_code, edit, *, expected_sha256=None):
+    with bundle.open("rb") as signed:
+        digest = hashlib.file_digest(signed, "sha256").hexdigest()
+        if expected_sha256 is not None and digest != expected_sha256:
+            raise PlayError("The local bundle SHA-256 differs from the verified artifact")
+        signed.seek(0)
+        uploaded = publisher_request(
+            "POST", f"/upload{edit}/bundles?uploadType=media", media=signed,
+        )
+    if uploaded.get("versionCode") != version_code or uploaded.get("sha256") != digest:
+        raise PlayError("The uploaded version code or SHA-256 differs from the signed bundle")
+
+
+def discard_edit(edit):
+    try:
+        publisher_request("DELETE", edit)
+    except (PlayError, URLError, TimeoutError):
+        print("Play edit could not be discarded. Check Play Console before retrying.", file=sys.stderr)
+
+
+def store_bundle_only(bundle, version_code, expected_sha256):
+    if not 1 <= version_code <= 2_100_000_000 or not re.fullmatch(r"[a-f0-9]{64}", expected_sha256):
+        raise PlayError("Expected a Play version code and the verified lowercase SHA-256")
+    with bundle.open("rb") as signed:
+        if hashlib.file_digest(signed, "sha256").hexdigest() != expected_sha256:
+            raise PlayError("The local bundle SHA-256 differs from the verified artifact")
+
+    edit_id = quote(publisher_request("POST", SCOPE_PATH, {})["id"], safe="")
+    edit = f"{SCOPE_PATH}/{edit_id}"
+    commit_attempted = False
+    try:
+        existing = publisher_request("GET", f"{edit}/bundles").get("bundles", [])
+        for item in existing:
+            if item.get("versionCode") == version_code:
+                if item.get("sha256") != expected_sha256:
+                    raise PlayError("Play already stores a different bundle with this version code")
+                return "already_present"
+
+        upload_bundle(bundle, version_code, edit, expected_sha256=expected_sha256)
+        publisher_request("POST", f"{edit}:validate")
+        commit_attempted = True
+        try:
+            publisher_request("POST", f"{edit}:commit{COMMIT_WITHOUT_REVIEW}")
+        except (PlayError, URLError, OSError, ValueError) as error:
+            raise PlayError(
+                f"Play commit did not confirm success. Check version {version_code} and SHA-256 "
+                f"in Play Console before another upload. {error}"
+            ) from None
+        return "stored"
+    finally:
+        if not commit_attempted:
+            discard_edit(edit)
+
+
 def save_draft(bundle, track, version_code, release_name, notes):
     if (
         not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._()-]{0,99}", track)
@@ -65,14 +120,7 @@ def save_draft(bundle, track, version_code, release_name, notes):
         if any(str(version_code) in release.get("versionCodes", []) for release in releases):
             raise PlayError(f"Version code {version_code} is already on the target track")
 
-        with bundle.open("rb") as signed:
-            digest = hashlib.file_digest(signed, "sha256").hexdigest()
-            signed.seek(0)
-            uploaded = publisher_request(
-                "POST", f"/upload{edit}/bundles?uploadType=media", media=signed,
-            )
-        if uploaded.get("versionCode") != version_code or uploaded.get("sha256") != digest:
-            raise PlayError("The uploaded version code or SHA-256 differs from the signed bundle")
+        upload_bundle(bundle, version_code, edit)
 
         draft = {"name": release_name, "versionCodes": [str(version_code)], "status": "draft"}
         if notes:
@@ -87,19 +135,24 @@ def save_draft(bundle, track, version_code, release_name, notes):
             raise PlayError("Play did not return the expected draft release")
 
         # Never retry with weaker flags. Play Console owns review and rollout.
-        publisher_request("POST", f"{edit}:commit?changesNotSentForReview=true&changesInReviewBehavior=ERROR_IF_IN_REVIEW")
+        publisher_request("POST", f"{edit}:commit{COMMIT_WITHOUT_REVIEW}")
         committed = True
         print(f"Saved draft on {track} for version code {version_code}.")
     finally:
         if not committed:
-            try:
-                publisher_request("DELETE", edit)
-            except (PlayError, URLError):
-                print("Play edit could not be discarded. Check Play Console before retrying.", file=sys.stderr)
+            discard_edit(edit)
 
 
 if __name__ == "__main__":
     try:
-        save_draft(Path(sys.argv[1]), os.environ["PLAY_CLOSED_TRACK"], int(sys.argv[2]), sys.argv[3], os.environ.get("PLAY_RELEASE_NOTES", "").strip())
-    except (PlayError, URLError, KeyError, ValueError) as error:
+        if sys.argv[1:2] == ["--bundle-only"] and len(sys.argv) == 5:
+            _, _, bundle, version_code, expected_sha256 = sys.argv
+            result = store_bundle_only(Path(bundle), int(version_code), expected_sha256)
+            print(f"Bundle {result}: version code {version_code}, SHA-256 {expected_sha256}")
+        elif len(sys.argv) == 4 and sys.argv[1] != "--bundle-only":
+            _, bundle, version_code, release_name = sys.argv
+            save_draft(Path(bundle), os.environ["PLAY_CLOSED_TRACK"], int(version_code), release_name, os.environ.get("PLAY_RELEASE_NOTES", "").strip())
+        else:
+            sys.exit("Usage: android_play_draft.py --bundle-only AAB VERSION_CODE SHA256")
+    except (PlayError, OSError, KeyError, ValueError) as error:
         sys.exit(str(error))

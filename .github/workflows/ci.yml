@@ -234,7 +234,10 @@ jobs:
         with:
           persist-credentials: false
       - name: actionlint (pinned image)
-        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7 -color
+        # actionlint 1.7.7 predates GitHub's artifact-metadata attestation permission.
+        run: >-
+          docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.7 -color
+          -ignore '^unknown permission scope "artifact-metadata"\.'
 
   # Single required check for branch protection: green only if every job above is green.
   ci-ok:

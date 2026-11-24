@@ -52,6 +52,9 @@
   },
   "private": true,
   "packageManager": "bun@1.4.4",
+  "overrides": {
+    "minimatch": "11.0.9"
+  },
   "engines": {
     "bun": ">=1.4.0"
   }

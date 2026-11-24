@@ -1,0 +1,27 @@
+name = "disnana-release-signer-staging"
+main = "workers/signer/index.mjs"
+compatibility_date = "2026-11-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+APPROVAL_ORIGIN = "https://release-stg.disnana.com"
+VERIFIER_ORIGIN = "https://release-api-stg.disnana.com"
+RELEASE_INTAKE_ENABLED = "false"
+RELEASE_SIGNING_ENABLED = "false"
+# Set these values through the Signer's isolated configuration before testing intake.
+# RELEASE_POLICY, ACCESS_POLICY, VERIFIER_POLICY
+
+[[rules]]
+type = "Text"
+globs = ["**/*.txt"]
+fallthrough = true
+
+[[durable_objects.bindings]]
+name = "RELEASE_LEDGER"
+class_name = "SignerLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["SignerLedger"]

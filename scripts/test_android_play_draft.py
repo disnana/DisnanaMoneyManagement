@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import URLError
 
 import android_play_draft as play
 
@@ -20,12 +21,15 @@ class DraftReleaseTest(unittest.TestCase):
         self.api = self.enterContext(patch.object(play, "publisher_request", side_effect=self.request))
         self.commit_error = None
         self.releases = [self.live]
+        self.stored_bundles = []
         self.play_sha = hashlib.sha256(self.bundle.read_bytes()).hexdigest()
 
     def request(self, method, path, body=None, *, media=None):
         self.calls.append((method, path))
         if method == "POST" and path == play.SCOPE_PATH:
             return {"id": "example"}
+        if method == "GET" and path == f"{self.edit}/bundles":
+            return {"bundles": self.stored_bundles}
         if method == "GET":
             return {"track": self.track, "releases": self.releases}
         if media is not None:
@@ -74,3 +78,39 @@ class DraftReleaseTest(unittest.TestCase):
         with self.assertRaisesRegex(play.PlayError, "closed-test track"):
             self.save_draft()
         self.api.assert_not_called()
+
+    def test_bundle_only_commits_without_touching_tracks_or_review(self):
+        self.assertEqual(play.store_bundle_only(self.bundle, 6, self.play_sha), "stored")
+        self.assertEqual(self.calls, [
+            ("POST", play.SCOPE_PATH),
+            ("GET", f"{self.edit}/bundles"),
+            ("POST", f"/upload{self.edit}/bundles?uploadType=media"),
+            ("POST", f"{self.edit}:validate"),
+            ("POST", self.commit),
+        ])
+
+    def test_bundle_only_recognizes_a_previous_upload_by_its_digest(self):
+        self.stored_bundles = [{"versionCode": 6, "sha256": self.play_sha}]
+        self.assertEqual(play.store_bundle_only(self.bundle, 6, self.play_sha), "already_present")
+        self.assertEqual(self.calls, [
+            ("POST", play.SCOPE_PATH), ("GET", f"{self.edit}/bundles"), ("DELETE", self.edit),
+        ])
+
+    def test_bundle_only_rejects_different_bytes_for_an_existing_version(self):
+        self.stored_bundles = [{"versionCode": 6, "sha256": "0" * 64}]
+        with self.assertRaisesRegex(play.PlayError, "different bundle"):
+            play.store_bundle_only(self.bundle, 6, self.play_sha)
+        self.assertEqual(self.calls[-1], ("DELETE", self.edit))
+        self.assertEqual(len(self.calls), 3)
+
+    def test_bundle_only_rejects_an_unverified_local_file_before_opening_an_edit(self):
+        with self.assertRaisesRegex(play.PlayError, "local bundle SHA-256 differs"):
+            play.store_bundle_only(self.bundle, 6, "0" * 64)
+        self.api.assert_not_called()
+
+    def test_bundle_only_preserves_an_edit_after_an_unconfirmed_commit(self):
+        self.commit_error = URLError("connection lost")
+        with self.assertRaisesRegex(play.PlayError, "Check version 6"):
+            play.store_bundle_only(self.bundle, 6, self.play_sha)
+        self.assertEqual(self.calls[-1], ("POST", self.commit))
+        self.assertEqual(len(self.calls), 5)
