@@ -9,7 +9,7 @@ from urllib.parse import quote
 sys.path.insert(0, str(Path.cwd() / "scripts"))
 from android_play_draft import PACKAGE, SCOPE_PATH, PlayError, discard_edit, publisher_request, upload_bundle
 
-TRACK = "qa"
+TRACK = "internal"
 VERSION = 6
 SHA256 = "156353e589821e273bf9303f6c3a7d17ebec86e7d4fdf8806ed21b0f8806a616"
 DRAFT = {"name": "v6", "versionCodes": ["6"], "status": "draft"}
@@ -82,12 +82,16 @@ def publish(bundle):
     commit_attempted = False
     try:
         before = tracks(edit)
-        require(TRACK in before, "Play did not return qa. No alternative track was written.")
+        require(TRACK in before, "Play did not return the verified internal track ID.")
+        previous = before[TRACK].get("releases", [])
+        print("Internal releases before the check:", [
+            {"status": release.get("status"), "versionCodes": release.get("versionCodes", [])}
+            for release in previous
+        ], flush=True)
         review_before = {track: lifecycle(track) for track in before}
         for track, entries in review_before.items():
             require(not any(entry.get("releaseLifecycleState") in PENDING_REVIEW for entry in entries),
                     f"Existing releases await or are undergoing review on {track}.")
-        previous = before[TRACK].get("releases", [])
         already_draft = any(is_v6_draft(release) for release in previous)
         stored = matching_bundle(edit)
         if already_draft:
@@ -104,7 +108,13 @@ def publish(bundle):
             require(response.get("track") == TRACK and any(is_v6_draft(r) for r in response.get("releases", []))
                     and all(prior in response.get("releases", []) for prior in previous),
                     "Play did not return the intended internal draft and existing releases.")
-            require(other_tracks(tracks(edit)) == other_tracks(before), "Another track changed inside the edit.")
+            staged = tracks(edit)
+            require(other_tracks(staged) == other_tracks(before), "Another track changed inside the edit.")
+            staged_releases = staged.get(TRACK, {}).get("releases", [])
+            require(len(staged_releases) == len(previous) + 1
+                    and all(prior in staged_releases for prior in previous)
+                    and any(is_v6_draft(release) for release in staged_releases),
+                    "The draft would alter an existing internal release.")
             publisher_request("POST", f"{edit}:validate")
             commit_attempted = True
             publisher_request("POST", f"{edit}:commit?changesInReviewBehavior=ERROR_IF_IN_REVIEW")
