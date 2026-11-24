@@ -89,8 +89,8 @@ func runtimeFixture(t *testing.T) (*Runtime, *memoryPendingQueue, *memoryCredits
 	service, _, wallet, key, now, _, raw, group := serviceFixture(t)
 	service.now = func() time.Time { return now }
 	queue := &memoryPendingQueue{rows: make(map[JobKey]memoryPendingEntry)}
-	runtime, err := newRuntime(service, queue, RuntimeConfig{
-		PriceVersion: "price-1", CreditPerImage: 1, JobTimeout: time.Minute,
+	runtime, err := newRuntime(service, queue, newMemoryResultExpiry(), RuntimeConfig{
+		PriceVersion: "price-1", CreditPerImage: 1, JobTimeout: time.Minute, ResultRetention: 2 * time.Minute,
 		ClaimDuration: time.Second, AcknowledgeTimeout: 5 * time.Second,
 		PollInterval: time.Second, PollBatchSize: 1,
 	})
@@ -113,7 +113,7 @@ func TestRuntimeRecoversStagedInputAndBindsOriginalQuote(t *testing.T) {
 
 	changed := runtime.config
 	changed.PriceVersion, changed.CreditPerImage = "price-2", 2
-	other, err := newRuntime(runtime.service, queue, changed)
+	other, err := newRuntime(runtime.service, queue, runtime.results, changed)
 	if err != nil {
 		t.Fatal(err)
 	}

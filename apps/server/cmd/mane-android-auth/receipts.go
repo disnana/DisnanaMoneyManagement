@@ -26,6 +26,10 @@ func openReceipts(ctx context.Context, wallet *credits.Wallet) (*receiptai.Runti
 	if err != nil || unit <= 0 || unit > 1000 {
 		return nil, errors.New("MANE_RECEIPT_CREDITS_PER_IMAGE must be a positive staging tariff")
 	}
+	retention, err := time.ParseDuration(os.Getenv("MANE_RECEIPT_RESULT_RETENTION"))
+	if err != nil || retention < time.Second {
+		return nil, errors.New("MANE_RECEIPT_RESULT_RETENTION must be at least 1s")
+	}
 	priceVersion := os.Getenv("MANE_RECEIPT_PRICE_VERSION")
 	if priceVersion == "" {
 		return nil, errors.New("MANE_RECEIPT_PRICE_VERSION is required")
@@ -59,14 +63,14 @@ func openReceipts(ctx context.Context, wallet *credits.Wallet) (*receiptai.Runti
 		return nil, err
 	}
 	runtime, err := receiptai.NewRuntime(service, wallet.Session(), receiptai.RuntimeConfig{
-		PriceVersion: priceVersion, CreditPerImage: unit, JobTimeout: 20 * time.Minute,
+		PriceVersion: priceVersion, CreditPerImage: unit, JobTimeout: 20 * time.Minute, ResultRetention: retention,
 		ClaimDuration: 10 * time.Second, AcknowledgeTimeout: 55 * time.Second,
 		PollInterval: 3 * time.Second, PollBatchSize: 16,
 	})
 	if err != nil {
 		return nil, err
 	}
-	// Validate the two tables with the same consistency as the live job runner.
+	// Validate the three tables with the same consistency as the live job runner.
 	// These reads also let --check-config catch a missing migration.
 	var revision int64
 	err = wallet.Session().Query(
@@ -81,6 +85,12 @@ func openReceipts(ctx context.Context, wallet *credits.Wallet) (*receiptai.Runti
 	).WithContext(ctx).Consistency(gocql.LocalQuorum).Scan(&shard)
 	if err != nil && !errors.Is(err, gocql.ErrNotFound) {
 		return nil, errors.New("cannot read receipt_ai_pending at LOCAL_QUORUM")
+	}
+	err = wallet.Session().Query(
+		"SELECT shard FROM receipt_ai_result_expiry WHERE shard = ? LIMIT 1", 0,
+	).WithContext(ctx).Consistency(gocql.LocalQuorum).Scan(&shard)
+	if err != nil && !errors.Is(err, gocql.ErrNotFound) {
+		return nil, errors.New("cannot read receipt_ai_result_expiry at LOCAL_QUORUM")
 	}
 	return runtime, nil
 }

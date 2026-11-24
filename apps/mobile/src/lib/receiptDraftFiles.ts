@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
-import type { ReceiptConfig, ReceiptDocument, ReceiptJobInput } from './androidReceiptClient';
+import type { ReceiptConfig, ReceiptJobInput } from './androidReceiptClient';
 
 export type ReceiptMimeType = 'image/jpeg' | 'image/png';
 export type ReceiptPage = { id: string; uri: string; name: string; type: ReceiptMimeType; bytes: number };
@@ -102,15 +102,6 @@ export async function attachReceiptImages(input: ReceiptJobInput, groups: readon
     }
   }
   return input;
-}
-
-export function receiptExpenseAmount(document: ReceiptDocument) {
-  const amount = document.total_minor;
-  if ((document.status !== 'success' && document.status !== 'partial') || document.currency !== 'JPY' ||
-      document.document_type === 'atm_statement' || amount === null || !Number.isSafeInteger(amount) || amount <= 0) {
-    return undefined;
-  }
-  return String(amount);
 }
 
 export function receiptExpenseDate(date: string | undefined) {

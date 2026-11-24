@@ -30,6 +30,7 @@ type RuntimeConfig struct {
 	PriceVersion       string
 	CreditPerImage     int64
 	JobTimeout         time.Duration
+	ResultRetention    time.Duration
 	ClaimDuration      time.Duration
 	AcknowledgeTimeout time.Duration
 	PollInterval       time.Duration
@@ -37,26 +38,30 @@ type RuntimeConfig struct {
 }
 
 type ConfigView struct {
-	PriceVersion       string `json:"price_version"`
-	CreditPerImage     int64  `json:"credits_per_image"`
-	MaxJSONBytes       int    `json:"max_json_bytes"`
-	MaxGroups          int    `json:"max_groups"`
-	MaxImagesPerGroup  int    `json:"max_images_per_group"`
-	MaxTotalImages     int    `json:"max_total_images"`
-	MaxImageBytes      int    `json:"max_image_bytes"`
-	MaxTotalImageBytes int    `json:"max_total_image_bytes"`
-	MaxImagePixels     int64  `json:"max_image_pixels"`
+	PriceVersion           string `json:"price_version"`
+	CreditPerImage         int64  `json:"credits_per_image"`
+	ResultRetentionSeconds int64  `json:"result_retention_seconds"`
+	MaxJSONBytes           int    `json:"max_json_bytes"`
+	MaxGroups              int    `json:"max_groups"`
+	MaxImagesPerGroup      int    `json:"max_images_per_group"`
+	MaxTotalImages         int    `json:"max_total_images"`
+	MaxImageBytes          int    `json:"max_image_bytes"`
+	MaxTotalImageBytes     int    `json:"max_total_image_bytes"`
+	MaxImagePixels         int64  `json:"max_image_pixels"`
 }
 
 type JobView struct {
-	RequestID     string      `json:"id"`
-	State         JobState    `json:"state"`
-	Accepted      bool        `json:"accepted"`
-	Settled       bool        `json:"settled"`
-	PriceVersion  string      `json:"price_version"`
-	MaximumCredit int64       `json:"maximum_credit"`
-	FinalCredit   *int64      `json:"final_credit"`
-	Groups        []GroupView `json:"groups"`
+	RequestID       string      `json:"id"`
+	State           JobState    `json:"state"`
+	Accepted        bool        `json:"accepted"`
+	Settled         bool        `json:"settled"`
+	PriceVersion    string      `json:"price_version"`
+	MaximumCredit   int64       `json:"maximum_credit"`
+	FinalCredit     *int64      `json:"final_credit"`
+	Deadline        time.Time   `json:"deadline"`
+	ResultExpiresAt *time.Time  `json:"result_expires_at"`
+	ResultExpired   bool        `json:"result_expired"`
+	Groups          []GroupView `json:"groups"`
 }
 
 type GroupView struct {
@@ -92,6 +97,7 @@ type pendingQueue interface {
 type Runtime struct {
 	service *Service
 	queue   pendingQueue
+	results resultExpiryIndex
 	config  RuntimeConfig
 	wake    chan struct{}
 }
@@ -100,12 +106,12 @@ func NewRuntime(service *Service, db *gocql.Session, config RuntimeConfig) (*Run
 	if db == nil {
 		return nil, errors.New("receipt runtime database is required")
 	}
-	return newRuntime(service, scyllaPending{db: db}, config)
+	return newRuntime(service, scyllaPending{db: db}, scyllaResultExpiry{db: db}, config)
 }
 
-func newRuntime(service *Service, queue pendingQueue, config RuntimeConfig) (*Runtime, error) {
-	if service == nil || queue == nil || !identifier.MatchString(config.PriceVersion) ||
-		config.CreditPerImage <= 0 || config.JobTimeout <= 0 || config.ClaimDuration <= 0 ||
+func newRuntime(service *Service, queue pendingQueue, results resultExpiryIndex, config RuntimeConfig) (*Runtime, error) {
+	if service == nil || queue == nil || results == nil || !identifier.MatchString(config.PriceVersion) ||
+		config.CreditPerImage <= 0 || config.JobTimeout <= 0 || config.ResultRetention < time.Second || config.ClaimDuration <= 0 ||
 		config.ClaimDuration >= config.JobTimeout || config.AcknowledgeTimeout <= 0 ||
 		config.AcknowledgeTimeout >= config.JobTimeout || config.PollInterval <= 0 ||
 		config.PollBatchSize <= 0 || config.PollBatchSize > 100 {
@@ -117,14 +123,15 @@ func newRuntime(service *Service, queue pendingQueue, config RuntimeConfig) (*Ru
 		int64(l.MaxTotalImages) > math.MaxInt64/config.CreditPerImage {
 		return nil, errors.New("invalid receipt runtime limits")
 	}
-	return &Runtime{service: service, queue: queue, config: config, wake: make(chan struct{}, 1)}, nil
+	return &Runtime{service: service, queue: queue, results: results, config: config, wake: make(chan struct{}, 1)}, nil
 }
 
 func (r *Runtime) Config() ConfigView {
 	l := r.service.limits
 	return ConfigView{
 		PriceVersion: r.config.PriceVersion, CreditPerImage: r.config.CreditPerImage,
-		MaxJSONBytes: l.MaxJSONBytes, MaxGroups: l.MaxGroups, MaxImagesPerGroup: l.MaxImagesPerGroup,
+		ResultRetentionSeconds: int64(r.config.ResultRetention / time.Second),
+		MaxJSONBytes:           l.MaxJSONBytes, MaxGroups: l.MaxGroups, MaxImagesPerGroup: l.MaxImagesPerGroup,
 		MaxTotalImages: l.MaxTotalImages, MaxImageBytes: l.MaxImageBytes,
 		MaxTotalImageBytes: l.MaxTotalImageBytes, MaxImagePixels: l.MaxImagePixels,
 	}
@@ -148,7 +155,7 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 			return JobView{}, ErrJobConflict
 		}
 		if job.Accepted {
-			return publicJob(key, job)
+			return r.visibleJob(ctx, key, job)
 		}
 		if job.Abandoned {
 			return JobView{}, ErrJobTransition
@@ -186,7 +193,7 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 		}
 		staged = pendingReceipt{
 			Intake: ReceiptIntake{BodySHA256: digest, PriceVersion: priceVersion, MaximumCredit: expectedMax,
-				Deadline: r.service.now().Add(r.config.JobTimeout).UTC()},
+				Deadline: r.service.now().Add(r.config.JobTimeout).UTC(), ResultRetention: r.config.ResultRetention},
 			CreditPerImage: r.config.CreditPerImage, Limits: r.service.limits, Groups: groups,
 		}
 		inserted, insertErr := r.queue.insert(ctx, key, staged, raw)
@@ -215,7 +222,7 @@ func (r *Runtime) Submit(ctx context.Context, key JobKey, expectedMax int64, pri
 	case r.wake <- struct{}{}:
 	default:
 	}
-	return publicJob(key, accepted)
+	return r.visibleJob(ctx, key, accepted)
 }
 
 func matchIntake(intake ReceiptIntake, digest string, maximum int64, version string) bool {
@@ -227,16 +234,33 @@ func (r *Runtime) Job(ctx context.Context, key JobKey) (JobView, error) {
 	if err != nil {
 		return JobView{}, err
 	}
-	return publicJob(key, job)
+	return r.visibleJob(ctx, key, job)
 }
 
-func publicJob(key JobKey, job ReceiptJob) (JobView, error) {
+func (r *Runtime) visibleJob(ctx context.Context, key JobKey, job ReceiptJob) (JobView, error) {
+	if job.Settled && job.ResultExpiresAt.IsZero() && job.hasResults() {
+		var err error
+		job, err = r.adoptLegacyResults(ctx, key, job)
+		if err != nil {
+			return JobView{}, err
+		}
+	}
+	return publicJob(key, job, r.service.now())
+}
+
+func publicJob(key JobKey, job ReceiptJob, now time.Time) (JobView, error) {
 	view := JobView{RequestID: key.RequestID, State: receiptState(job), Accepted: job.Accepted,
 		Settled: job.Settled, PriceVersion: job.Intake.PriceVersion, MaximumCredit: job.Intake.MaximumCredit,
-		FinalCredit: job.FinalCredit, Groups: make([]GroupView, 0, len(job.Groups))}
+		FinalCredit: job.FinalCredit, Deadline: job.Intake.Deadline,
+		ResultExpired: job.ResultExpired, Groups: make([]GroupView, 0, len(job.Groups))}
+	if !job.ResultExpiresAt.IsZero() {
+		expires := job.ResultExpiresAt
+		view.ResultExpiresAt = &expires
+		view.ResultExpired = view.ResultExpired || !now.Before(expires)
+	}
 	for _, group := range job.Groups {
 		item := GroupView{ID: group.Job.GroupID, State: group.Job.State, ErrorCode: group.Job.Outcome.ErrorCode}
-		if group.Result != "" {
+		if group.Result != "" && !view.ResultExpired {
 			var result Result
 			if err := json.Unmarshal([]byte(group.Result), &result); err != nil {
 				return JobView{}, errors.New("invalid stored receipt result")
@@ -314,6 +338,9 @@ func (r *Runtime) Run(ctx context.Context) {
 		if err := r.poll(ctx, &cursors, visit); err != nil && ctx.Err() == nil {
 			log.Print("receipt runtime: a pending work operation failed")
 		}
+		if err := r.pollResultExpiry(ctx); err != nil && ctx.Err() == nil {
+			log.Print("receipt runtime: a result expiry operation failed")
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -363,7 +390,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return err
 	}
 	if job.Settled {
-		return r.queue.remove(ctx, key)
+		return r.cleanSettledInput(ctx, key, job)
 	}
 	pending, err := r.queue.load(ctx, key)
 	if err != nil {
@@ -389,7 +416,8 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return input, nil
 	}
 	if job.Revision != 0 && (!matchIntake(job.Intake, pending.Intake.BodySHA256,
-		pending.Intake.MaximumCredit, pending.Intake.PriceVersion) || !job.Intake.Deadline.Equal(pending.Intake.Deadline)) {
+		pending.Intake.MaximumCredit, pending.Intake.PriceVersion) || !job.Intake.Deadline.Equal(pending.Intake.Deadline) ||
+		job.Intake.ResultRetention != pending.Intake.ResultRetention) {
 		return errors.New("stored receipt quote does not match the job")
 	}
 	if !job.Accepted {
@@ -425,7 +453,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return err
 	}
 	if job.Settled {
-		return r.queue.remove(ctx, key)
+		return r.cleanSettledInput(ctx, key, job)
 	}
 	for _, group := range job.Groups {
 		if group.Job.State != JobSettling {
@@ -443,7 +471,7 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 	}
 	final, err := r.service.SettleReceipt(ctx, key, used)
 	if err == nil && final.Settled {
-		return r.queue.remove(ctx, key)
+		return r.cleanSettledInput(ctx, key, final)
 	}
 	return err
 }

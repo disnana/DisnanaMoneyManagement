@@ -22,10 +22,11 @@ type JobKey struct {
 }
 
 type ReceiptIntake struct {
-	BodySHA256    string
-	PriceVersion  string
-	MaximumCredit int64
-	Deadline      time.Time
+	BodySHA256      string
+	PriceVersion    string
+	MaximumCredit   int64
+	Deadline        time.Time
+	ResultRetention time.Duration
 }
 
 type SavedGroup struct {
@@ -39,18 +40,20 @@ type SavedGroup struct {
 // ReceiptJob groups the states and immutable quote for one accepted upload. Actual
 // input images are kept separately so that image retention can be enforced.
 type ReceiptJob struct {
-	Revision    int64
-	Intake      ReceiptIntake
-	Accepted    bool
-	Abandoned   bool
-	FinalCredit *int64
-	Settled     bool
-	Groups      []SavedGroup
+	Revision        int64
+	Intake          ReceiptIntake
+	Accepted        bool
+	Abandoned       bool
+	FinalCredit     *int64
+	Settled         bool
+	ResultExpiresAt time.Time
+	ResultExpired   bool
+	Groups          []SavedGroup
 }
 
 func newReceiptJob(intake ReceiptIntake, groups []Group) (ReceiptJob, error) {
 	if !resultDigest.MatchString(intake.BodySHA256) || !identifier.MatchString(intake.PriceVersion) ||
-		intake.MaximumCredit <= 0 || intake.Deadline.IsZero() || len(groups) == 0 {
+		intake.MaximumCredit <= 0 || intake.Deadline.IsZero() || intake.ResultRetention < 0 || len(groups) == 0 {
 		return ReceiptJob{}, ErrJobTransition
 	}
 	intake.Deadline = intake.Deadline.UTC()
@@ -150,7 +153,7 @@ func (j ReceiptJob) stageSettlement(used int64) (ReceiptJob, error) {
 	return j, nil
 }
 
-func (j ReceiptJob) finishSettlement() (ReceiptJob, error) {
+func (j ReceiptJob) finishSettlement(now time.Time) (ReceiptJob, error) {
 	if j.FinalCredit == nil {
 		return j, ErrJobTransition
 	}
@@ -168,6 +171,34 @@ func (j ReceiptJob) finishSettlement() (ReceiptJob, error) {
 	}
 	j.Groups = groups
 	j.Settled = true
+	if j.Intake.ResultRetention > 0 && j.hasResults() {
+		j.ResultExpiresAt = resultExpiry(now, j.Intake.ResultRetention)
+	}
+	j.Revision++
+	return j, nil
+}
+
+func (j ReceiptJob) hasResults() bool {
+	for _, group := range j.Groups {
+		if group.Result != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (j ReceiptJob) clearExpiredResults(now time.Time) (ReceiptJob, error) {
+	if !j.Settled || j.ResultExpiresAt.IsZero() || now.Before(j.ResultExpiresAt) {
+		return j, ErrJobTransition
+	}
+	if j.ResultExpired {
+		return j, nil
+	}
+	j.Groups = append([]SavedGroup(nil), j.Groups...)
+	for i := range j.Groups {
+		j.Groups[i].Result = ""
+	}
+	j.ResultExpired = true
 	j.Revision++
 	return j, nil
 }

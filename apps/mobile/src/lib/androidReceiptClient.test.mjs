@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
-  device: { loadSession: vi.fn(), saveSession: vi.fn(), signChallenge: vi.fn() },
+  device: { loadSession: vi.fn(), saveSession: vi.fn(), signChallenge: vi.fn(), clearGoogleState: vi.fn() },
 }));
 vi.mock('expo', () => ({ requireOptionalNativeModule: () => mocks.device }));
 vi.mock('expo/fetch', () => ({ fetch: mocks.fetch }));
@@ -149,5 +149,28 @@ describe('authenticated Android receipt jobs', () => {
     const account = await import('./androidAccount');
     await account.refreshAndroidAccount();
     expect(account.useAndroidAccount()).toMatchObject({ accountId: 'account-a', credits: 3, lots, expiredLots, history });
+  });
+
+  it('restores the verified account ID offline and carries it through node reassignment', async () => {
+    mocks.device.loadSession.mockResolvedValue(JSON.stringify({ ...session, account_id: 'account-a' }));
+    const assigned = { ...session, issuer_node_id: 'b', origin: 'https://node-b.test', access_token: 'access-b' };
+    const account = await import('./androidAccount');
+    await account.restoreAndroidAccount();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(account.getAndroidAccountSnapshot()).toMatchObject({ signedIn: true, accountId: 'account-a' });
+    mocks.fetch.mockImplementation(async (url, init) => {
+      if (url === origin + '/auth/challenge') return Response.json({}, { status: 503 });
+      if (url === 'https://auth.test/auth/node') return Response.json({ id: 'b', origin: assigned.origin });
+      if (url === assigned.origin + '/auth/challenge') return challenge(init, 'b');
+      if (url === assigned.origin + '/auth/refresh') return Response.json({ ...assigned, account_id: 'unverified-reply' });
+      if (url === assigned.origin + '/auth/logout') return new Response(null, { status: 204 });
+      return Response.json(config);
+    });
+    const api = await import('./androidReceiptClient');
+    await expect(api.getReceiptConfig()).resolves.toEqual(config);
+    expect(JSON.parse(mocks.device.saveSession.mock.lastCall[0])).toMatchObject({ account_id: 'account-a', issuer_node_id: 'b' });
+    await account.signOutAndroidAccount();
+    expect(account.getAndroidAccountSnapshot()).toMatchObject({ signedIn: false, accountId: null });
+    expect(mocks.device.saveSession.mock.lastCall[0]).toBeNull();
   });
 });

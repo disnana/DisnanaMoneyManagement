@@ -71,7 +71,7 @@ func TestScyllaReceiptJobRevision(t *testing.T) {
 func scyllaRuntimeFixture(t *testing.T) (*credits.Wallet, context.Context, string) {
 	t.Helper()
 	if os.Getenv("MANE_TEST_SCYLLA") != "1" {
-		t.Skip("requires an isolated Scylla keyspace with credit, receipt job, and pending queue schemas")
+		t.Skip("requires an isolated Scylla keyspace with credit and receipt runtime schemas")
 	}
 	wallet, err := credits.OpenFromEnv()
 	if err != nil {
@@ -173,7 +173,7 @@ func TestScyllaReceiptRuntimeStandardAndExpiredIntake(t *testing.T) {
 	now := time.Now().UTC()
 	service.now = func() time.Time { return now }
 	runtime, err := NewRuntime(service, db, RuntimeConfig{
-		PriceVersion: "scylla-test", CreditPerImage: 1, JobTimeout: time.Minute,
+		PriceVersion: "scylla-test", CreditPerImage: 1, JobTimeout: time.Minute, ResultRetention: 2 * time.Minute,
 		ClaimDuration: time.Second, AcknowledgeTimeout: 5 * time.Second,
 		PollInterval: time.Second, PollBatchSize: 1,
 	})
@@ -221,6 +221,15 @@ func TestScyllaReceiptRuntimeStandardAndExpiredIntake(t *testing.T) {
 	if _, err := runtime.queue.body(ctx, key); !errors.Is(err, ErrReceiptNotFound) {
 		t.Fatalf("settled job retained its image: %v", err)
 	}
+	if view.ResultExpiresAt == nil || view.Groups[0].Result == nil {
+		t.Fatal("settled job did not retain its result and expiry")
+	}
+	expiry := *view.ResultExpiresAt
+	t.Cleanup(func() {
+		if err := runtime.results.remove(context.Background(), resultExpiryEntry{Key: key, ExpiresAt: expiry}); err != nil {
+			t.Errorf("remove Scylla test result index: %v", err)
+		}
+	})
 
 	if _, err := runtime.Submit(ctx, abandoned, 1, "scylla-test", raw); !errors.Is(err, credits.ErrInsufficient) {
 		t.Fatalf("fixture should fail before acceptance due to insufficient credit: %v", err)
@@ -236,5 +245,13 @@ func TestScyllaReceiptRuntimeStandardAndExpiredIntake(t *testing.T) {
 	}
 	if _, err := runtime.queue.body(ctx, abandoned); !errors.Is(err, ErrReceiptNotFound) {
 		t.Fatalf("abandoned job retained its image: %v", err)
+	}
+	now = expiry
+	if err := runtime.pollResultExpiry(ctx); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := store.load(ctx, key)
+	if err != nil || !stored.Settled || !stored.ResultExpired || stored.hasResults() {
+		t.Fatalf("Scylla expiry did not clear only the result: %v", err)
 	}
 }

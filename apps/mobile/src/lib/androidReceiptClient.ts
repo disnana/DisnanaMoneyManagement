@@ -11,6 +11,7 @@ export type ReceiptConfig = {
   max_total_image_bytes: number;
   max_image_pixels: number;
   max_json_bytes: number;
+  result_retention_seconds?: number;
 };
 
 export type ReceiptJobInput = {
@@ -56,6 +57,9 @@ export type ReceiptJob = {
   price_version: string;
   maximum_credit: number;
   final_credit: number | null;
+  deadline?: string;
+  result_expires_at?: string | null;
+  result_expired?: boolean;
   groups: {
     id: string;
     state: ReceiptJobState;
@@ -97,6 +101,7 @@ function integer(value: unknown, minimum: number) {
 
 function isReceiptConfig(value: unknown): value is ReceiptConfig {
   if (!object(value) || typeof value.price_version !== 'string' || !identifier.test(value.price_version)) return false;
+  if (value.result_retention_seconds !== undefined && !integer(value.result_retention_seconds, 1)) return false;
   return ['credits_per_image', 'max_groups', 'max_images_per_group', 'max_total_images', 'max_image_bytes',
     'max_total_image_bytes', 'max_image_pixels', 'max_json_bytes'].every(key => integer(value[key], 1));
 }
@@ -107,6 +112,11 @@ function optionalStrings(value: Record<string, unknown>, fields: string[]) {
 
 function money(value: unknown) {
   return value === null || typeof value === 'number' && Number.isSafeInteger(value);
+}
+
+function timestamp(value: unknown) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value));
 }
 
 function isReceiptDocument(value: unknown): value is ReceiptDocument {
@@ -122,10 +132,13 @@ function isReceiptDocument(value: unknown): value is ReceiptDocument {
       object(payment) && optionalStrings(payment, ['method', 'brand', 'issuer', 'last_four', 'payment_label']) && money(payment.amount_minor));
 }
 
-function isReceiptJob(value: unknown, id: string): value is ReceiptJob {
+export function isReceiptJob(value: unknown, id: string): value is ReceiptJob {
   return object(value) && value.id === id && isJobState(value.state) &&
     typeof value.accepted === 'boolean' && typeof value.settled === 'boolean' &&
     typeof value.price_version === 'string' && identifier.test(value.price_version) && integer(value.maximum_credit, 0) &&
+    (value.deadline === undefined || timestamp(value.deadline)) &&
+    (value.result_expires_at === undefined || value.result_expires_at === null || timestamp(value.result_expires_at)) &&
+    (value.result_expired === undefined || typeof value.result_expired === 'boolean') &&
     (value.final_credit === null || integer(value.final_credit, 0)) && Array.isArray(value.groups) &&
     value.groups.every(group => object(group) && typeof group.id === 'string' && identifier.test(group.id) &&
       isJobState(group.state) && (group.error_code === undefined || typeof group.error_code === 'string') &&

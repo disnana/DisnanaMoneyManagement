@@ -1,18 +1,23 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { router } from 'expo-router';
 import { accountAvailable, refreshAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
 import {
-  getReceiptConfig, getReceiptJob, isReceiptJobTerminal, ReceiptAPIError, submitReceiptJob,
+  getReceiptConfig, isReceiptJobTerminal, ReceiptAPIError, submitReceiptJob,
   type ReceiptConfig, type ReceiptDocument, type ReceiptJob,
 } from '@/lib/androidReceiptClient';
-import { kv } from '@/lib/kv';
 import {
-  attachReceiptImages, buildReceiptInput, inspectReceiptFile, newReceiptID, parsePendingReceipt, receiptExpenseAmount,
+  attachReceiptImages, buildReceiptInput, inspectReceiptFile, newReceiptID,
   receiptPreviewEnabled, removeReceiptFile, type ReceiptGroup, type ReceiptPage,
 } from '@/lib/receiptDraftFiles';
 import { metrics, usePalette } from '@/lib/theme';
+import { canImportReceipt, initialReceiptItems, receiptImportDraft } from '@/lib/receiptImport';
+import { ReceiptExpenseReview } from '@/ui/ReceiptExpenseReview';
+import {
+  deleteLocalReceiptResult, listLocalReceiptResults, readLocalReceiptResult, readPendingReceipt,
+  receivePendingReceiptResult, subscribeLocalReceiptResults, writePendingReceipt,
+} from '@/lib/receiptLocalResults';
 
 const DOCUMENT_TYPES: Record<string, string> = {
   itemized_receipt: 'レシート', payment_receipt: '領収書', invoice: '請求書',
@@ -26,9 +31,17 @@ const JOB_STATUS: Record<string, string> = {
   CLAIMED: '準備中', SUBMITTING: '解析を開始中', SUBMISSION_UNKNOWN: '解析先の受付を確認中',
   PARTIAL: '一部の解析が完了', FAILED: '解析に失敗', CANCELLED: '取り消し済み', EXPIRED: '受付期限切れ',
 };
+const resultDate = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo' });
 
 function cr(amount: number) {
   return `${amount.toLocaleString('ja-JP')} CR`;
+}
+
+function resultWindow(seconds: number) {
+  if (seconds % 86_400 === 0) return `${seconds / 86_400}日間`;
+  if (seconds % 3_600 === 0) return `${seconds / 3_600}時間`;
+  if (seconds % 60 === 0) return `${seconds / 60}分間`;
+  return `${seconds}秒間`;
 }
 
 function resultAmount(document: ReceiptDocument, value: number | null) {
@@ -71,10 +84,16 @@ export default function ReceiptReviewScreen() {
 
 function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: number | null }) {
   const p = usePalette();
-  const jobKey = `dmm.receipt.job.v1.${accountId}`;
-  const [pending, setPending] = useState(() => parsePendingReceipt(kv.getItem(jobKey)));
+  const [pending, setPending] = useState(() => readPendingReceipt(accountId));
+  const [savedResults, setSavedResults] = useState(() => listLocalReceiptResults(accountId));
+  const [selectedLocalId, setSelectedLocalId] = useState<string>();
+  const [showArchive, setShowArchive] = useState(false);
   const jobId = pending?.id;
   const [job, setJob] = useState<ReceiptJob>();
+  const viewedId = selectedLocalId ?? jobId;
+  const localResult = useMemo(() => viewedId && savedResults.some((entry) => entry.id === viewedId)
+    ? readLocalReceiptResult(accountId, viewedId) : undefined, [accountId, viewedId, savedResults]);
+  const viewedJob = localResult ?? (selectedLocalId ? undefined : job);
   const [notFound, setNotFound] = useState(false);
   const [config, setConfig] = useState<ReceiptConfig>();
   const [configLoading, setConfigLoading] = useState(true);
@@ -89,6 +108,13 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   const cachedFiles = useRef(new Set<string>());
   const open = useRef(true);
   const submitting = useRef(false);
+
+  useEffect(() => {
+    const updateArchive = () => setSavedResults(listLocalReceiptResults(accountId));
+    const unsubscribe = subscribeLocalReceiptResults(accountId, updateArchive);
+    updateArchive();
+    return unsubscribe;
+  }, [accountId]);
 
   useEffect(() => {
     open.current = true;
@@ -121,8 +147,13 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
     setNotFound(false);
     async function poll(delay: number) {
       try {
-        const next = await getReceiptJob(id, controller.signal);
+        const next = readLocalReceiptResult(accountId, id) ?? await receivePendingReceiptResult(accountId, controller.signal)
+          ?? readLocalReceiptResult(accountId, id);
         if (controller.signal.aborted) return;
+        if (!next || next.id !== id) {
+          setPending(readPendingReceipt(accountId));
+          return;
+        }
         setJob(next);
         setMessage('');
         if (isReceiptJobTerminal(next.state)) {
@@ -132,7 +163,13 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof ReceiptAPIError && error.status === 404) {
-          if (!parsePendingReceipt(kv.getItem(jobKey))) {
+          const saved = readLocalReceiptResult(accountId, id);
+          if (saved) {
+            setJob(saved);
+            setMessage('');
+            return;
+          }
+          if (!readPendingReceipt(accountId)) {
             setPending(undefined);
             return;
           }
@@ -153,7 +190,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
       controller.abort();
       clearTimeout(timer);
     };
-  }, [pending, jobKey, pollRefresh]);
+  }, [pending, accountId, pollRefresh]);
 
   const pages = groups.flatMap((group) => group.pages);
   const estimate = config && pages.length ? pages.length * config.credits_per_image : undefined;
@@ -237,7 +274,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
       if (!open.current) return;
       // Store the ID before the POST so a process restart can resume by GET even if the reply is lost.
       const pointer = { id, startedAt: Date.now() };
-      kv.setItem(jobKey, JSON.stringify(pointer));
+      writePendingReceipt(accountId, pointer);
       try {
         const accepted = await submitReceiptJob(id, input);
         if (open.current) {
@@ -248,7 +285,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
         if (open.current) setGroups([]);
       } catch (error) {
         if (error instanceof ReceiptAPIError && !error.mayHaveCommitted) {
-          kv.setItem(jobKey, '');
+          if (readPendingReceipt(accountId)?.id === pointer.id) writePendingReceipt(accountId, undefined);
           if (error.status === 409 && open.current) setConfigRefresh((previous) => previous + 1);
           throw error;
         }
@@ -271,8 +308,8 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   }
 
   function newDraft() {
-    if (!notFound && (!job || !isReceiptJobTerminal(job.state))) return;
-    kv.setItem(jobKey, '');
+    if (!notFound && (!viewedJob || !isReceiptJobTerminal(viewedJob.state))) return;
+    if (readPendingReceipt(accountId)?.id === jobId) writePendingReceipt(accountId, undefined);
     setPending(undefined);
     setJob(undefined);
     setNotFound(false);
@@ -280,31 +317,67 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
     setConfigRefresh((previous) => previous + 1);
   }
 
+  function removeLocalResult(id: string) {
+    Alert.alert('端末の解析結果を削除しますか？', '登録済みの支出は削除されません。', [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: '削除', style: 'destructive', onPress: () => {
+        try {
+          deleteLocalReceiptResult(accountId, id);
+          setSelectedLocalId(undefined);
+          if (id === jobId) {
+            setPending(undefined);
+            setJob(undefined);
+          }
+        } catch {
+          Alert.alert('端末の解析結果を削除できませんでした');
+        }
+      } },
+    ]);
+  }
+
   return (
     <Page>
       <Surface>
-        <Heading>{jobId ? '解析結果' : '画像を確認して送信'}</Heading>
-        <Copy>{jobId ? '解析状況と確定したCRを確認できます。支出に入力する前に、元の書類と内容を見比べてください。' :
+        <Heading>{viewedId ? '解析結果' : '画像を確認して送信'}</Heading>
+        <Copy>{viewedId ? '支出を登録する前に、元の書類と内容を見比べてください。' :
           'レシート・領収書・請求書などを選んでください。反射や影を避け、文字と四隅が写った画像を使うと読み取りやすくなります。長い書類は、前後が少し重なるように分けて選んでください。'}</Copy>
+        {!viewedId && config?.result_retention_seconds ? <Copy>
+          解析・精算後の受信期間は{resultWindow(config.result_retention_seconds)}です。期間内に通信できる状態でアプリを開くと、結果を端末に保存します。
+        </Copy> : null}
+        {savedResults.length > 0 && !selectedLocalId ? <Action
+          label={showArchive ? '端末に保存した結果を閉じる' : `端末に保存した結果を見る（${savedResults.length}件）`}
+          onPress={() => setShowArchive((current) => !current)} /> : null}
+        {selectedLocalId ? <Action label="端末に保存した結果の一覧へ" onPress={() => setSelectedLocalId(undefined)} /> : null}
       </Surface>
-      {jobId ? <>
+      {showArchive && !selectedLocalId ? <Surface>
+        <Heading>端末に保存した解析結果</Heading>
+        <Copy>オフラインでも確認・編集できます。</Copy>
+        {savedResults.map((entry) => <Action key={entry.id}
+          label={`${resultDate.format(entry.savedAt)} · 書類 ${entry.documentCount}件`}
+          onPress={() => setSelectedLocalId(entry.id)} />)}
+      </Surface> : null}
+      {viewedId ? <>
         <Surface>
-          <Heading>{job ? JOB_STATUS[job.state] ?? '処理中' : notFound ? '受付を確認できません' : '受付を確認中'}</Heading>
-          <Copy>{job ? `最大 ${cr(job.maximum_credit)}　確定 ${job.final_credit == null ? '精算待ち' : cr(job.final_credit)}`
-            : '画面を閉じても、ここから受付状況を確認できます。'}</Copy>
-          {message ? <Notice text={message} /> : null}
-          {!job || !isReceiptJobTerminal(job.state)
+          <Heading>{viewedJob ? JOB_STATUS[viewedJob.state] ?? '処理中'
+            : selectedLocalId ? '端末の結果を読み込めません' : notFound ? '受付を確認できません' : '受付を確認中'}</Heading>
+          <Copy>{viewedJob ? `最大 ${cr(viewedJob.maximum_credit)}　確定 ${viewedJob.final_credit == null ? '精算待ち' : cr(viewedJob.final_credit)}`
+            : selectedLocalId ? '一覧から別の結果を開くことができます。' : '画面を閉じても、ここから受付状況を確認できます。'}</Copy>
+          {localResult ? <Copy>端末に保存済み</Copy> : viewedJob?.result_expired ? <Notice text="解析結果の受信期限を過ぎました。" />
+            : viewedJob?.result_expires_at ? <Copy>受信期限 {resultDate.format(new Date(viewedJob.result_expires_at))}（日本時間）</Copy> : null}
+          {!selectedLocalId && message ? <Notice text={message} /> : null}
+          {!selectedLocalId && (!viewedJob || !isReceiptJobTerminal(viewedJob.state))
             ? <Action label="状況を更新" onPress={() => setPollRefresh((previous) => previous + 1)} /> : null}
         </Surface>
-        {job?.groups.map((group, index) => (
-          <Surface key={group.id}>
+        {viewedJob?.groups.map((group, index) => (
+          <Surface key={`${viewedId}-${group.id}`}>
             <Heading>書類 {index + 1}</Heading>
-            {group.result ? group.result.documents.map((document, documentIndex) => (
-              <DocumentResult key={documentIndex} document={document} />
-            )) : <Copy>{JOB_STATUS[group.state] ?? '解析結果を待っています。'}</Copy>}
+            {group.result && !viewedJob.result_expired ? group.result.documents.map((document, documentIndex) => (
+              <DocumentResult key={documentIndex} document={document} allowImport={viewedJob.settled} />
+            )) : <Copy>{viewedJob.result_expired ? '受信期限切れ' : JOB_STATUS[group.state] ?? '解析結果を待っています。'}</Copy>}
           </Surface>
         ))}
-        {notFound || (job && isReceiptJobTerminal(job.state))
+        {selectedLocalId ? <Action label="この結果を端末から削除" onPress={() => removeLocalResult(selectedLocalId)} /> : null}
+        {!selectedLocalId && (notFound || (viewedJob && isReceiptJobTerminal(viewedJob.state)))
           ? <Action label="新しい受付を作成" onPress={newDraft} /> : null}
       </> : <>
         {configLoading ? <ActivityIndicator color={p.tint} accessibilityLabel="料金を確認中" /> : null}
@@ -342,8 +415,9 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
         {config ? <Surface>
           <Heading>送信時の最大CR</Heading>
           <Text style={[styles.estimate, { color: p.text }]}>{estimate == null ? '—' : cr(estimate)}</Text>
-          <Copy>画像1枚につき {cr(config.credits_per_image)}。{credits == null ? '' : `利用可能 ${cr(credits)}。`}</Copy>
+          <Copy>{pages.length}枚 · 画像1枚につき {cr(config.credits_per_image)}。{credits == null ? '' : `利用可能 ${cr(credits)}。`}</Copy>
           <Copy>対象外や不鮮明と判定された画像も、解析できた分はCRを消費します。送信前に画像とページ順をご確認ください。</Copy>
+          <Copy>カード番号の全桁など、読み取りに不要な情報は隠してください。</Copy>
           {credits !== null && estimate != null && estimate > credits ? <>
             <Notice text="送信に必要なCRが不足しています。" />
             <Action label="残高を更新" onPress={() => void refreshAndroidAccount()} disabled={busy} />
@@ -357,6 +431,18 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
                 { text: 'キャンセル', style: 'cancel' }, { text: '送信', onPress: () => void send() },
               ]);
             }} />
+          <View style={styles.policyLinks}>
+            {[
+              { label: '利用規約', url: 'https://dmm.disnana.com/terms/#ai-receipt' },
+              { label: 'プライバシーポリシー', url: 'https://dmm.disnana.com/privacy/#ai-receipt' },
+            ].map(({ label, url }) => (
+              <Pressable key={url} accessibilityRole="link" hitSlop={8} onPress={() => {
+                void Linking.openURL(url).catch(() => Alert.alert('ページを開けませんでした'));
+              }}>
+                <Text style={{ color: p.tint, fontSize: 13 }}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
         </Surface> : null}
       </>}
       <Modal visible={Boolean(preview)} onRequestClose={() => setPreview(undefined)} animationType="fade">
@@ -370,9 +456,10 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   );
 }
 
-function DocumentResult({ document }: { document: ReceiptDocument }) {
+function DocumentResult({ document, allowImport }: { document: ReceiptDocument; allowImport: boolean }) {
   const p = usePalette();
-  const amount = receiptExpenseAmount(document);
+  const editable = allowImport && canImportReceipt(document) && (document.items.length > 0 ||
+    receiptImportDraft(document, 'merchant', initialReceiptItems(document)) !== undefined);
   const pageNumbers = document.source_image_ids.map((id) => /^g\d+-p(\d+)$/.exec(id)?.[1])
     .filter((page) => page !== undefined).join('・');
   return (
@@ -386,23 +473,22 @@ function DocumentResult({ document }: { document: ReceiptDocument }) {
       {document.merchant ? <Heading>{document.merchant}</Heading> : null}
       {document.date ? <Copy>{document.date}</Copy> : null}
       {document.total_minor !== null ? <Copy>合計 {resultAmount(document, document.total_minor)}</Copy> : null}
-      {document.items.map((item, index) => (
+      {!editable ? document.items.map((item, index) => (
         <Copy key={index}>{item.name ?? '品目不明'} · {resultAmount(document, item.amount_minor)}</Copy>
-      ))}
+      )) : null}
       {document.payments.map((payment, index) => (
         <Copy key={index}>{payment.payment_label ?? payment.brand ?? payment.method ?? '支払い方法不明'}
           {payment.last_four ? `（下4桁 ${payment.last_four}）` : ''} · {resultAmount(document, payment.amount_minor)}</Copy>
       ))}
-      {amount ? <Action label="支出の入力に反映" onPress={() => router.push({
-        pathname: '/add', params: { receiptAmount: amount, receiptDate: document.date ?? '', receiptTitle: document.merchant ?? '' },
-      })} /> : null}
+      {editable ? <ReceiptExpenseReview document={document} /> : null}
     </View>
   );
 }
 
 function Page({ children }: { children: ReactNode }) {
   const p = usePalette();
-  return <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={styles.content}>{children}</ScrollView>;
+  return <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={styles.content}
+    keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">{children}</ScrollView>;
 }
 
 function Surface({ children }: { children: ReactNode }) {
@@ -443,6 +529,7 @@ const styles = StyleSheet.create({
   surface: { padding: 16, gap: 10 },
   heading: { fontSize: 17, fontWeight: '700' },
   estimate: { fontSize: 27, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  policyLinks: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 18, rowGap: 12, paddingVertical: 6 },
   copy: { fontSize: 14, lineHeight: 21 },
   small: { fontSize: 12, lineHeight: 16 },
   action: { minHeight: 48, minWidth: 48, paddingHorizontal: 10, paddingVertical: 8, justifyContent: 'center',

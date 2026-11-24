@@ -5,7 +5,7 @@ import { fetch } from 'expo/fetch';
 import { admissionHash, deviceProofHTTPError, deviceProofWindow, DeviceProofHTTPError, IssuerUnavailable, getAndroidDeviceProof, submitDeviceProof, type AuthenticatedOperation, type ReceiptOperation } from './androidProof';
 
 type Settings = { entry: string; googleClientID: string; projectNumber: string };
-type Session = { issuer_node_id: string; origin?: string; session_id: string; access_token: string; refresh_token: string; expires_at: number };
+type Session = { issuer_node_id: string; origin?: string; session_id: string; access_token: string; refresh_token: string; expires_at: number; account_id?: string };
 export type CreditLot = { amount: number; expires_at_ms?: number };
 type CreditActivity = { id: string; at_ms: number; operation: { kind: 'grant' | 'spend' | 'reverse' | 'expire'; amount: number; expired_lots?: CreditLot[] } };
 type State = { signedIn: boolean; accountId: string | null; issuerNodeID: string | null; credits: number | null; history: CreditActivity[] | null; lots: CreditLot[] | null; expiredLots: CreditLot[] | null; busy: boolean; message: string };
@@ -30,7 +30,11 @@ function subscribe(notify: () => void) {
 }
 
 export function useAndroidAccount() {
-  return useSyncExternalStore(subscribe, () => state, () => state);
+  return useSyncExternalStore(subscribe, getAndroidAccountSnapshot, getAndroidAccountSnapshot);
+}
+
+export function getAndroidAccountSnapshot() {
+  return state;
 }
 
 function nodeOrigin(value: unknown): string | undefined {
@@ -43,7 +47,11 @@ function nodeOrigin(value: unknown): string | undefined {
   }
 }
 
-function parseSession(value: unknown): Session {
+function verifiedAccountID(value: unknown) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 255 ? value : undefined;
+}
+
+function parseSession(value: unknown, local = false): Session {
   const session = value as Partial<Session> | null;
   if (!session || typeof session.session_id !== 'string' || !session.session_id ||
     typeof session.access_token !== 'string' || !session.access_token ||
@@ -55,22 +63,25 @@ function parseSession(value: unknown): Session {
   if (typeof issuer !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(issuer)) throw new Error('Invalid session issuer');
   const origin = nodeOrigin(session.origin);
   return { issuer_node_id: issuer, origin: origin === settings?.entry ? undefined : origin, session_id: session.session_id, access_token: session.access_token,
-    refresh_token: session.refresh_token, expires_at: session.expires_at };
+    refresh_token: session.refresh_token, expires_at: session.expires_at, account_id: local ? verifiedAccountID(session.account_id) : undefined };
 }
 
 async function setSession(next: Session | null) {
   const sameSession = next !== null && next.session_id === session?.session_id;
-  await device!.saveSession(next ? JSON.stringify(next) : null);
-  session = next;
-  if (!sameSession) publish({ signedIn: Boolean(next), accountId: null, issuerNodeID: next?.issuer_node_id ?? null, ...emptyCredits });
-  else if (state.issuerNodeID !== next?.issuer_node_id) publish({ issuerNodeID: next?.issuer_node_id ?? null });
+  const saved = next && { ...next, account_id: next.account_id ?? (sameSession ? session?.account_id : undefined) };
+  await device!.saveSession(saved ? JSON.stringify(saved) : null);
+  session = saved;
+  const accountId = saved?.account_id ?? null;
+  const issuerNodeID = saved?.issuer_node_id ?? null;
+  if (!sameSession) publish({ signedIn: Boolean(saved), accountId, issuerNodeID, ...emptyCredits });
+  else if (state.issuerNodeID !== issuerNodeID || state.accountId !== accountId) publish({ accountId, issuerNodeID });
 }
 
 async function loadSavedSession() {
   try {
     const saved = await device!.loadSession();
-    session = saved ? parseSession(JSON.parse(saved)) : null;
-    publish({ signedIn: Boolean(session), issuerNodeID: session?.issuer_node_id ?? null });
+    session = saved ? parseSession(JSON.parse(saved), true) : null;
+    publish({ signedIn: Boolean(session), accountId: session?.account_id ?? null, issuerNodeID: session?.issuer_node_id ?? null });
   } catch {
     await setSession(null);
     publish({ message: '保存されていたログイン情報を読み込めませんでした。もう一度ログインしてください。' });
@@ -83,6 +94,10 @@ function restore() {
     throw error;
   });
   return restored;
+}
+
+export async function restoreAndroidAccount() {
+  if (accountAvailable) await restore();
 }
 
 async function assignedNode(current: Session, signal: AbortSignal) {
@@ -184,14 +199,18 @@ async function refresh() {
 }
 
 let accountRequests: Promise<unknown> = Promise.resolve();
-function authenticated(op: AuthenticatedOperation, signal?: AbortSignal) {
+function forCurrentSession<T>(run: () => Promise<T>) {
   const sessionID = session?.session_id;
   const operation = accountRequests.then(() => {
     if (!sessionID || session?.session_id !== sessionID) throw new DeviceProofHTTPError(401, 'login_required');
-    return runAuthenticated(op, signal);
+    return run();
   });
   accountRequests = operation.catch(() => {});
   return operation;
+}
+
+function authenticated(op: AuthenticatedOperation, signal?: AbortSignal) {
+  return forCurrentSession(() => runAuthenticated(op, signal));
 }
 
 async function runAuthenticated(op: AuthenticatedOperation, signal?: AbortSignal) {
@@ -245,11 +264,13 @@ async function loadAccount() {
   await loadCredits();
   if (!session || state.accountId !== null) return;
   try {
-    const response = await authenticated({ method: 'GET', path: '/v1/me' });
-    const result = await response.json() as { subject?: unknown } | null;
-    if (typeof result?.subject === 'string' && result.subject.length > 0 && result.subject.length <= 255) {
-      publish({ accountId: result.subject });
-    }
+    await forCurrentSession(async () => {
+      if (state.accountId !== null) return;
+      const response = await runAuthenticated({ method: 'GET', path: '/v1/me' });
+      const result = await response.json() as { subject?: unknown } | null;
+      const accountId = verifiedAccountID(result?.subject);
+      if (session && accountId) await setSession({ ...session, account_id: accountId });
+    });
   } catch {
     if (!session) publish({ message: 'セッションが切れました。もう一度ログインしてください。' });
   }
@@ -289,12 +310,14 @@ export function signInAndroidAccount() {
 export function signOutAndroidAccount() {
   return run(async () => {
     if (session) {
-      try {
-        await authenticated({ method: 'POST', path: '/auth/logout' });
-      } catch (error) {
-        if (session) throw error;
-      }
-      await setSession(null);
+      await forCurrentSession(async () => {
+        try {
+          await runAuthenticated({ method: 'POST', path: '/auth/logout' });
+        } catch (error) {
+          if (session) throw error;
+        }
+        await setSession(null);
+      });
     }
     try { await device!.clearGoogleState(); } catch { /* The DMM session is already revoked. */ }
   }, 'ログアウトを完了できませんでした。通信を確認して再試行してください。');

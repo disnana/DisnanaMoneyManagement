@@ -306,7 +306,7 @@ func (s *Service) SettleReceipt(ctx context.Context, key JobKey, used int64) (Re
 		if err := s.credits.Settle(ctx, key.Subject, key.RequestID, *staged.FinalCredit); err != nil {
 			return ReceiptJob{}, err
 		}
-		final, err := staged.finishSettlement()
+		final, err := staged.finishSettlement(s.now())
 		if err != nil {
 			return ReceiptJob{}, err
 		}
