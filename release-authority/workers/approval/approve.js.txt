@@ -2,6 +2,9 @@ const main = document.querySelector('main');
 const arm = document.querySelector('#arm');
 const hold = document.querySelector('#hold');
 const reject = document.querySelector('#reject');
+const rejectDialog = document.querySelector('#reject-dialog');
+const cancelReject = document.querySelector('#cancel-reject');
+const confirmReject = document.querySelector('#confirm-reject');
 const progress = document.querySelector('#progress');
 const status = document.querySelector('#status');
 let nonce;
@@ -54,6 +57,7 @@ arm.addEventListener('click', async () => {
   try {
     nonce = (await (await send('arm')).json()).nonce;
     armedAt = performance.now();
+    arm.hidden = true;
     hold.hidden = false;
     progress.hidden = false;
     hold.disabled = true;
@@ -76,7 +80,17 @@ hold.addEventListener('keyup', (event) => { if (event.code === 'Space') cancel()
 for (const name of ['blur', 'pagehide']) window.addEventListener(name, cancel);
 document.addEventListener('visibilitychange', () => { if (document.hidden) cancel(); });
 
-reject.addEventListener('click', async () => {
+reject.addEventListener('click', () => {
+  if (busy) return;
+  cancel();
+  rejectDialog.showModal();
+});
+
+cancelReject.addEventListener('click', () => rejectDialog.close());
+
+confirmReject.addEventListener('click', async () => {
+  if (busy || !rejectDialog.open) return;
+  rejectDialog.close();
   cancel();
   busy = true;
   arm.disabled = true;
