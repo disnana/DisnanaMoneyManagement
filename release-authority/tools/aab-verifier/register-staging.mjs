@@ -46,7 +46,11 @@ export async function registerStagingManifest(wire, env, request = fetch) {
     redirect: 'error',
     signal: AbortSignal.timeout(15_000),
   });
-  if (!result.ok) throw new Error(`Staging registration returned HTTP ${result.status}`);
+  if (!result.ok) {
+    const ray = result.headers.get('cf-ray') ?? '';
+    const reference = /^[a-f0-9]{12,32}-[A-Z]{3,5}$/.test(ray) ? ` (CF-Ray ${ray})` : '';
+    throw new Error(`Staging registration returned HTTP ${result.status}${reference}`);
+  }
   const { releaseHash } = await result.json();
   if (releaseHash !== await sha256Hex(wire)) throw new Error('Signer returned a different release manifest hash');
   return { releaseHash, approvalUrl: stagingApproval + manifest.releaseId };

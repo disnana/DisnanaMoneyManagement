@@ -102,8 +102,11 @@ jobs:
         env:
           RELEASE_VERIFIER_SECRET: ${{ secrets.RELEASE_VERIFIER_SECRET }}
         run: |
-          node release-authority/tools/aab-verifier/register-staging.mjs "$RUNNER_TEMP/mane-authority/manifest.json" |
-            jq -r '"[承認画面](\(.approvalUrl))\n\nManifest SHA-256 `\(.releaseHash)`"' >> "$GITHUB_STEP_SUMMARY"
+          registration=$(node release-authority/tools/aab-verifier/register-staging.mjs "$RUNNER_TEMP/mane-authority/manifest.json")
+          jq -er '
+            select(.approvalUrl | type == "string" and startswith("https://release-stg.disnana.com/approve/")) |
+            "[承認画面](\(.approvalUrl))\n\nManifest SHA-256 `\(.releaseHash)`"
+          ' <<< "$registration" >> "$GITHUB_STEP_SUMMARY"
 
   finalize:
     if: inputs.operation == 'finalize' && github.repository == 'disnana/DisnanaMoneyManagement' && github.ref == 'refs/heads/main'
