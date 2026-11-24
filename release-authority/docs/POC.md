@@ -55,3 +55,9 @@ cp release-authority/packages/protocol/{ledger,manifest}.mjs "$scratch/"
 # 別の端末で実行し、stateがSIGNED、auditCountが5になることを確認
 curl -fsS -X POST http://127.0.0.1:45918/test-ledger
 ```
+
+## GatewayとSignerの結合試験
+
+`WORKERD=/path/to/workerd release-authority/tests/run-two-worker-smoke.sh` で、Gateway・Private Signer・SQLite DOを同じローカルworkerdで接続しました。試験用のOIDC発行元と鍵を用い、署名前の承認、SignerのRSA署名、Play登録の予約、P-256署名付き受領証の検証まで通しました。検証用の認可を他の経路に持ち込む要求、早すぎる承認、承認の再使用、署名入力の不一致、受領証公開鍵の不一致、二重登録は拒否されました。同じ署名の取得と登録結果の再通知が、署名や監査記録を増やさないことも確認しました。
+
+SQLiteには申請から登録結果まで8件の監査イベントが残りました。Wrangler 4.167.0による両Workerのdry runも成功しました。Playの登録結果は試験データです。Cloudflare上のAccess・GitHubのOIDC・GoogleのWIFとPlay APIを実際に接続した結果は未確認です。
