@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """One-off v6 Android Publisher API check. Run from the app repository."""
+import argparse
 import hashlib
 import os
 import sys
@@ -53,7 +54,27 @@ def other_tracks(snapshot):
     return {name: track for name, track in snapshot.items() if name != TRACK}
 
 
-def verify_saved(before, review_before, previous_releases):
+def same_releases(actual, expected):
+    return len(actual) == len(expected) and all(release in actual for release in expected)
+
+
+def plan_draft(previous, reuse_empty_draft):
+    drafts = [release for release in previous if release.get("status") == "draft"]
+    if reuse_empty_draft:
+        require(len(previous) == 2 and len(drafts) == 1 and drafts[0].get("versionCodes", []) == []
+                and any(release.get("status") == "completed" and release.get("versionCodes") == ["5"]
+                        for release in previous),
+                "Expected exactly the confirmed empty draft and completed v5. No bundle was uploaded.")
+        empty_draft = drafts[0]
+        return [dict(release, versionCodes=[str(VERSION)]) if release is empty_draft else release
+                for release in previous]
+
+    require(all(release.get("status") == "completed" for release in previous),
+            "The internal track has a draft or an unfinished rollout.")
+    return [*previous, DRAFT]
+
+
+def verify_saved(before, review_before, expected_releases):
     edit = new_edit()
     try:
         require(matching_bundle(edit), "The committed bundle is missing from a fresh edit.")
@@ -63,7 +84,7 @@ def verify_saved(before, review_before, previous_releases):
                 "The release lifecycle changed on another track. Inspect Play Console.")
         releases = after.get(TRACK, {}).get("releases", [])
         require(any(is_v6_draft(release) for release in releases), "v6 is not an internal draft in the fresh edit.")
-        require(all(prior in releases for prior in previous_releases), "An existing internal release changed.")
+        require(same_releases(releases, expected_releases), "An internal release changed unexpectedly.")
         summaries = lifecycle(TRACK)
         require(any(
             entry.get("releaseLifecycleState") == DRAFT_STATE
@@ -75,7 +96,7 @@ def verify_saved(before, review_before, previous_releases):
         discard_edit(edit)
 
 
-def publish(bundle):
+def publish(bundle, *, reuse_empty_draft=False):
     with bundle.open("rb") as stream:
         require(hashlib.file_digest(stream, "sha256").hexdigest() == SHA256, "The file differs from the verified signed v6.")
     edit = new_edit()
@@ -93,27 +114,24 @@ def publish(bundle):
             require(not any(entry.get("releaseLifecycleState") in PENDING_REVIEW for entry in entries),
                     f"Existing releases await or are undergoing review on {track}.")
         already_draft = any(is_v6_draft(release) for release in previous)
+        expected = previous
         stored = matching_bundle(edit)
         if already_draft:
             require(stored, "An existing v6 draft has no matching signed bundle.")
         else:
-            require(all(release.get("status") == "completed" for release in previous),
-                    "The internal track has a draft or an unfinished rollout.")
+            expected = plan_draft(previous, reuse_empty_draft)
             require(all(str(VERSION) not in release.get("versionCodes", []) for release in previous),
                     "v6 is already assigned to an internal release in a different state.")
             if not stored:
                 upload_bundle(bundle, VERSION, edit, expected_sha256=SHA256)
-            update = {"track": TRACK, "releases": [*previous, DRAFT]}
+            update = {"track": TRACK, "releases": expected}
             response = publisher_request("PUT", f"{edit}/tracks/{TRACK}", update)
-            require(response.get("track") == TRACK and any(is_v6_draft(r) for r in response.get("releases", []))
-                    and all(prior in response.get("releases", []) for prior in previous),
+            require(response.get("track") == TRACK and same_releases(response.get("releases", []), expected),
                     "Play did not return the intended internal draft and existing releases.")
             staged = tracks(edit)
             require(other_tracks(staged) == other_tracks(before), "Another track changed inside the edit.")
             staged_releases = staged.get(TRACK, {}).get("releases", [])
-            require(len(staged_releases) == len(previous) + 1
-                    and all(prior in staged_releases for prior in previous)
-                    and any(is_v6_draft(release) for release in staged_releases),
+            require(same_releases(staged_releases, expected),
                     "The draft would alter an existing internal release.")
             publisher_request("POST", f"{edit}:validate")
             commit_attempted = True
@@ -121,15 +139,17 @@ def publish(bundle):
     finally:
         if not commit_attempted:
             discard_edit(edit)
-    verify_saved(before, review_before, [release for release in previous if not is_v6_draft(release)])
+    verify_saved(before, review_before, expected)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        sys.exit("Usage: PLAY_ACCESS_TOKEN=<from your authenticated session> python3 play-v6-internal-draft.py mane-chan-signed.aab")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("bundle", type=Path)
+    parser.add_argument("--reuse-empty-draft", action="store_true")
+    args = parser.parse_args()
     if not os.environ.get("PLAY_ACCESS_TOKEN"):
         sys.exit("Play API authentication is missing. Supply a short-lived OAuth token locally.")
     try:
-        publish(Path(sys.argv[1]))
+        publish(args.bundle, reuse_empty_draft=args.reuse_empty_draft)
     except (PlayError, OSError, KeyError, ValueError) as error:
         sys.exit(f"Stopped: {error}")
