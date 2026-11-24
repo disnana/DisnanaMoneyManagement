@@ -81,11 +81,11 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
   {
     "callerRef": "disnana/DisnanaMoneyManagement/.github/workflows/release-authority.yml@refs/heads/main",
     "reusableWorkflow": "disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml",
-    "reusableSha": "d4eac0c42a98a93aa772474a50f7b8df2ca55898"
+    "reusableSha": "1ef32344ca7c0b475e224ec8682471ed0d1fb152"
   }
   ```
 
-- Google WIFの既存条件から `assertion.workflow_sha == '旧mainのSHA'` を除き、`assertion.job_workflow_sha == 'd4eac0c42a98a93aa772474a50f7b8df2ca55898'` と `assertion.job_workflow_ref == 'disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@d4eac0c42a98a93aa772474a50f7b8df2ca55898'` を加えます。その他の条件は維持します。
+- Google WIFの既存条件から `assertion.workflow_sha == '旧mainのSHA'` を除き、`assertion.job_workflow_sha == '1ef32344ca7c0b475e224ec8682471ed0d1fb152'` と `assertion.job_workflow_ref == 'disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@1ef32344ca7c0b475e224ec8682471ed0d1fb152'` を加えます。その他の条件は維持します。
 - v6で履歴上のAABを使うために設定した GitHubの `RELEASE_SOURCE_SHA` とSignerの `RELEASE_POLICY.sourceCommitSha` を取り除きます。以後はAABのソースを検証・署名・登録を行う `main` のコミットと照合します。
 - Release Authorityのツールを更新した場合は、新しい固定コミットを入口と両方の認証ポリシーに反映します。通常のアプリ変更ではこの更新は不要です。申請後に別のコミットが `main` に入った場合は、現在のコミットの監査付きAABで申請し直してください。
 
