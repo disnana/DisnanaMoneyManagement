@@ -15,6 +15,7 @@ from zipfile import BadZipFile, ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 ANDROID = "{http://schemas.android.com/apk/res/android}"
 SIGNING_ENTRIES = {"META-INF/MANIFEST.MF", "META-INF/MANE.SF", "META-INF/MANE.RSA"}
+REANIMATED_KOTLIN_MODULE = "base/root/META-INF/DMM:react-native-reanimated_release.kotlin_module"
 MAX_ENTRIES = 10_000
 MAX_ARCHIVE = 256 * 1024**2
 MAX_ENTRY = 256 * 1024**2
@@ -60,7 +61,9 @@ def inspect_zip(path, *, signed=False):
                 or name.endswith("//")
                 or any(part in {"", ".", ".."} for part in parts)
                 or any(unicodedata.category(character).startswith("C") for character in name)
-                or "\\" in name or ":" in name or folded in names
+                or "\\" in name or folded in names
+                or (":" in name and name != REANIMATED_KOTLIN_MODULE)
+                or (name == REANIMATED_KOTLIN_MODULE and mode == stat.S_IFDIR)
                 or mode not in {0, stat.S_IFREG, stat.S_IFDIR}
                 or entry.flag_bits & 1 or entry.compress_type not in {ZIP_STORED, ZIP_DEFLATED}
             ):
