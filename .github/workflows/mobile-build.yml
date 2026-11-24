@@ -24,6 +24,8 @@ jobs:
     name: Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      ANDROID_PREVIEW_ABI: ${{ github.event_name == 'pull_request' && 'arm64-v8a' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,11 +46,38 @@ jobs:
         run: bunx expo prebuild --platform android --no-install
       - name: Build release APK (debug-signed; for sideloading/testing)
         working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          args=(assembleRelease --no-daemon)
+          if [[ -n "$ANDROID_PREVIEW_ABI" ]]; then
+            args+=("-PreactNativeArchitectures=$ANDROID_PREVIEW_ABI")
+          fi
+          time -p ./gradlew "${args[@]}"
+      - name: Verify preview APK architecture
+        if: env.ANDROID_PREVIEW_ABI != ''
+        working-directory: apps/mobile/android
+        run: |
+          python3 - "$ANDROID_PREVIEW_ABI" <<'PY'
+          from pathlib import Path
+          import sys
+          from zipfile import ZipFile
+
+          expected = {sys.argv[1]}
+          apks = sorted(Path('app/build/outputs/apk/release').glob('*.apk'))
+          if not apks:
+              raise SystemExit('No preview APK found')
+          for apk in apks:
+              with ZipFile(apk) as archive:
+                  actual = {path.split('/', 2)[1] for path in archive.namelist()
+                            if path.startswith('lib/') and path.count('/') >= 2 and path.endswith('.so')}
+              if actual != expected:
+                  raise SystemExit(f'{apk.name}: expected {sorted(expected)}, found {sorted(actual)}')
+              print(f'{apk.name}: {next(iter(expected))}')
+          PY
       - uses: actions/upload-artifact@v4
         with:
-          name: DMM-android-apk
+          name: ${{ env.ANDROID_PREVIEW_ABI != '' && format('DMM-android-apk-{0}', env.ANDROID_PREVIEW_ABI) || 'DMM-android-apk' }}
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
           retention-days: 30
 
   ios:
