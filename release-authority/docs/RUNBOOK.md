@@ -57,14 +57,25 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - GitHubのリポジトリ変数 `RELEASE_AUTO_VERIFY=true` で、`main` の監査付きAABビルドが成功したときにVerifierを起動します。ActionsのサマリーにCloudflare承認画面のリンクが出ます。手動での `verify` と `finalize` も利用できます。
 - 署名・AAB登録の認可、承認期限、再取得時のハッシュ確認、署名・アップロード予約は引き続き使います。`dispatch_failed` や `dispatch_unknown` が残ったら、対象のVerifier run IDでActionsの起動履歴を確認してください。起動がなかったことを確認してから、期限内に手動で再開できます。
 
+### アプリの更新と独立した認証ピン
+
+通常リリースでは `main` の入口から、固定コミットの [Release Authority jobs](../../.github/workflows/release-authority-jobs.yml) を呼び出します。ジョブ自身も GitHub の `job.workflow_sha` でツールを取得します。入口のコミットの変化だけでは、署名ツールや認証条件は変わりません。
+
+この切り替えは旧構成の承認・署名・登録を完了してから行います。この変更をマージするときは、固定コミットを履歴に残すためマージコミットを使用してください。
+
+- Signerの `VERIFIER_POLICY`、`FINALIZER_POLICY`、`PUBLISHER_POLICY` から `callerSha` を除き、`reusableSha` を `e8c8630323069b0d627eccd5bc85db4f39a1c54e`、`reusableRef` を `disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@e8c8630323069b0d627eccd5bc85db4f39a1c54e` に設定します。`callerRef`、リポジトリID、環境、audienceとSecretの条件は維持します。
+- Google WIFの既存条件から `assertion.workflow_sha == '旧mainのSHA'` を除き、`assertion.job_workflow_sha == 'e8c8630323069b0d627eccd5bc85db4f39a1c54e'` と `assertion.job_workflow_ref == 'disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@e8c8630323069b0d627eccd5bc85db4f39a1c54e'` を加えます。その他の条件は維持します。
+- v6で履歴上のAABを使うために設定した GitHubの `RELEASE_SOURCE_SHA` とSignerの `RELEASE_POLICY.sourceCommitSha` を取り除きます。以後はAABのソースを検証・署名・登録を行う `main` のコミットと照合します。
+- Release Authorityのツールを更新した場合は、新しい固定コミットを入口と両方の認証ポリシーに反映します。通常のアプリ変更ではこの更新は不要です。申請後に別のコミットが `main` に入った場合は、現在のコミットの監査付きAABで申請し直してください。
+
 ### 既存GitHubリポジトリで実行する順番
 
-- GitHub上の配置先は既存の `disnana/DisnanaMoneyManagement` です。この構成では独立したGitHub-hostedジョブを持つ `.github/workflows/release-authority.yml` を使います。Cloudflare側のVerifierとFinalizerポリシーに同じ `callerRef` と完全な `callerSha` を設定し、それぞれ個別のenvironment・audience・Secretを使います。署名鍵とWorkerの更新権限はCloudflareに残します。
+- GitHub上の配置先は既存の `disnana/DisnanaMoneyManagement` です。この構成では独立したGitHub-hostedジョブを持つ `.github/workflows/release-authority.yml` を使います。Cloudflare側のVerifierとFinalizerポリシーで入口の `callerRef` と上記の再利用ワークフローを固定し、それぞれ個別のenvironment・audience・Secretを使います。署名鍵とWorkerの更新権限はCloudflareに残します。
 - `Release Authority Gradle baseline` は依存のチェックサムとロック候補を作ります。来歴と差分をレビューしたファイルを `apps/mobile/release-verification/{verification-metadata.xml,gradle.lockfile}` に反映してください。証明書や認証情報は含めません。候補を自動で受け入れる処理はありません。
 - 既存の `Android Play closed-test draft` を `release_authority_checks=true`、`upload_to_play=false` で実行します。Gradleの固定配布物、依存検証・ロック、Gradle依存監査、Bun監査、テストを通った場合にのみ、AABと品質証跡を保存して来歴を発行します。
 - `Release Authority AAB` を `operation=verify` で実行し、上のBuild run IDを渡します。Actions要約のリンクをiPhoneで開いてハッシュを照合し、Cloudflare側で承認します。
 - 同じワークフローを `operation=finalize` で実行します。Build run IDと先ほどのVerifier run IDを渡すと、AABを再取得して署名・検証まで進みます。Play権限と実アップロード証明書を確認した運用時にだけ `upload_to_play=true` を使います。初期運用のFinalizer起動は手動で、承認待ちのrunnerや定期ポーリングはありません。
-- Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、`workflow_ref`、`workflow_sha`、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
+- Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、入口の `workflow_ref`、再利用ワークフローのrefとSHA、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
 - 同じjobが `RELEASE_PUBLISHER_SECRET` と専用audience `urn:disnana:release-authority:staging:publisher` でSigner台帳に登録開始と確定結果を記録します。Playの認証や応答を受け取れるのはこのjobです。
 - Playへ送る前に、受領証の公開鍵と鍵IDの一致をSignerで確認します。登録後、Signerが台帳の結果にES256で署名し、Actionsが検証した受領証を成果物 `Mane-chan-Play-upload-receipt` に保存します。
 - GitHubの変数は `RELEASE_VERSION_NAME`、`RELEASE_VERSION_CODE`、`RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
