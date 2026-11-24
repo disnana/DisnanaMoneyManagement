@@ -1,4 +1,4 @@
-import { manifestWire, randomId, readManifest, sha256Hex } from './manifest.mjs';
+import { internalDraftTrack, isAutomatedPlayRelease, manifestWire, randomId, readManifest, sha256Hex } from './manifest.mjs';
 
 const minute = 60_000;
 const zeroHash = '0'.repeat(64);
@@ -74,7 +74,7 @@ export class ReleaseLedger {
   checkPolicy(manifest, now) {
     const p = this.policy;
     requireRule(
-      !p.disabled() && !trackBlacklist.has(p.track.toLowerCase()) && manifest.targetTrack === p.track
+      !p.disabled() && (manifest.releaseStatus === 'internal-draft' ? p.track === internalDraftTrack : !trackBlacklist.has(p.track.toLowerCase())) && manifest.targetTrack === p.track
       && manifest.releaseStatus === (p.releaseStatus ?? 'draft')
       && (!p.sourceCommitSha || manifest.commitSha === p.sourceCommitSha)
       && manifest.appId === p.appId && manifest.packageName === p.packageName
@@ -185,7 +185,7 @@ export class ReleaseLedger {
       this.checkPolicy(record.manifest, now);
       requireRule(now >= record.armedAt + 8000 && now < record.armedAt + minute, 'Approval timing outside policy');
       const { approvalNonce: discarded, ...approved } = record;
-      const dispatch = this.policy.autoDispatch?.() && approved.manifest.releaseStatus === 'upload-only' ? 'QUEUED' : undefined;
+      const dispatch = this.policy.autoDispatch?.() && isAutomatedPlayRelease(approved.manifest) ? 'QUEUED' : undefined;
       return {
         record: { ...approved, state: 'APPROVED', approvedAt: now, dispatch },
         event: { type: 'approved', administrator },
@@ -286,7 +286,7 @@ export class ReleaseLedger {
   recordPlayUpload(releaseId, report, publisher) {
     return this.mutate(releaseId, (record, now) => {
       requireRule(record?.hash === report.releaseHash && record.signatureHash === report.signatureHash
-        && record.manifest.versionCode === report.versionCode && record.manifest.releaseStatus === 'upload-only',
+        && record.manifest.versionCode === report.versionCode && isAutomatedPlayRelease(record.manifest),
       'Upload evidence does not match the signed release');
       requireRule(publisher.role === 'publisher' && publisher.repositoryId === record.manifest.repositoryId
         && publisher.runId === record.finalizerRunId && publisher.runAttempt === record.finalizerRunAttempt

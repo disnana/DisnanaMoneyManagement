@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createPublicKey } from 'node:crypto';
 import { importSPKI } from 'jose';
-import { readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
+import { isAutomatedPlayRelease, readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
 import { verifyUploadReceipt } from '../../packages/protocol/receipt.mjs';
 import { getStagingCiCredentials } from '../aab-verifier/register-staging.mjs';
 
@@ -14,7 +14,7 @@ try {
   }
   const wire = await readFile(manifestPath, 'utf8');
   const manifest = readManifest(wire);
-  if (process.env.GITHUB_ACTIONS !== 'true' || manifest.releaseStatus !== 'upload-only'
+  if (process.env.GITHUB_ACTIONS !== 'true' || !isAutomatedPlayRelease(manifest)
     || process.env.GITHUB_REPOSITORY_ID !== manifest.repositoryId
     || (process.env.RELEASE_SOURCE_SHA ?? process.env.GITHUB_SHA) !== manifest.commitSha) {
     throw new Error('Manifest does not match this publisher');

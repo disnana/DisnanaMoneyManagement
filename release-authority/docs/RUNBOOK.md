@@ -40,6 +40,16 @@
 - アップロード鍵の変更時はPlayの正式な鍵リセットで新しい公開証明書を登録。鍵ID・証明書指紋・ポリシー版を更新し、旧版の要求を作り直す。receipt鍵とCI Secretは独立に更新し、どの鍵で署名したかを監査する。
 - 監査の外部バックアップには署名付きチェックポイントを使う。JWTやCookie、秘密鍵は保存対象に含めない。
 
+## 署名済みAABを内部テストの下書きとして保存
+
+マネーちゃん v6 では、Play API が内部テストを `internal` と返し、下書きとして保存した署名済みAABがApp Bundle Explorerに表示されました。この自動化では承認後に同じトラックへ保存し、クローズドテストへの割り当て、配布、審査提出はPlay Consoleで行います。
+
+- Signerの `RELEASE_POLICY` に `"track": "internal"` と `"releaseStatus": "internal-draft"` を設定します。GitHubのリポジトリ変数にも `RELEASE_TARGET_TRACK=internal`、`RELEASE_STATUS=internal-draft` を設定します。承認画面に保存先を表示し、署名済みマニフェストと登録受領証にも保存先を記録します。
+- 新しいジョブの固定コミットは Signer と Google WIF に一度反映します。アプリ更新だけで認証ピンを更新する必要はありません。通常リリースではバージョンを監査付きのビルド証跡から取得するので、`RELEASE_VERSION_NAME` と `RELEASE_VERSION_CODE` は省略できます。旧バージョンを固定するために設定した場合は、新しいリリースの前に解除してください。
+- AAB未割り当ての下書きがある場合は、名前とリリースノートを保持してAABを追加します。別バージョン入りの下書き、配布途中の内部リリース、確認可能な審査待ち・審査中の変更があれば停止します。同じ版とハッシュが登録済みなら再アップロードしません。
+- Playのコミットは `changesInReviewBehavior=ERROR_IF_IN_REVIEW` を指定します。Play Consoleに別の審査送信待ち変更がある場合、自動送信される可能性があります。APIで確認できないストア掲載情報などは承認前に「公開の概要」で確認してください。
+- コミット後の別Editで、バージョンコードとSHA-256、下書き、既存トラックを照合します。コミットが未確認の場合や事後照合に失敗した場合は、Play Consoleの現状を確認してから次の操作を判断します。
+
 ## PlayへのAAB登録のみ
 
 新しいデプロイで有効化するときは、Signerの `RELEASE_POLICY` に `"releaseStatus": "upload-only"` を追加します。既存の `track` は承認時に確認する予定トラックです。Playへ割り当てるAPI呼び出しはありません。
@@ -54,6 +64,7 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 
 - GitHub Appを専用で作り、`disnana/DisnanaMoneyManagement` のみにインストールします。リポジトリ権限はActionsの読み取りと書き込みです。Appの鍵をPKCS#8 PEMに変換し、[Dispatcher Worker](../wrangler.dispatcher.example.toml) の `GITHUB_APP_PKCS8_PEM` にSecretとして登録します。`GITHUB_APP_ID` と `GITHUB_APP_INSTALLATION_ID` は対応する数値IDです。Dispatcherに外部ルートを付ける必要はありません。
 - Signerに `GITHUB_DISPATCHER` Service Bindingを接続し、検証が済んだ運用環境で `RELEASE_AUTO_DISPATCH=true` にします。Signerが承認と同時に台帳へ起動待ちを記録し、DOアラームからDispatcherを呼びます。Dispatcherは対象リポジトリの短命installation tokenでVerifierの成功とSHAを確認し、固定ワークフローの `finalize` を起動します。GitHubの書き込み権限はDispatcherに、Android署名鍵はSignerに置きます。
+- GitHubのリポジトリ変数 `RELEASE_AUTO_BUILD=true` で、`main` に入った `apps/mobile/app.json` のAndroid `versionCode` が上がったときに監査付きビルドを開始します。下の自動検証とSignerの自動起動を有効にすると、ライブラリ登録までの手動操作はCloudflareの承認です。
 - GitHubのリポジトリ変数 `RELEASE_AUTO_VERIFY=true` で、`main` の監査付きAABビルドが成功したときにVerifierを起動します。ActionsのサマリーにCloudflare承認画面のリンクが出ます。手動での `verify` と `finalize` も利用できます。
 - 署名・AAB登録の認可、承認期限、再取得時のハッシュ確認、署名・アップロード予約は引き続き使います。`dispatch_failed` や `dispatch_unknown` が残ったら、対象のVerifier run IDでActionsの起動履歴を確認してください。起動がなかったことを確認してから、期限内に手動で再開できます。
 - Dispatcherのログ `release_dispatch_failed` にある `stage` と `githubStatus` で、Appの認証、Verifier実行の確認、起動APIのどこで止まったかを確認できます。ログにトークンや秘密鍵、GitHubから受け取った本文は含まれません。

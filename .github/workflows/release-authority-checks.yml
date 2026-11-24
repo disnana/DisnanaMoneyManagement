@@ -4,6 +4,11 @@ on:
     paths:
       - release-authority/**
       - .github/workflows/release-authority-checks.yml
+      - .github/workflows/release-authority-jobs.yml
+      - .github/workflows/release-authority.yml
+      - .github/workflows/android-play-draft.yml
+      - scripts/android_play_draft.py
+      - scripts/test_android_play_draft.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,3 +34,4 @@ jobs:
       - run: bun audit
       - run: node --test --test-isolation=none tests/*.test.mjs
       - run: python3 -B -m unittest discover -s tests -p 'test_*.py'
+      - run: python3 -B -m unittest discover -s ../scripts -p test_android_play_draft.py

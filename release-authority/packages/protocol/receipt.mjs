@@ -1,5 +1,5 @@
 import { CompactSign, compactVerify } from 'jose';
-import { manifestWire, sha256Hex } from './manifest.mjs';
+import { isAutomatedPlayRelease, manifestWire, sha256Hex } from './manifest.mjs';
 
 const receiptType = 'disnana-release-receipt+jws';
 const encoder = new TextEncoder();
@@ -52,7 +52,7 @@ export async function verifyDraftReceipt(jws, { issuer, keyId, publicKey, releas
 
 export async function issueUploadReceipt(record, { issuer, keyId, receiptKey }) {
   const { manifest, hash, signatureHash, signedAabSha256, approvedAt, uploadedAt, uploadResult } = record;
-  requireReceipt(record.state === 'UPLOADED' && manifest.releaseStatus === 'upload-only'
+  requireReceipt(record.state === 'UPLOADED' && isAutomatedPlayRelease(manifest)
     && ['stored', 'already_present'].includes(uploadResult)
     && await sha256Hex(manifestWire(manifest)) === hash
     && isHash(signatureHash) && isHash(signedAabSha256) && isId(record.finalizerRunId)
@@ -67,6 +67,7 @@ export async function issueUploadReceipt(record, { issuer, keyId, receiptKey }) 
     signingInputSha256: manifest.signingInputSha256, artifactProofSha256: manifest.artifactProofSha256,
     uploadCertificateSha256: manifest.uploadCertificateSha256, packageName: manifest.packageName,
     versionCode: manifest.versionCode, status: uploadResult,
+    ...(manifest.releaseStatus === 'internal-draft' ? { targetTrack: manifest.targetTrack, releaseStatus: 'draft' } : {}),
   };
   return new CompactSign(encoder.encode(JSON.stringify(receipt)))
     .setProtectedHeader({ alg: 'ES256', typ: receiptType, kid: keyId })
@@ -87,6 +88,8 @@ export async function verifyUploadReceipt(jws, { keyId, publicKey, manifest, rep
     && body.artifactProofSha256 === manifest.artifactProofSha256
     && body.uploadCertificateSha256 === manifest.uploadCertificateSha256
     && body.packageName === manifest.packageName && body.versionCode === manifest.versionCode
-    && body.status === report.result);
+    && body.status === report.result
+    && (manifest.releaseStatus !== 'internal-draft'
+      || (isAutomatedPlayRelease(manifest) && body.targetTrack === manifest.targetTrack && body.releaseStatus === 'draft')));
   return Object.freeze(body);
 }

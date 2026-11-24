@@ -1,5 +1,5 @@
 import { open } from 'node:fs/promises';
-import { readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
+import { isAutomatedPlayRelease, readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
 
 const stagingApi = 'https://release-api-stg.disnana.com/v1/releases';
 const stagingApproval = 'https://release-stg.disnana.com/approve/';
@@ -30,7 +30,7 @@ export async function getStagingCiCredentials(env, role, request) {
 
 export async function registerStagingManifest(wire, env, request = fetch) {
   const manifest = readManifest(wire);
-  if (manifest.releaseStatus !== 'upload-only') throw new Error('Expected a bundle-only release');
+  if (!isAutomatedPlayRelease(manifest)) throw new Error('Expected a bundle-only or internal draft release');
   if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_REPOSITORY_ID !== manifest.repositoryId
     || env.GITHUB_RUN_ID !== manifest.verifierRunId || (env.RELEASE_SOURCE_SHA ?? env.GITHUB_SHA) !== manifest.commitSha) {
     throw new Error('Manifest does not match this GitHub Actions run');

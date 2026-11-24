@@ -9,6 +9,13 @@ const integer = (min, max) => (value) => Number.isSafeInteger(value) && value >=
 const equals = (expected) => (value) => value === expected;
 const time = (value) => match(utc)(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 
+export const internalDraftTrack = 'internal';
+
+export function isAutomatedPlayRelease(manifest) {
+  return manifest.releaseStatus === 'upload-only'
+    || (manifest.releaseStatus === 'internal-draft' && manifest.targetTrack === internalDraftTrack);
+}
+
 const fields = {
   schema: equals('disnana.release-manifest.v1'),
   releaseId: match(random), nonce: match(random),
@@ -22,7 +29,7 @@ const fields = {
   buildProofSha256: match(sha256), artifactProofSha256: match(sha256),
   auditReportSha256: match(sha256), sbomSha256: match(sha256),
   algorithm: equals('SHA256withRSA'), keyId: match(name), uploadCertificateSha256: match(sha256),
-  targetTrack: match(name), releaseStatus: (value) => value === 'draft' || value === 'upload-only',
+  targetTrack: match(name), releaseStatus: (value) => ['draft', 'upload-only', 'internal-draft'].includes(value),
   policyVersion: integer(1, 1_000_000),
   issuedAt: time, expiresAt: time,
 };
@@ -33,6 +40,9 @@ const encoder = new TextEncoder();
 export function manifestWire(value) {
   if (!value || Object.getPrototypeOf(value) !== Object.prototype || Object.keys(value).length !== keys.length) {
     throw new TypeError('Invalid release manifest');
+  }
+  if (value.releaseStatus === 'internal-draft' && value.targetTrack !== internalDraftTrack) {
+    throw new TypeError('Internal drafts require the verified Play internal track');
   }
   const ordered = {};
   for (const key of keys) {

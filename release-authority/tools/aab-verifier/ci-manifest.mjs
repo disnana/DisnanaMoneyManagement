@@ -31,7 +31,10 @@ requireValue(
   quality.schema === 'disnana.release-quality.v1' && quality.commitSha === build.sourceCommitSha
     && quality.unsignedAabSha256 === digest && quality.auditReportSha256 === await sha256Hex(audit)
     && quality.sbomSha256 === await sha256Hex(sbom) && quality.packageName === 'com.disnana.mane_chan'
-    && quality.versionName === process.env.RELEASE_VERSION_NAME && quality.versionCode === Number(process.env.RELEASE_VERSION_CODE),
+    && typeof quality.versionName === 'string' && /^[A-Za-z0-9._-]{1,80}$/.test(quality.versionName)
+    && Number.isSafeInteger(quality.versionCode) && quality.versionCode >= 1 && quality.versionCode <= 2_100_000_000
+    && (!process.env.RELEASE_VERSION_NAME || quality.versionName === process.env.RELEASE_VERSION_NAME)
+    && (!process.env.RELEASE_VERSION_CODE || quality.versionCode === Number(process.env.RELEASE_VERSION_CODE)),
   'Quality evidence does not match the target AAB',
 );
 const checks = JSON.parse(audit);
@@ -62,7 +65,8 @@ if (process.argv[2] === 'validate') {
     auditReportSha256: quality.auditReportSha256, sbomSha256: quality.sbomSha256,
     algorithm: 'SHA256withRSA', keyId: process.env.RELEASE_UPLOAD_KEY_ID,
     uploadCertificateSha256: process.env.RELEASE_UPLOAD_CERTIFICATE_SHA256,
-    targetTrack: process.env.RELEASE_TARGET_TRACK, releaseStatus: 'upload-only', policyVersion: Number(process.env.RELEASE_POLICY_VERSION),
+    targetTrack: process.env.RELEASE_TARGET_TRACK, releaseStatus: process.env.RELEASE_STATUS || 'upload-only',
+    policyVersion: Number(process.env.RELEASE_POLICY_VERSION),
   };
   if (process.argv[2] === 'create') {
     const issuedAt = new Date(process.env.RELEASE_ISSUED_AT);
