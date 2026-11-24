@@ -14,8 +14,11 @@ function response(body, status, type = 'text/plain; charset=utf-8') {
 }
 
 function approvalPage({ manifest: m, hash }) {
-  const operation = m.releaseStatus === 'upload-only' ? 'Google PlayにAABを登録' : 'クローズドテストの下書きを作成';
-  const track = m.releaseStatus === 'upload-only' ? `予定トラック ${m.targetTrack} · 割り当ては手動` : `トラック ${m.targetTrack}`;
+  const internalDraft = m.releaseStatus === 'internal-draft';
+  const operation = internalDraft ? '内部テストの下書きとしてGoogle Playに保存'
+    : m.releaseStatus === 'upload-only' ? 'Google PlayにAABを登録' : 'クローズドテストの下書きを作成';
+  const track = internalDraft ? '配布はPlay Consoleから手動で開始'
+    : m.releaseStatus === 'upload-only' ? `予定トラック ${m.targetTrack} · 割り当ては手動` : `トラック ${m.targetTrack}`;
   const expires = Number.isFinite(Date.parse(m.expiresAt)) ? new Intl.DateTimeFormat('ja-JP', {
     dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Tokyo',
   }).format(new Date(m.expiresAt)) + '（日本時間）' : '—';
@@ -41,6 +44,7 @@ function approvalPage({ manifest: m, hash }) {
   <p class="version">${escape(m.versionName)} <span>バージョンコード ${escape(m.versionCode)}</span></p>
   <h2>${escape(operation)}</h2>
   <p class="track">${escape(track)}</p>
+  ${internalDraft ? '<p>AAB未割り当ての下書きがあれば使用します。Play Consoleに審査送信待ちの変更がある場合、保存時に送信される可能性があります。</p>' : ''}
   <div class="verification">
     <div><p>確認コード</p><strong class="code">${escape(code)}</strong></div>
     <p class="deadline">承認期限<br><time datetime="${escape(m.expiresAt)}">${escape(expires)}</time></p>

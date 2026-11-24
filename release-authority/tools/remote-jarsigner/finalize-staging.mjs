@@ -1,10 +1,10 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
+import { isAutomatedPlayRelease, readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
 import { getStagingCiCredentials } from '../aab-verifier/register-staging.mjs';
 
 export async function requestStagingSignature(wire, input, env, request = fetch) {
   const manifest = readManifest(wire);
-  if (manifest.releaseStatus !== 'upload-only' || env.GITHUB_ACTIONS !== 'true'
+  if (!isAutomatedPlayRelease(manifest) || env.GITHUB_ACTIONS !== 'true'
     || env.GITHUB_REPOSITORY_ID !== manifest.repositoryId || (env.RELEASE_SOURCE_SHA ?? env.GITHUB_SHA) !== manifest.commitSha
     || !/^[1-9][0-9]{0,19}$/.test(env.GITHUB_RUN_ID ?? '') || env.GITHUB_RUN_ID === manifest.verifierRunId) {
     throw new Error('Manifest does not match this independent GitHub Actions finalizer');

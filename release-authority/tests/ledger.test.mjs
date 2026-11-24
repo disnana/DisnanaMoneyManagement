@@ -86,24 +86,26 @@ test('registration rejects mismatched verifier, unknown fields and duplicate key
   assert.equal(f.ledger.auditEvents().length, 0);
 });
 
-test('only a confirmed upload-only release queues one dispatch and an unknown result is not retried', async (t) => {
-  const f = await fixture(t, { autoDispatch: () => true, releaseStatus: 'upload-only' });
-  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
-  const hash = await sha256Hex(wire);
-  const id = f.manifest.releaseId;
-  await f.ledger.register(wire, verifier);
-  const nonce = await f.ledger.arm(id, hash, administrator);
-  assert.deepEqual(f.ledger.pendingDispatchIds(), []);
-  await assert.rejects(f.ledger.confirm(id, hash, administrator, nonce));
-  f.advance(8000);
-  await f.ledger.confirm(id, hash, administrator, nonce);
-  assert.deepEqual(f.ledger.pendingDispatchIds(), [id]);
-  const reservations = await Promise.all([f.ledger.beginDispatch(id), f.ledger.beginDispatch(id)]);
-  assert.deepEqual(reservations.filter(Boolean), [{ buildRunId: '567', verifierRunId: '1234', workflowSha: verifier.workflowSha }]);
-  await f.ledger.finishDispatch(id, 'unknown');
-  assert.equal(f.ledger.read(id).dispatch, 'UNKNOWN');
-  assert.equal(await f.ledger.beginDispatch(id), undefined);
-});
+for (const [releaseStatus, targetTrack] of [['upload-only', 'alpha'], ['internal-draft', 'internal']]) {
+  test(`only a confirmed ${releaseStatus} release queues one dispatch and an unknown result is not retried`, async (t) => {
+    const f = await fixture(t, { autoDispatch: () => true, releaseStatus, track: targetTrack });
+    const wire = manifestWire({ ...f.manifest, releaseStatus, targetTrack });
+    const hash = await sha256Hex(wire);
+    const id = f.manifest.releaseId;
+    await f.ledger.register(wire, verifier);
+    const nonce = await f.ledger.arm(id, hash, administrator);
+    assert.deepEqual(f.ledger.pendingDispatchIds(), []);
+    await assert.rejects(f.ledger.confirm(id, hash, administrator, nonce));
+    f.advance(8000);
+    await f.ledger.confirm(id, hash, administrator, nonce);
+    assert.deepEqual(f.ledger.pendingDispatchIds(), [id]);
+    const reservations = await Promise.all([f.ledger.beginDispatch(id), f.ledger.beginDispatch(id)]);
+    assert.deepEqual(reservations.filter(Boolean), [{ buildRunId: '567', verifierRunId: '1234', workflowSha: verifier.workflowSha }]);
+    await f.ledger.finishDispatch(id, 'unknown');
+    assert.equal(f.ledger.read(id).dispatch, 'UNKNOWN');
+    assert.equal(await f.ledger.beginDispatch(id), undefined);
+  });
+}
 
 test('staging requester binds identity and sends credentials only to their intended hosts', async (t) => {
   const f = await fixture(t);
@@ -160,6 +162,15 @@ test('ledger requires the operation explicitly configured in the release policy'
   assert.equal(await f.ledger.register(wire, verifier), await sha256Hex(wire));
 });
 
+test('internal draft approval is bound to the exact track and operation', async (t) => {
+  const f = await fixture(t, { releaseStatus: 'internal-draft', track: 'internal' });
+  assert.throws(() => manifestWire({ ...f.manifest, releaseStatus: 'internal-draft', targetTrack: 'production' }), /verified Play internal track/);
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'internal-draft', targetTrack: 'internal' });
+  const legacy = await fixture(t, { releaseStatus: 'upload-only' });
+  await assert.rejects(legacy.ledger.register(wire, verifier), /policy mismatch/);
+  assert.equal(await f.ledger.register(wire, verifier), await sha256Hex(wire));
+});
+
 test('a later CI commit may process only the historical source pinned by Signer', async (t) => {
   const laterCommit = 'd'.repeat(40);
   const fixedCaller = { ...verifier, commitSha: laterCommit };
@@ -171,30 +182,44 @@ test('a later CI commit may process only the historical source pinned by Signer'
   await assert.rejects(pinned.ledger.register(differentSource, fixedCaller), /policy mismatch/);
 });
 
-test('Play upload is reserved once and only the signing run can complete its audit', async (t) => {
-  const f = await fixture(t, { releaseStatus: 'upload-only', requireFinalizer: true });
-  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
-  const releaseHash = await f.ledger.register(wire, verifier);
-  const { releaseId, versionCode, repositoryId } = f.manifest;
-  const nonce = await f.ledger.arm(releaseId, releaseHash, administrator);
-  f.advance(8_000);
-  await f.ledger.confirm(releaseId, releaseHash, administrator, nonce);
-  const finalizer = { ...verifier, role: 'finalizer', runId: '999', runAttempt: 1 };
-  const signingIdentity = { ...signer, finalizer };
-  const publisher = { ...finalizer, role: 'publisher', repositoryId };
-  const { attemptId } = await f.ledger.beginSigning(releaseId, releaseHash, bytes, signingIdentity);
-  const signatureHash = await f.ledger.finishSigning(releaseId, attemptId, new Uint8Array(256), signingIdentity);
-  const report = { phase: 'start', releaseHash, signatureHash, signedAabSha256: hashValue, versionCode };
-  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, finalizer), /Publisher does not match/);
-  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, { ...publisher, runAttempt: 2 }), /Publisher does not match/);
-  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, report, publisher), { status: 'reserved' });
-  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, publisher), /already started/);
-  const finished = { ...report, phase: 'finish', result: 'stored' };
-  await assert.rejects(f.ledger.recordPlayUpload(releaseId, { ...finished, signedAabSha256: 'a'.repeat(64) }, publisher), /differs/);
-  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
-  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
-  assert.deepEqual(f.ledger.auditEvents().slice(-2).map(row => JSON.parse(row.body).event.type), ['upload_started', 'upload_result']);
-});
+for (const [releaseStatus, targetTrack] of [['upload-only', 'alpha'], ['internal-draft', 'internal']]) {
+  test(`${releaseStatus} upload is reserved once and only the signing run can complete its audit`, async (t) => {
+    const f = await fixture(t, { releaseStatus, track: targetTrack, requireFinalizer: true });
+    const manifest = { ...f.manifest, releaseStatus, targetTrack };
+    const wire = manifestWire(manifest);
+    const releaseHash = await f.ledger.register(wire, verifier);
+    const { releaseId, versionCode, repositoryId } = f.manifest;
+    const nonce = await f.ledger.arm(releaseId, releaseHash, administrator);
+    f.advance(8_000);
+    await f.ledger.confirm(releaseId, releaseHash, administrator, nonce);
+    const finalizer = { ...verifier, role: 'finalizer', runId: '999', runAttempt: 1 };
+    const signingIdentity = { ...signer, finalizer };
+    const publisher = { ...finalizer, role: 'publisher', repositoryId };
+    const { attemptId } = await f.ledger.beginSigning(releaseId, releaseHash, bytes, signingIdentity);
+    const signatureHash = await f.ledger.finishSigning(releaseId, attemptId, new Uint8Array(256), signingIdentity);
+    const report = { phase: 'start', releaseHash, signatureHash, signedAabSha256: hashValue, versionCode };
+    await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, finalizer), /Publisher does not match/);
+    await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, { ...publisher, runAttempt: 2 }), /Publisher does not match/);
+    assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, report, publisher), { status: 'reserved' });
+    await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, publisher), /already started/);
+    const finished = { ...report, phase: 'finish', result: 'stored' };
+    await assert.rejects(f.ledger.recordPlayUpload(releaseId, { ...finished, signedAabSha256: 'a'.repeat(64) }, publisher), /differs/);
+    assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
+    assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
+    assert.deepEqual(f.ledger.auditEvents().slice(-2).map(row => JSON.parse(row.body).event.type), ['upload_started', 'upload_result']);
+    const { issueUploadReceipt, verifyUploadReceipt } = await import('../packages/protocol/receipt.mjs');
+    const keys = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+    const keyId = 'test-receipt';
+    const jws = await issueUploadReceipt(f.ledger.read(releaseId), {
+      keyId, issuer: 'disnana-release-authority', receiptKey: keys.privateKey,
+    });
+    const receipt = await verifyUploadReceipt(jws, {
+      keyId, publicKey: keys.publicKey, manifest, report: finished, runId: publisher.runId, runAttempt: 1,
+    });
+    assert.equal(receipt.targetTrack, releaseStatus === 'internal-draft' ? targetTrack : undefined);
+    assert.equal(receipt.releaseStatus, releaseStatus === 'internal-draft' ? 'draft' : undefined);
+  });
+}
 
 test('staging finalizer rejects a reused verifier run and changed CMS input before requesting credentials', async (t) => {
   const f = await fixture(t);

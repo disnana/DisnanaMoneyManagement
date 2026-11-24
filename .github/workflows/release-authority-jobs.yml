@@ -19,13 +19,12 @@ on:
 permissions: {}
 
 env:
-  RELEASE_SOURCE_SHA: ${{ vars.RELEASE_SOURCE_SHA || github.sha }}
-  RELEASE_VERSION_NAME: ${{ vars.RELEASE_VERSION_NAME }}
-  RELEASE_VERSION_CODE: ${{ vars.RELEASE_VERSION_CODE }}
+  RELEASE_SOURCE_SHA: ${{ github.sha }}
   RELEASE_UPLOAD_CERTIFICATE_PEM: ${{ vars.RELEASE_UPLOAD_CERTIFICATE_PEM }}
   RELEASE_UPLOAD_CERTIFICATE_SHA256: ${{ vars.RELEASE_UPLOAD_CERTIFICATE_SHA256 }}
   RELEASE_UPLOAD_KEY_ID: ${{ vars.RELEASE_UPLOAD_KEY_ID }}
   RELEASE_TARGET_TRACK: ${{ vars.RELEASE_TARGET_TRACK }}
+  RELEASE_STATUS: ${{ vars.RELEASE_STATUS }}
   RELEASE_POLICY_VERSION: ${{ vars.RELEASE_POLICY_VERSION }}
   BUILD_RUN_ID: ${{ inputs.build_run_id || github.event.workflow_run.id }}
 
@@ -35,7 +34,9 @@ jobs:
       github.repository == 'disnana/DisnanaMoneyManagement' && github.ref == 'refs/heads/main' &&
       (inputs.operation == 'verify' ||
        (github.event_name == 'workflow_run' && vars.RELEASE_AUTO_VERIFY == 'true' &&
-        github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'workflow_dispatch' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        (github.event.workflow_run.event == 'workflow_dispatch' ||
+         (github.event.workflow_run.event == 'push' && vars.RELEASE_AUTO_BUILD == 'true')) &&
         github.event.workflow_run.path == '.github/workflows/android-play-draft.yml' &&
         github.event.workflow_run.head_repository.id == 1462301394 && github.event.workflow_run.head_sha == github.sha))
     runs-on: ubuntu-latest
@@ -82,8 +83,10 @@ jobs:
           bash release-authority/tools/aab-verifier/prepare-ci.sh
           out="$RUNNER_TEMP/mane-authority"
           digest=$(node release-authority/tools/aab-verifier/ci-manifest.mjs validate)
+          version_name=$(jq -er .versionName "$out/quality.json")
+          version_code=$(jq -er .versionCode "$out/quality.json")
           python3 release-authority/tools/aab-verifier/verify.py --bundletool "$out/tools/bundletool.jar" \
-            --package com.disnana.mane_chan --version-name "$RELEASE_VERSION_NAME" --version-code "$RELEASE_VERSION_CODE" \
+            --package com.disnana.mane_chan --version-name "$version_name" --version-code "$version_code" \
             --commit "$RELEASE_SOURCE_SHA" --unsigned "$out/app-release.aab" --sha256 "$digest"
           RELEASE_ISSUED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S.000Z')
           export RELEASE_ISSUED_AT
@@ -166,8 +169,10 @@ jobs:
           jq -e --arg id "$VERIFIER_RUN_ID" '.verifierRunId == $id' "$out/manifest.json" >/dev/null
           issued_at=$(jq -er .issuedAt "$out/manifest.json")
           digest=$(node release-authority/tools/aab-verifier/ci-manifest.mjs validate)
+          version_name=$(jq -er .versionName "$out/quality.json")
+          version_code=$(jq -er .versionCode "$out/quality.json")
           verify=(python3 release-authority/tools/aab-verifier/verify.py --bundletool "$out/tools/bundletool.jar"
-            --package com.disnana.mane_chan --version-name "$RELEASE_VERSION_NAME" --version-code "$RELEASE_VERSION_CODE"
+            --package com.disnana.mane_chan --version-name "$version_name" --version-code "$version_code"
             --commit "$RELEASE_SOURCE_SHA" --unsigned "$out/app-release.aab" --sha256 "$digest")
           "${verify[@]}"
           assembly=(java -cp "$out/classes:$out/tools/*" DeterministicAab)
@@ -237,7 +242,7 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/androidpublisher
           create_credentials_file: false
           export_environment_variables: false
-      - name: Register the bundle without changing a track
+      - name: Save the verified bundle using the approved Play action
         env:
           PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
           SIGNED_SHA256: ${{ needs.finalize.outputs.signed_sha256 }}
@@ -248,9 +253,20 @@ jobs:
           printf '%s  %s\n' "$SIGNED_SHA256" signed/mane-chan-signed.aab | sha256sum -c -
           audit=(node release-authority/tools/remote-jarsigner/record-play-upload.mjs)
           evidence=(signed/manifest.json signed/signature.bin "$SIGNED_SHA256")
-          "${audit[@]}" start "${evidence[@]}"
-          result=$(python3 scripts/android_play_draft.py --bundle-only \
-            signed/mane-chan-signed.aab "$RELEASE_VERSION_CODE" "$SIGNED_SHA256")
+          mode=$(jq -er '
+            if .releaseStatus == "internal-draft" and .targetTrack == "internal" then "--internal-draft"
+            elif .releaseStatus == "upload-only" then "--bundle-only"
+            else error("Unsupported approved Play operation") end
+          ' signed/manifest.json)
+          version_code=$(jq -er .versionCode signed/manifest.json)
+          play=(python3 scripts/android_play_draft.py "$mode"
+            signed/mane-chan-signed.aab "$version_code" "$SIGNED_SHA256")
+          if [[ "$mode" == --internal-draft ]]; then
+            result=$("${play[@]}" signed/manifest.json signed/signature.bin)
+          else
+            "${audit[@]}" start "${evidence[@]}"
+            result=$("${play[@]}")
+          fi
           case "$result" in
             'Bundle stored:'*) status=stored ;;
             'Bundle already_present:'*) status=already_present ;;
@@ -258,6 +274,9 @@ jobs:
           esac
           "${audit[@]}" finish "${evidence[@]}" "$status" > signed/release-receipt.jws
           printf '%s\n' "$result" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$mode" == --internal-draft ]]; then
+            printf '%s\n' 'Verified Play internal-testing draft. Distribution requires a Play Console action.' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Mane-chan-Play-upload-receipt

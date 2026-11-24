@@ -1,6 +1,9 @@
 name: Android Play closed-test draft
 
 on:
+  push:
+    branches: [main]
+    paths: ['apps/mobile/app.json']
   workflow_dispatch:
     inputs:
       upload_to_play:
@@ -27,18 +30,56 @@ defaults:
     shell: bash
 
 concurrency:
-  group: android-play-closed-test
+  group: ${{ github.event_name == 'push' && format('android-play-audit-{0}', github.sha) || 'android-play-closed-test' }}
   cancel-in-progress: false
 
 jobs:
+  check-release-version:
+    if: >-
+      github.repository == 'disnana/DisnanaMoneyManagement' &&
+      github.ref == 'refs/heads/main' && github.event_name == 'push' &&
+      vars.RELEASE_AUTO_BUILD == 'true' && !github.event.created &&
+      !github.event.deleted && !github.event.forced
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      increased: ${{ steps.version.outputs.increased }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require a higher Android version code
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ && "$BEFORE_SHA" != "$GITHUB_SHA" ]]
+          git merge-base --is-ancestor "$BEFORE_SHA" "$GITHUB_SHA"
+          app_config=apps/mobile/app.json
+          version_code='.expo.android.versionCode | select(type == "number" and . == floor and . >= 1 and . <= 2100000000)'
+          previous=$(git show "$BEFORE_SHA:$app_config" | jq -er "$version_code")
+          current=$(jq -er "$version_code" "$app_config")
+          if (( current > previous )); then
+            printf 'increased=true\n' >> "$GITHUB_OUTPUT"
+          else
+            printf 'increased=false\n' >> "$GITHUB_OUTPUT"
+          fi
+
   build:
-    if: github.ref == 'refs/heads/main'
+    needs: check-release-version
+    if: >-
+      !cancelled() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || needs.check-release-version.outputs.increased == 'true')
     permissions:
       contents: read
     uses: ./.github/workflows/android-play-bundle.yml
     with:
-      staging_auth: ${{ inputs.staging_auth }}
-      release_authority_checks: ${{ inputs.release_authority_checks }}
+      staging_auth: ${{ github.event_name == 'workflow_dispatch' && inputs.staging_auth }}
+      release_authority_checks: ${{ github.event_name == 'push' || inputs.release_authority_checks }}
 
   verify:
     needs: build
@@ -83,18 +124,18 @@ jobs:
         with:
           subject-path: bundle/app-release.aab
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        if: inputs.release_authority_checks
+        if: github.event_name == 'push' || inputs.release_authority_checks
         with:
           name: Mane-chan-release-quality-evidence
           path: quality
       - name: Attest the quality evidence index
-        if: inputs.release_authority_checks
+        if: github.event_name == 'push' || inputs.release_authority_checks
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: quality/quality.json
 
   play-draft:
-    if: inputs.upload_to_play && !inputs.release_authority_checks
+    if: github.event_name == 'workflow_dispatch' && inputs.upload_to_play && !inputs.release_authority_checks
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15

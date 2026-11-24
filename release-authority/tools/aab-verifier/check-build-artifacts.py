@@ -18,7 +18,7 @@ def check_build(run, pages):
     source = run.get("head_sha")
     if (
         run.get("status") != "completed" or run.get("conclusion") != "success"
-        or run.get("event") != "workflow_dispatch" or run.get("head_branch") != "main"
+        or run.get("event") not in {"workflow_dispatch", "push"} or run.get("head_branch") != "main"
         or run.get("path") != BUILD_WORKFLOW
         or run.get("repository", {}).get("id") != REPOSITORY_ID
         or run.get("head_repository", {}).get("id") != REPOSITORY_ID
