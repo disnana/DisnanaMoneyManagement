@@ -45,7 +45,7 @@
 マネーちゃん v6 では、Play API が内部テストを `internal` と返し、下書きとして保存した署名済みAABがApp Bundle Explorerに表示されました。この自動化では承認後に同じトラックへ保存し、クローズドテストへの割り当て、配布、審査提出はPlay Consoleで行います。
 
 - Signerの `RELEASE_POLICY` に `"track": "internal"` と `"releaseStatus": "internal-draft"` を設定します。GitHubのリポジトリ変数にも `RELEASE_TARGET_TRACK=internal`、`RELEASE_STATUS=internal-draft` を設定します。承認画面に保存先を表示し、署名済みマニフェストと登録受領証にも保存先を記録します。
-- 新しいジョブの固定コミットは Signer と Google WIF に一度反映します。アプリ更新だけで認証ピンを更新する必要はありません。通常リリースではバージョンを監査付きのビルド証跡から取得するので、`RELEASE_VERSION_NAME` と `RELEASE_VERSION_CODE` は省略できます。旧バージョンを固定するために設定した場合は、新しいリリースの前に解除してください。
+- 新しいジョブの固定コミットは Signer と Google WIF に一度反映します。アプリ更新だけで認証ピンを更新する必要はありません。バージョンは監査付きビルド証跡、ソースSHAは実行中の `main` のコミットから取得します。GitHubにv6用のバージョンやソースSHAの変数が残っていても、このワークフローは参照しません。
 - AAB未割り当ての下書きがある場合は、名前とリリースノートを保持してAABを追加します。別バージョン入りの下書き、配布途中の内部リリース、確認可能な審査待ち・審査中の変更があれば停止します。同じ版とハッシュが登録済みなら再アップロードしません。
 - Playのコミットは `changesInReviewBehavior=ERROR_IF_IN_REVIEW` を指定します。Play Consoleに別の審査送信待ち変更がある場合、自動送信される可能性があります。APIで確認できないストア掲載情報などは承認前に「公開の概要」で確認してください。
 - コミット後の別Editで、バージョンコードとSHA-256、下書き、既存トラックを照合します。コミットが未確認の場合や事後照合に失敗した場合は、Play Consoleの現状を確認してから次の操作を判断します。
@@ -86,7 +86,7 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
   ```
 
 - Google WIFの既存条件から `assertion.workflow_sha == '旧mainのSHA'` を除き、`assertion.job_workflow_sha == '1ef32344ca7c0b475e224ec8682471ed0d1fb152'` と `assertion.job_workflow_ref == 'disnana/DisnanaMoneyManagement/.github/workflows/release-authority-jobs.yml@1ef32344ca7c0b475e224ec8682471ed0d1fb152'` を加えます。その他の条件は維持します。
-- v6で履歴上のAABを使うために設定した GitHubの `RELEASE_SOURCE_SHA` とSignerの `RELEASE_POLICY.sourceCommitSha` を取り除きます。以後はAABのソースを検証・署名・登録を行う `main` のコミットと照合します。
+- v6用にSignerへ設定した `RELEASE_POLICY.sourceCommitSha` と `CI_WORKFLOW_POLICY.callerSha` があれば、この切り替え時に解除します。以後はAABのソースを実行時の `main` のコミットと照合し、SignerとWIFは再利用ワークフローを固定します。
 - Release Authorityのツールを更新した場合は、新しい固定コミットを入口と両方の認証ポリシーに反映します。通常のアプリ変更ではこの更新は不要です。申請後に別のコミットが `main` に入った場合は、現在のコミットの監査付きAABで申請し直してください。
 
 ### 既存GitHubリポジトリで実行する順番
@@ -99,12 +99,12 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、入口の `workflow_ref`、再利用ワークフローのrefとSHA、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
 - 同じjobが `RELEASE_PUBLISHER_SECRET` と専用audience `urn:disnana:release-authority:staging:publisher` でSigner台帳に登録開始と確定結果を記録します。Playの認証や応答を受け取れるのはこのjobです。
 - Playへ送る前に、受領証の公開鍵と鍵IDの一致をSignerで確認します。登録後、Signerが台帳の結果にES256で署名し、Actionsが検証した受領証を成果物 `Mane-chan-Play-upload-receipt` に保存します。
-- GitHubの変数は `RELEASE_VERSION_NAME`、`RELEASE_VERSION_CODE`、`RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
+- GitHubの固定設定には `RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
 - `Release Authority preflight` は、対象ビルドの完了状態、ソース、成果物ID・出所・アーカイブハッシュのメタデータを確認し、監査結果とSBOMを格納する成果物の欠落を検出します。来歴の暗号学的な検証、監査資料の検証、署名申請は後段です。
 - v6の既存run `45284819969` には未署名AABの成果物 `14874240148` だけがあり、必須の監査結果・SBOMに対応する成果物がありません。このrunは本番署名申請の前に停止します。
 - 元のv6のルートlockfileに対し、Bun 1.4.4の全依存監査は `glob` と `minimatch` のmoderate 2件を返して非ゼロ終了しました。Webとモバイルのlockfileを修正しました。監査結果を含むAABは修正後のコミットから再ビルドする必要があります。 [glob advisory](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) · [minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249)
 - 検証済みcanonical manifestを `node tools/aab-verifier/register-staging.mjs MANIFEST` で登録します。独立VerifierのOIDCと `RELEASE_VERIFIER_SECRET` が必要です。
 - 承認後、別実行の固定FinalizerでAABとCMS属性を再検証して再生成し、`node tools/remote-jarsigner/finalize-staging.mjs MANIFEST CMS_INPUT RAW_SIGNATURE` で署名を受け取ります。Finalizer専用OIDCと `RELEASE_FINALIZER_SECRET` が必要です。受け取った署名はJava側でAABに組み込み、公開証明書で再検証します。
 - Java側では `DeterministicAab finalize-signature AAB CERTIFICATE ISSUED_AT PROOF_DIR OUTPUT SIGNATURE` を使用します。同じAABから再生成した署名対象とVerifierの証拠を比較し、署名と全エントリの証明書を確認してから出力します。
-- 過去のAABを後から追加したCIで処理する場合は、`RELEASE_POLICY.sourceCommitSha` にAABのソース完全SHA、`CI_WORKFLOW_POLICY.callerSha` に呼び出し元の完全SHAを固定します。各CIでは同じAABのソースSHAを `RELEASE_SOURCE_SHA` に設定して来歴を検証します。指定がない通常運用ではOIDCのソースSHAとAABのソースSHAの一致を要求します。
+- 過去のAABを特別に扱う旧ワークフローを運用する場合は、`RELEASE_POLICY.sourceCommitSha` にAABのソース完全SHA、`CI_WORKFLOW_POLICY.callerSha` に呼び出し元の完全SHAを固定します。各CIでは同じAABのソースSHAを `RELEASE_SOURCE_SHA` に設定して来歴を検証します。指定がない通常運用ではOIDCのソースSHAとAABのソースSHAの一致を要求します。
 - 上記の処理はリポジトリのワークフローファイルに接続済みです。GitHubとCloudflareの反映、レビュー済みGradleベースライン、Playへの実接続は環境側に残っています。

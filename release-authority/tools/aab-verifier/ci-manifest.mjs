@@ -32,9 +32,7 @@ requireValue(
     && quality.unsignedAabSha256 === digest && quality.auditReportSha256 === await sha256Hex(audit)
     && quality.sbomSha256 === await sha256Hex(sbom) && quality.packageName === 'com.disnana.mane_chan'
     && typeof quality.versionName === 'string' && /^[A-Za-z0-9._-]{1,80}$/.test(quality.versionName)
-    && Number.isSafeInteger(quality.versionCode) && quality.versionCode >= 1 && quality.versionCode <= 2_100_000_000
-    && (!process.env.RELEASE_VERSION_NAME || quality.versionName === process.env.RELEASE_VERSION_NAME)
-    && (!process.env.RELEASE_VERSION_CODE || quality.versionCode === Number(process.env.RELEASE_VERSION_CODE)),
+    && Number.isSafeInteger(quality.versionCode) && quality.versionCode >= 1 && quality.versionCode <= 2_100_000_000,
   'Quality evidence does not match the target AAB',
 );
 const checks = JSON.parse(audit);
