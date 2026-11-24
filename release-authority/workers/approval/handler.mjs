@@ -14,33 +14,61 @@ function response(body, status, type = 'text/plain; charset=utf-8') {
 }
 
 function approvalPage({ manifest: m, hash }) {
+  const operation = m.releaseStatus === 'upload-only' ? 'Google PlayにAABを登録' : 'クローズドテストの下書きを作成';
+  const track = m.releaseStatus === 'upload-only' ? `予定トラック ${m.targetTrack} · 割り当ては手動` : `トラック ${m.targetTrack}`;
+  const expires = Number.isFinite(Date.parse(m.expiresAt)) ? new Intl.DateTimeFormat('ja-JP', {
+    dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Tokyo',
+  }).format(new Date(m.expiresAt)) + '（日本時間）' : '—';
   const rows = [
     ['パッケージ', m.packageName], ['バージョン', `${m.versionName} (${m.versionCode})`],
-    ['操作', m.releaseStatus === 'upload-only'
-      ? `PlayにAABを登録。予定トラック ${m.targetTrack} の割り当ては手動`
-      : `クローズドテスト・${m.targetTrack}・下書き`], ['コミット', m.commitSha],
+    ['コミット', m.commitSha],
     ['ビルド実行', `${m.buildRunId} / ${m.buildRunAttempt}`], ['検証実行', m.verifierRunId],
     ['未署名AAB SHA-256', m.unsignedAabSha256], ['独立検証証明 SHA-256', m.artifactProofSha256],
     ['監査資料 SHA-256', m.auditReportSha256], ['SBOM SHA-256', m.sbomSha256],
-    ['照合ハッシュ', hash], ['期限', m.expiresAt],
+    ['照合ハッシュ', hash],
   ];
   const code = hash.slice(0, 12).toUpperCase().match(/.{4}/g).join('-');
-  return `<!doctype html><html lang="ja"><meta charset="utf-8">
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/approve.css"><script src="/approve.js" defer></script>
-<title>マネーちゃんのリリース承認</title>
+<title>マネーちゃんのリリース承認</title></head><body>
 <main data-hash="${escape(hash)}">
-<h1>リリース承認</h1>
-<p>Actionsの確認コードと見比べてください。</p>
-<strong class="code">${escape(code)}</strong>
-<dl>${rows.map(([key, value]) => `<dt>${escape(key)}</dt><dd>${escape(value)}</dd>`).join('')}</dl>
-<p id="status" role="status">内容を確認してから進んでください。</p>
-<button id="arm">リリース承認に進む</button>
-<button id="hold" hidden>3秒長押しで承認</button>
-<progress id="progress" max="3000" value="0" hidden aria-label="長押しの進捗"></progress>
-<button id="reject">このリリースを拒否する</button>
+<header>
+  <p class="product">マネーちゃん</p>
+  <h1>リリース承認</h1>
+</header>
+<section class="release" aria-label="今回のリリース">
+  <p class="version">${escape(m.versionName)} <span>バージョンコード ${escape(m.versionCode)}</span></p>
+  <h2>${escape(operation)}</h2>
+  <p class="track">${escape(track)}</p>
+  <div class="verification">
+    <div><p>確認コード</p><strong class="code">${escape(code)}</strong></div>
+    <p class="deadline">承認期限<br><time datetime="${escape(m.expiresAt)}">${escape(expires)}</time></p>
+  </div>
+</section>
+<details>
+  <summary>成果物と監査の詳細</summary>
+  <dl>${rows.map(([key, value]) => `<dt>${escape(key)}</dt><dd>${escape(value)}</dd>`).join('')}</dl>
+</details>
+<section class="decision" aria-label="承認または拒否">
+  <p id="status" role="status">Actionsの確認コードと照合してから進んでください。</p>
+  <div class="actions">
+    <button id="arm" class="primary" type="button">承認に進む</button>
+    <button id="hold" class="primary" type="button" hidden>3秒長押しで承認</button>
+    <button id="reject" class="quiet" type="button">リリースを拒否</button>
+  </div>
+  <progress id="progress" max="3000" value="0" hidden aria-label="長押しの進捗"></progress>
+</section>
+<dialog id="reject-dialog" aria-labelledby="reject-title" aria-describedby="reject-description">
+  <h2 id="reject-title">リリースを拒否しますか？</h2>
+  <p id="reject-description">この申請を拒否すると、署名や登録には新しい申請が必要です。</p>
+  <div class="actions">
+    <button id="cancel-reject" class="secondary" type="button" autofocus>戻る</button>
+    <button id="confirm-reject" class="danger" type="button">拒否する</button>
+  </div>
+</dialog>
 <noscript>承認操作にはJavaScriptが必要です。</noscript>
-</main></html>`;
+</main></body></html>`;
 }
 
 async function readBody(request, operation) {
