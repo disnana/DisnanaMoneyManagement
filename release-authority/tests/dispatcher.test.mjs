@@ -13,7 +13,8 @@ const run = {
   head_branch: 'main', head_sha: input.workflowSha, repository: { id: 1462301394 }, head_repository: { id: 1462301394 },
 };
 
-function fakeGitHub(selectedRun = run, send = () => new Response(null, { status: 204 })) {
+function fakeGitHub(selectedRun = run, send = () => new Response(null, { status: 204 }),
+  token = 'fixture_installation_token') {
   const paths = [];
   const call = async (url, init) => {
     const target = new URL(url);
@@ -23,9 +24,9 @@ function fakeGitHub(selectedRun = run, send = () => new Response(null, { status:
     if (target.pathname === '/app/installations/456/access_tokens') {
       await jwtVerify(init.headers.Authorization.slice(7), pair.publicKey, { issuer: '123', algorithms: ['RS256'] });
       assert.deepEqual(JSON.parse(init.body), { repository_ids: [1462301394], permissions: { actions: 'write' } });
-      return Response.json({ token: 'fixture_installation_token' }, { status: 201 });
+      return Response.json({ token }, { status: 201 });
     }
-    assert.equal(init.headers.Authorization, 'Bearer fixture_installation_token');
+    assert.equal(init.headers.Authorization, `Bearer ${token}`);
     if (target.pathname.endsWith('/actions/runs/567')) return Response.json(selectedRun);
     assert.equal(target.pathname, '/repos/disnana/DisnanaMoneyManagement/actions/workflows/release-authority.yml/dispatches');
     assert.deepEqual(JSON.parse(init.body), {
@@ -38,6 +39,13 @@ function fakeGitHub(selectedRun = run, send = () => new Response(null, { status:
 
 test('dispatches the fixed finalizer after checking the verifier on a scoped installation token', async () => {
   const { paths, call } = fakeGitHub();
+  assert.equal(await makeDispatcher(env, call)(input), 204);
+  assert.equal(paths.length, 3);
+});
+
+test('forwards a stateless GitHub installation token without assuming its length or legacy alphabet', async () => {
+  const token = `ghs_123_eyJhbGciOiJSUzI1NiJ9.${'a'.repeat(540)}.fixture-_signature`;
+  const { paths, call } = fakeGitHub(run, undefined, token);
   assert.equal(await makeDispatcher(env, call)(input), 204);
   assert.equal(paths.length, 3);
 });
