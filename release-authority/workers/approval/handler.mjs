@@ -91,12 +91,22 @@ export function makeApprovalHandler({ origin, authenticate, ledger, assets }) {
       return response('Forbidden', 403);
     }
     let administrator;
-    try { administrator = await authenticate(request.headers); } catch { return response('Not found', 404); }
+    try { administrator = await authenticate(request.headers); } catch {
+      if (view) console.warn('release_approval_view_denied', { reason: 'access' });
+      return response('Not found', 404);
+    }
     if (asset) return response(assets[url.pathname].body, 200, assets[url.pathname].type);
     const [, releaseId, operation] = route;
     if (view) {
       try { return response(approvalPage(await ledger.approvalView(releaseId, administrator)), 200, 'text/html; charset=utf-8'); }
-      catch { return response('Not found', 404); }
+      catch (error) {
+        const message = String(error?.message ?? '');
+        const reason = ['Approval unavailable', 'Administrator required', 'Release has expired',
+          'Release policy mismatch or signing disabled', 'Release state changed concurrently']
+          .find((known) => message.includes(known)) ?? 'runtime';
+        console.warn('release_approval_view_denied', { releaseId, reason });
+        return response('Not found', 404);
+      }
     }
     try {
       const { hash, nonce } = await readBody(request, operation);
