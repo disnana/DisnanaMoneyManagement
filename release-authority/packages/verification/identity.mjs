@@ -9,12 +9,12 @@ const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const encoder = new TextEncoder();
 const jwksOptions = { cacheMaxAge: 5 * 60_000, cooldownDuration: 30_000, timeoutDuration: 2500 };
 
-function deny() {
-  throw new Error('Request identity rejected');
+function deny(cause) {
+  throw new Error('Request identity rejected', { cause });
 }
 
 async function validateJwt(token, resolver, options) {
-  if (!token || token.length > 8192 || !jwtPattern.test(token)) deny();
+  if (!token || token.length > 8192 || !jwtPattern.test(token)) deny('jwt-format');
   try {
     const header = decodeProtectedHeader(token);
     if (header.alg !== 'RS256' || !/^[A-Za-z0-9_.-]{1,128}$/.test(header.kid ?? '')
@@ -22,7 +22,7 @@ async function validateJwt(token, resolver, options) {
     const { payload } = await jwtVerify(token, resolver, { algorithms: ['RS256'], clockTolerance: 5, ...options });
     return payload;
   } catch {
-    deny();
+    deny('jwt-verification');
   }
 }
 
@@ -48,9 +48,9 @@ export function makeCiAuthenticator(policy, {
   return async function authenticate(headers) {
     const secret = headers.get('x-release-secret');
     const authorization = headers.get('authorization');
-    if (!secret || !secretPattern.test(secret) || !authorization?.startsWith('Bearer ')) deny();
+    if (!secret || !secretPattern.test(secret) || !authorization?.startsWith('Bearer ')) deny('credential-headers');
     const digest = await crypto.subtle.digest('SHA-256', encoder.encode(secret));
-    if (!equal(new Uint8Array(digest), expected)) deny();
+    if (!equal(new Uint8Array(digest), expected)) deny('secret-digest');
     const claims = await validateJwt(authorization.slice(7), resolveKey, {
       issuer: githubIssuer, audience: policy.audience, maxTokenAge: '5m',
       requiredClaims: ['sub', 'iat', 'nbf', 'exp', 'jti'],
@@ -58,16 +58,17 @@ export function makeCiAuthenticator(policy, {
     const expectedJobRef = reusable ? policy.reusableRef : policy.callerRef;
     const expectedJobSha = reusable ? policy.reusableSha : policy.callerSha;
     const hasJobIdentity = claims.job_workflow_ref !== undefined || claims.job_workflow_sha !== undefined;
-    if (!githubClaimsContainIds(claims) || claims.aud !== policy.audience || claims.sub !== policy.subject
-      || claims.repository_id !== policy.repositoryId || claims.repository_owner_id !== policy.ownerId
-      || claims.ref !== policy.ref || claims.workflow_ref !== policy.callerRef || !shaPattern.test(claims.workflow_sha ?? '')
-      || (policy.callerSha && claims.workflow_sha !== policy.callerSha)
-      || ((reusable || hasJobIdentity)
-        && (claims.job_workflow_sha !== expectedJobSha || claims.job_workflow_ref !== expectedJobRef))
-      || (claims.event_name !== 'workflow_dispatch' && !(policy.role === 'verifier' && claims.event_name === 'workflow_run'))
-      || claims.runner_environment !== 'github-hosted'
-      || (policy.environment && claims.environment !== policy.environment)
-      || claims.exp <= claims.iat || claims.exp - claims.iat > 305) deny();
+    if (!githubClaimsContainIds(claims)) deny('run-claims');
+    if (claims.aud !== policy.audience || claims.sub !== policy.subject
+      || (policy.environment && claims.environment !== policy.environment)) deny('audience-subject-environment');
+    if (claims.repository_id !== policy.repositoryId || claims.repository_owner_id !== policy.ownerId) deny('repository-owner');
+    if (claims.ref !== policy.ref || claims.workflow_ref !== policy.callerRef || !shaPattern.test(claims.workflow_sha ?? '')
+      || (policy.callerSha && claims.workflow_sha !== policy.callerSha)) deny('caller-workflow');
+    if ((reusable || hasJobIdentity)
+      && (claims.job_workflow_sha !== expectedJobSha || claims.job_workflow_ref !== expectedJobRef)) deny('job-workflow');
+    if ((claims.event_name !== 'workflow_dispatch' && !(policy.role === 'verifier' && claims.event_name === 'workflow_run'))
+      || claims.runner_environment !== 'github-hosted') deny('event-runner');
+    if (claims.exp <= claims.iat || claims.exp - claims.iat > 305) deny('token-lifetime');
     return Object.freeze({
       role: policy.role, repositoryId: claims.repository_id, commitSha: claims.sha,
       runId: claims.run_id, runAttempt: Number(claims.run_attempt), workflowSha: expectedJobSha,

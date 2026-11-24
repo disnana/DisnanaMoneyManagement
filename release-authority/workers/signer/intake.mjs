@@ -1,4 +1,7 @@
 const maxManifestBytes = 8192;
+const verifierRejectionReasons = new Set(['credential-headers', 'secret-digest', 'jwt-format',
+  'jwt-verification', 'run-claims', 'audience-subject-environment', 'repository-owner',
+  'caller-workflow', 'job-workflow', 'event-runner', 'token-lifetime']);
 
 function response(message, status) {
   return new Response(message, {
@@ -41,7 +44,11 @@ export function makeVerifierIntake({ origin, authenticate, ledger }) {
     try {
       principal = await authenticate(request.headers);
       if (principal.role !== 'verifier') return response('Not found', 404);
-    } catch {
+    } catch (error) {
+      if (request.headers.has('authorization') || request.headers.has('x-release-secret')) {
+        const reason = verifierRejectionReasons.has(error.cause) ? error.cause : 'runtime';
+        console.warn('release_verifier_denied', { reason });
+      }
       return response('Not found', 404);
     }
     try {

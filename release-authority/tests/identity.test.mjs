@@ -43,7 +43,7 @@ test('valid GitHub JWT and distinct 256-bit release secret are jointly required'
   assert.equal(result.workflowSha, policy.reusableSha);
   await assert.rejects(ci(new Headers({ 'x-release-secret': secret })));
   await assert.rejects(ci(new Headers({ authorization: `Bearer ${token}` })));
-  await assert.rejects(ci(authorization(token, 'b'.repeat(43))));
+  await assert.rejects(ci(authorization(token, 'b'.repeat(43))), { cause: 'secret-digest' });
 });
 
 test('32-byte hexadecimal secrets are authenticated using the digest of their text', async () => {
