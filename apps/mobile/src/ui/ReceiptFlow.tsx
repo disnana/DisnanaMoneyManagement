@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import { router } from 'expo-router';
+import { router, usePathname, usePreventRemove } from 'expo-router';
 import { accountAvailable, refreshAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
 import {
   getReceiptConfig, getReceiptModes, isReceiptJobTerminal, quoteReceiptCredits, ReceiptAPIError, submitReceiptJob,
@@ -17,7 +18,7 @@ import { ReceiptExpenseReview } from '@/ui/ReceiptExpenseReview';
 import { openReceiptCamera, openReceiptGallery, ReceiptImageEditor, type ReceiptImageSource } from '@/ui/ReceiptImageEditor';
 import {
   deleteLocalReceiptResult, listLocalReceiptResults, readLocalReceiptResult, readPendingReceipt,
-  receivePendingReceiptResult, subscribeLocalReceiptResults, writePendingReceipt,
+  receivePendingReceiptResult, reservePendingReceipt, subscribeLocalReceiptResults, writePendingReceipt,
 } from '@/lib/receiptLocalResults';
 
 const DOCUMENT_TYPES: Record<string, string> = {
@@ -40,6 +41,15 @@ const RECEIPT_MODES: Record<ReceiptMode, { name: string; description: string }> 
 const resultDate = new Intl.DateTimeFormat('ja-JP', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Tokyo' });
 type ReceiptSourceTarget = { groupId?: string };
 type ReceiptEditorQueue = ReceiptSourceTarget & { sources: ReceiptImageSource[] };
+type ReceiptView = 'index' | 'confirm' | 'history' | 'results' | 'document';
+type DocumentSelection = { jobId: string; groupId: string; index: number };
+const ReceiptScreens = createContext<Record<ReceiptView, ReactNode> | { unavailable: ReactNode } | null>(null);
+
+export function ReceiptFlowScreen({ screen }: { screen: ReceiptView }) {
+  const views = useContext(ReceiptScreens);
+  if (!views) return null;
+  return 'unavailable' in views ? views.unavailable : views[screen];
+}
 
 function cr(amount: number) {
   return `${amount.toLocaleString('ja-JP')} CR`;
@@ -60,6 +70,7 @@ function resultAmount(document: ReceiptDocument, value: number | null) {
 
 function requestError(error: unknown, polling = false) {
   if (error instanceof ReceiptAPIError) {
+    if (error.code === 'receipt_intake_paused') return '新しい画像の受付を一時停止しています。時間をおいてお試しください。';
     if (error.status === 401 || error.status === 403) return 'アカウントの状態を確認して、再度お試しください。';
     if (error.status === 404) return polling ? '受付をまだ確認できません。時間をおいて受付状況をご確認ください。'
       : 'レシート解析を利用できません。接続先をご確認ください。';
@@ -70,32 +81,36 @@ function requestError(error: unknown, polling = false) {
   return '通信または処理で問題が発生しました。時間をおいて再度お試しください。';
 }
 
-export default function ReceiptReviewScreen() {
+export function ReceiptFlowProvider({ children }: { children: ReactNode }) {
   const account = useAndroidAccount();
   useEffect(() => {
     if (receiptPreviewEnabled && accountAvailable && !account.accountId) void refreshAndroidAccount();
   }, [account.accountId]);
 
-  if (!receiptPreviewEnabled || !accountAvailable) {
-    return <Page><Surface><Copy>このアプリではレシート解析を利用できません。</Copy></Surface></Page>;
-  }
-  if (!account.signedIn || !account.accountId) {
-    return <Page><Surface>
-      {account.busy ? <ActivityIndicator accessibilityLabel="アカウントを確認中" /> : <>
-        <Copy>レシート解析はログインしたアカウントでご利用いただけます。</Copy>
-        <Action label="アカウント設定を開く" onPress={() => router.push('/settings/account')} />
-      </>}
+  if (!receiptPreviewEnabled || !accountAvailable || !account.signedIn || !account.accountId) {
+    const unavailable = <Page><Surface>
+      {!receiptPreviewEnabled || !accountAvailable ? <Copy>このアプリではレシート解析を利用できません。</Copy>
+        : account.busy ? <ActivityIndicator accessibilityLabel="アカウントを確認中" /> : <>
+          <Copy>レシート解析はログインしたアカウントでご利用いただけます。</Copy>
+          <Action label="アカウント設定を開く" onPress={() => router.push('/settings/account')} />
+        </>}
     </Surface></Page>;
+    return <ReceiptScreens.Provider value={{ unavailable }}>{children}</ReceiptScreens.Provider>;
   }
-  return <ReceiptWorkspace key={account.accountId} accountId={account.accountId} credits={account.credits} />;
+  return <ReceiptWorkspace key={account.accountId} accountId={account.accountId} credits={account.credits}>
+    {children}
+  </ReceiptWorkspace>;
 }
 
-function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: number | null }) {
+function ReceiptWorkspace({ accountId, credits, children }: { accountId: string; credits: number | null; children: ReactNode }) {
   const p = usePalette();
+  const pathname = usePathname();
+  const currentPath = useRef(pathname);
+  currentPath.current = pathname;
   const [pending, setPending] = useState(() => readPendingReceipt(accountId));
   const [savedResults, setSavedResults] = useState(() => listLocalReceiptResults(accountId));
   const [selectedLocalId, setSelectedLocalId] = useState<string>();
-  const [showArchive, setShowArchive] = useState(false);
+  const [selection, setSelection] = useState<DocumentSelection>();
   const jobId = pending?.id;
   const [job, setJob] = useState<ReceiptJob>();
   const viewedId = selectedLocalId ?? jobId;
@@ -119,6 +134,19 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   const cachedFiles = useRef(new Set<string>());
   const open = useRef(true);
   const submitting = useRef(false);
+  const allowExit = usePreventRemove(groups.length > 0 && !jobId, ({ repeat }) => {
+    if (submitting.current) {
+      Alert.alert('画像を送信しています', '受付を確認できるまでお待ちください。');
+      return;
+    }
+    Alert.alert('送信していない画像を破棄しますか？', '選んだ画像と並び順がリセットされます。', [
+      { text: '戻る', style: 'cancel' },
+      { text: '破棄する', style: 'destructive', onPress: () => {
+        allowExit();
+        repeat();
+      } },
+    ]);
+  });
 
   useEffect(() => {
     const updateArchive = () => setSavedResults(listLocalReceiptResults(accountId));
@@ -151,12 +179,12 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   }, [configRefresh]);
 
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || pathname !== '/receipt-review/results' || selectedLocalId) return;
     const { id, startedAt } = pending;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     setNotFound(false);
-    async function poll(delay: number) {
+    async function poll(delay: number, maxDelay = 15_000) {
       try {
         const next = readLocalReceiptResult(accountId, id) ?? await receivePendingReceiptResult(accountId, controller.signal)
           ?? readLocalReceiptResult(accountId, id);
@@ -167,6 +195,13 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
         }
         setJob(next);
         setMessage('');
+        if (next.mode === 'batch') {
+          delay = Math.max(delay, 60_000);
+          maxDelay = 120_000;
+        } else if (next.mode === 'background') {
+          delay = Math.max(delay, 30_000);
+          maxDelay = 60_000;
+        }
         if (isReceiptJobTerminal(next.state)) {
           void refreshAndroidAccount();
           return;
@@ -194,21 +229,21 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
         }
         setMessage(requestError(error, true));
       }
-      timer = setTimeout(() => void poll(Math.min(delay * 2, 15_000)), delay);
+      timer = setTimeout(() => void poll(Math.min(delay * 2, maxDelay), maxDelay), delay);
     }
     void poll(2500);
     return () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [pending, accountId, pollRefresh]);
+  }, [pending, accountId, pollRefresh, pathname, selectedLocalId]);
 
   const pages = groups.flatMap((group) => group.pages);
   const modes = config ? getReceiptModes(config) : [];
   const selectedMode = modes.find((item) => item.id === mode) ?? modes[0];
   const selectedModeInfo = selectedMode ? RECEIPT_MODES[selectedMode.id] : undefined;
   const estimate = config && selectedMode && pages.length ? quoteReceiptCredits(config, pages.length, selectedMode.id) : undefined;
-  const canPick = Boolean(config && !configLoading && !configError && !busy && !editorQueue);
+  const canPick = Boolean(config && !config.intake_paused && !configLoading && !configError && !busy && !editorQueue && !jobId);
   const imageSource = editorQueue?.sources[0];
 
   function removeTemporary(uri: string) {
@@ -343,7 +378,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
   }
 
   async function send() {
-    if (!config || busyRef.current || jobId) return;
+    if (!config || config.intake_paused || busyRef.current || jobId) return;
     busyRef.current = true;
     submitting.current = true;
     setBusy(true);
@@ -354,19 +389,26 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
       if (!open.current) return;
       // Store the ID before the POST so a process restart can resume by GET even if the reply is lost.
       const pointer = { id, startedAt: Date.now() };
-      writePendingReceipt(accountId, pointer);
+      if (!reservePendingReceipt(accountId, pointer)) {
+        const current = readPendingReceipt(accountId);
+        if (current) setPending(current);
+        setMessage(current ? 'すでに受付があります。受付状況を確認してください。' : 'アカウントを確認してから、もう一度お試しください。');
+        return;
+      }
       try {
-        const accepted = await submitReceiptJob(id, input);
+        const accepted = await submitReceiptJob(id, input, undefined, accountId);
         if (open.current) {
           setJob(accepted);
           setPending(pointer);
         }
         pages.forEach(removeFile);
-        if (open.current) setGroups([]);
+        if (open.current) finishSubmission();
       } catch (error) {
         if (error instanceof ReceiptAPIError && !error.mayHaveCommitted) {
           if (readPendingReceipt(accountId)?.id === pointer.id) writePendingReceipt(accountId, undefined);
-          if (error.status === 409 && open.current) setConfigRefresh((previous) => previous + 1);
+          if ((error.status === 409 || error.code === 'receipt_intake_paused') && open.current) {
+            setConfigRefresh((previous) => previous + 1);
+          }
           throw error;
         }
         if (open.current) {
@@ -374,7 +416,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
           setMessage('受付の結果を確認しています。同じ画像を送信し直す必要はありません。');
         }
         pages.forEach(removeFile);
-        if (open.current) setGroups([]);
+        if (open.current) finishSubmission();
       }
     } catch (error) {
       if (open.current) setMessage(error instanceof ReceiptAPIError ? requestError(error)
@@ -387,14 +429,24 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
     }
   }
 
+  function finishSubmission() {
+    setGroups([]);
+    setSelectedLocalId(undefined);
+    setSelection(undefined);
+    if (currentPath.current === '/receipt-review/confirm') router.replace('/receipt-review/results');
+  }
+
   function newDraft() {
     if (!notFound && (!viewedJob || !isReceiptJobTerminal(viewedJob.state))) return;
     if (readPendingReceipt(accountId)?.id === jobId) writePendingReceipt(accountId, undefined);
     setPending(undefined);
     setJob(undefined);
+    setSelectedLocalId(undefined);
+    setSelection(undefined);
     setNotFound(false);
     setMessage('');
     setConfigRefresh((previous) => previous + 1);
+    router.dismissTo('/receipt-review');
   }
 
   function removeLocalResult(id: string) {
@@ -408,6 +460,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
             setPending(undefined);
             setJob(undefined);
           }
+          router.back();
         } catch {
           Alert.alert('端末の解析結果を削除できませんでした');
         }
@@ -415,65 +468,42 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
     ]);
   }
 
-  return (
-    <Page>
-      <Surface>
-        <Heading>{viewedId ? '解析結果' : '画像を確認して送信'}</Heading>
-        <Copy>{viewedId ? '支出を登録する前に、元の書類と内容を見比べてください。' :
-          'レシートや領収書を撮影するか、画像を選んでください。長い書類は、続きが少し重なるように分けて撮影できます。'}</Copy>
-        {!viewedId && config?.result_retention_seconds ? <Copy>
-          解析・精算後の受信期間は{resultWindow(config.result_retention_seconds)}です。期間内に通信できる状態でアプリを開くと、結果を端末に保存します。
-        </Copy> : null}
-        {savedResults.length > 0 && !selectedLocalId ? <Action
-          label={showArchive ? '端末に保存した結果を閉じる' : `端末に保存した結果を見る（${savedResults.length}件）`}
-          onPress={() => setShowArchive((current) => !current)} /> : null}
-        {selectedLocalId ? <Action label="端末に保存した結果の一覧へ" onPress={() => setSelectedLocalId(undefined)} /> : null}
-      </Surface>
-      {showArchive && !selectedLocalId ? <Surface>
-        <Heading>端末に保存した解析結果</Heading>
-        <Copy>オフラインでも確認・編集できます。</Copy>
-        {savedResults.map((entry) => <Action key={entry.id}
-          label={`${resultDate.format(entry.savedAt)} · 書類 ${entry.documentCount}件`}
-          onPress={() => setSelectedLocalId(entry.id)} />)}
-      </Surface> : null}
-      {viewedId ? <>
-        <Surface>
-          <Heading>{viewedJob ? JOB_STATUS[viewedJob.state] ?? '処理中'
-            : selectedLocalId ? '端末の結果を読み込めません' : notFound ? '受付を確認できません' : '受付を確認中'}</Heading>
-          <Copy>{viewedJob ? `最大 ${cr(viewedJob.maximum_credit)}　確定 ${viewedJob.final_credit == null ? '精算待ち' : cr(viewedJob.final_credit)}`
-            : selectedLocalId ? '一覧から別の結果を開くことができます。' : '画面を閉じても、ここから受付状況を確認できます。'}</Copy>
-          {viewedJob?.mode ? <Copy>解析モード {RECEIPT_MODES[viewedJob.mode].name}</Copy> : null}
-          {viewedJob?.deadline && !isReceiptJobTerminal(viewedJob.state)
-            ? <Copy>処理期限 {resultDate.format(new Date(viewedJob.deadline))}（日本時間）</Copy> : null}
-          {localResult ? <Copy>端末に保存済み</Copy> : viewedJob?.result_expired ? <Notice text="解析結果の受信期限を過ぎました。" />
-            : viewedJob?.result_expires_at ? <Copy>受信期限 {resultDate.format(new Date(viewedJob.result_expires_at))}（日本時間）</Copy> : null}
-          {!selectedLocalId && message ? <Notice text={message} /> : null}
-          {!selectedLocalId && (!viewedJob || !isReceiptJobTerminal(viewedJob.state))
-            ? <Action label="状況を更新" onPress={() => setPollRefresh((previous) => previous + 1)} /> : null}
-        </Surface>
-        {viewedJob?.groups.map((group, index) => (
-          <Surface key={`${viewedId}-${group.id}`}>
-            <Heading>書類 {index + 1}</Heading>
-            {group.result && !viewedJob.result_expired ? group.result.documents.map((document, documentIndex) => (
-              <DocumentResult key={documentIndex} document={document} allowImport={viewedJob.settled} />
-            )) : <Copy>{viewedJob.result_expired ? '受信期限切れ' : JOB_STATUS[group.state] ?? '解析結果を待っています。'}</Copy>}
-          </Surface>
-        ))}
-        {selectedLocalId ? <Action label="この結果を端末から削除" onPress={() => removeLocalResult(selectedLocalId)} /> : null}
-        {!selectedLocalId && (notFound || (viewedJob && isReceiptJobTerminal(viewedJob.state)))
-          ? <Action label="新しい受付を作成" onPress={newDraft} /> : null}
-      </> : <>
-        {configLoading ? <ActivityIndicator color={p.tint} accessibilityLabel="料金を確認中" /> : null}
-        {configError ? <Surface>
-          <Notice text={configError} />
-          <Action label="料金を再確認" onPress={() => setConfigRefresh((previous) => previous + 1)} />
-        </Surface> : null}
-        {groups.map((group, index) => (
+  const selectedDocument = viewedJob && selection?.jobId === viewedJob.id
+    ? viewedJob.groups.find((group) => group.id === selection.groupId)?.result?.documents[selection.index] : undefined;
+
+  function showResult(localID?: string) {
+    setSelectedLocalId(localID);
+    setSelection(undefined);
+    router.navigate('/receipt-review/results');
+  }
+
+  const configNotice = configLoading ? <ActivityIndicator color={p.tint} accessibilityLabel="受付設定を確認中" />
+    : configError || config?.intake_paused ? <Surface>
+      <Notice text={configError || '新しい画像の受付を一時停止しています。'} />
+      <Action label="受付設定を再確認" onPress={() => setConfigRefresh((previous) => previous + 1)} />
+    </Surface> : null;
+
+  const draft = <Page footer={groups.length > 0 && !jobId ? <Action primary label="送信内容を確認"
+    onPress={() => router.navigate('/receipt-review/confirm')} disabled={!canPick} /> : undefined}>
+    {jobId ? <Surface>
+      <Heading>{job ? JOB_STATUS[job.state] ?? '受付済み' : '受付状況を確認'}</Heading>
+      <Copy>この受付の状況や、読み取りが終わった書類を確認できます。</Copy>
+      <Action primary label="受付状況を見る" onPress={() => showResult()} />
+    </Surface> : <>
+      {configNotice}
+      {groups.length === 0 ? <Surface>
+        <Heading>画像を追加</Heading>
+        <Copy>長いレシートは、続きが少し重なるように分けて撮影できます。</Copy>
+      </Surface> : <Surface>
+        <Heading>送る書類</Heading>
+        <Copy>書類 {groups.length}件 · 画像 {pages.length}枚</Copy>
+      </Surface>}
+      {groups.map((group, index) => (
           <Surface key={group.id}>
             <Heading>書類 {index + 1} · {group.pages.length}枚</Heading>
             {group.pages.map((page, pageIndex) => (
               <View key={page.id} style={[styles.pageRow, { borderColor: p.separator }]}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`ページ ${pageIndex + 1}を拡大`}
+                <Pressable accessibilityRole="button" accessibilityLabel={`書類 ${index + 1}のページ ${pageIndex + 1}を拡大`}
                   onPress={() => setPreview(page)} style={styles.pagePreview}>
                   <Image source={{ uri: page.uri }} style={[styles.thumbnail, { backgroundColor: p.fill }]} resizeMode="contain" />
                   <View style={styles.pageText}>
@@ -481,9 +511,9 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
                     <Text style={[styles.small, { color: p.textSecondary }]} numberOfLines={1}>{page.name}</Text>
                   </View>
                 </Pressable>
-                {pageIndex > 0 ? <Action label="上へ" accessibilityLabel={`ページ ${pageIndex + 1}を上へ移動`}
+                {pageIndex > 0 ? <Action label="上へ" accessibilityLabel={`書類 ${index + 1}のページ ${pageIndex + 1}を上へ移動`}
                   onPress={() => movePage(group.id, pageIndex)} disabled={busy} /> : null}
-                <Action label="外す" accessibilityLabel={`ページ ${pageIndex + 1}を外す`}
+                <Action label="外す" accessibilityLabel={`書類 ${index + 1}のページ ${pageIndex + 1}を外す`}
                   onPress={() => removePage(group.id, page)} disabled={busy} />
               </View>
             ))}
@@ -502,7 +532,36 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
           <Action label="写真から選ぶ" onPress={() => void selectPages('gallery')} disabled={!canPick} />
           <Action label="ファイルから選ぶ" onPress={() => void selectPages('file')} disabled={!canPick} />
         </Surface>}
-        {modes.length > 1 && pages.length > 0 ? <Surface>
+    </>}
+    {message && !jobId ? <Notice text={message} /> : null}
+    <Surface>
+      <Action label={savedResults.length ? `端末に保存した結果（${savedResults.length}件）` : '端末に保存した結果'}
+        onPress={() => router.navigate('/receipt-review/history')} />
+    </Surface>
+  </Page>;
+
+  const canSend = canPick && estimate !== undefined && (credits === null || estimate <= credits);
+  const confirmation = <Page footer={selectedMode && estimate !== undefined && !jobId ? <>
+    <Text style={[styles.small, { color: p.textSecondary }]}>
+      対象外や、ぼけ・反射で読めないと正常に判定された画像もCRを消費します。
+    </Text>
+    <Action primary label={busy ? '送信中…' : `最大 ${cr(estimate)} で送信`}
+      disabled={!canSend} onPress={() => void send()} />
+  </> : undefined}>
+    {jobId ? <Surface>
+      <Heading>受付を確認できます</Heading>
+      <Action primary label="受付状況を見る" onPress={() => showResult()} />
+    </Surface> : pages.length === 0 ? <Surface>
+      <Copy>送信する画像を追加してください。</Copy>
+      <Action primary label="画像を追加する" onPress={() => router.dismissTo('/receipt-review')} />
+    </Surface> : <>
+      {configNotice}
+      <Surface>
+        <Heading>書類 {groups.length}件 · 画像 {pages.length}枚</Heading>
+        <Copy>{groups.map((group, index) => `書類 ${index + 1}（${group.pages.length}枚）`).join('、')}</Copy>
+        <Action label="画像とページ順を見直す" disabled={busy} onPress={() => router.dismissTo('/receipt-review')} />
+      </Surface>
+      {modes.length > 1 && pages.length > 0 ? <Surface>
           <Heading>解析モード</Heading>
           {modes.map((item) => {
             const info = RECEIPT_MODES[item.id];
@@ -524,40 +583,100 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
             );
           })}
         </Surface> : null}
-        {config && selectedMode ? <Surface>
+      {config && selectedMode && estimate !== undefined ? <Surface>
+        <View style={styles.modeTitle}>
           <Heading>送信時の最大CR</Heading>
-          <Text style={[styles.estimate, { color: p.text }]}>{estimate == null ? '—' : cr(estimate)}</Text>
-          <Copy>書類 {groups.length}件 · 画像 {pages.length}枚 · {selectedModeInfo?.name}{credits == null ? '' : ` · 利用可能 ${cr(credits)}`}</Copy>
-          {selectedMode.millicredits_per_image % 1000 !== 0 ? <Copy>画像全体の料金を合計し、1 CR単位に切り上げます。</Copy> : null}
-          <Copy>対象外や不鮮明と判定された画像も、解析できた分はCRを消費します。送信前に画像とページ順をご確認ください。</Copy>
-          <Copy>カード番号の全桁など、読み取りに不要な情報は隠してください。</Copy>
-          {credits !== null && estimate != null && estimate > credits ? <>
-            <Notice text="送信に必要なCRが不足しています。" />
-            <Action label="残高を更新" onPress={() => void refreshAndroidAccount()} disabled={busy} />
-          </> : null}
-          {message ? <Notice text={message} /> : null}
-          <Action primary label={busy ? '処理中…' : '確認して送信'}
-            disabled={!canPick || estimate == null || (credits !== null && estimate > credits)}
-            onPress={() => {
-              if (estimate == null) return;
-              Alert.alert('画像を送信しますか？', `書類${groups.length}件の画像${pages.length}枚を${selectedModeInfo?.name ?? '選択したモード'}で解析し、最大 ${cr(estimate)} を確保します。対象外・不鮮明の判定も精算対象になります。`, [
-                { text: 'キャンセル', style: 'cancel' }, { text: '送信', onPress: () => void send() },
-              ]);
-            }} />
-          <View style={styles.policyLinks}>
-            {[
-              { label: '利用規約', url: 'https://dmm.disnana.com/terms/#ai-receipt' },
-              { label: 'プライバシーポリシー', url: 'https://dmm.disnana.com/privacy/#ai-receipt' },
-            ].map(({ label, url }) => (
-              <Pressable key={url} accessibilityRole="link" hitSlop={8} onPress={() => {
-                void Linking.openURL(url).catch(() => Alert.alert('ページを開けませんでした'));
-              }}>
-                <Text style={{ color: p.tint, fontSize: 13 }}>{label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Surface> : null}
-      </>}
+          <Text style={[styles.estimate, { color: p.text }]}>{cr(estimate)}</Text>
+        </View>
+        <Copy>{selectedModeInfo?.name}{credits == null ? '' : ` · 利用可能 ${cr(credits)}`}</Copy>
+        {selectedMode.millicredits_per_image % 1000 !== 0 ? <Copy>画像全体の料金を合計し、1 CR単位に切り上げます。</Copy> : null}
+        <Copy>カード番号の全桁など、読み取りに不要な情報が写っていないか確認してください。</Copy>
+        {config.result_retention_seconds ? <Copy>
+          受信期間は精算後{resultWindow(config.result_retention_seconds)}です。期間内に通信できる状態でアプリを開くと、結果を端末に保存します。
+        </Copy> : null}
+        {credits !== null && estimate > credits ? <>
+          <Notice text="送信に必要なCRが不足しています。" />
+          <Action label="残高を更新" onPress={() => void refreshAndroidAccount()} disabled={busy} />
+        </> : null}
+        <View style={styles.policyLinks}>
+          {[
+            { label: '利用規約', url: 'https://dmm.disnana.com/terms/#ai-receipt' },
+            { label: 'プライバシーポリシー', url: 'https://dmm.disnana.com/privacy/#ai-receipt' },
+          ].map(({ label, url }) => (
+            <Pressable key={url} accessibilityRole="link" hitSlop={8} onPress={() => {
+              void Linking.openURL(url).catch(() => Alert.alert('ページを開けませんでした'));
+            }}>
+              <Text style={{ color: p.tint, fontSize: 13 }}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Surface> : null}
+      {message ? <Notice text={message} /> : null}
+    </>}
+  </Page>;
+
+  const history = <Page>
+    <Surface>
+      <Copy>保存した結果は、サーバーの受信期間を過ぎてもオフラインで確認できます。</Copy>
+      {savedResults.length ? savedResults.map((entry) => <ReceiptRow key={entry.id}
+        title={entry.merchant ? `${entry.merchant}${entry.documentCount > 1 ? ' ほか' : ''}` : '読み取り結果'}
+        detail={`${resultDate.format(entry.savedAt)} · 書類 ${entry.documentCount}件 · ${JOB_STATUS[entry.state]}`}
+        onPress={() => showResult(entry.id)} />) : <Heading>保存した結果はありません</Heading>}
+    </Surface>
+  </Page>;
+
+  const results = <Page>
+    {!viewedId ? <Surface><Copy>表示する受付はありません。</Copy>
+      <Action label="画像の追加へ戻る" onPress={() => router.dismissTo('/receipt-review')} />
+    </Surface> : <>
+      <Surface>
+        <Heading>{viewedJob ? JOB_STATUS[viewedJob.state] ?? '処理中'
+          : selectedLocalId ? '端末の結果を読み込めません' : notFound ? '受付を確認できません' : '受付を確認中'}</Heading>
+        <Copy>{viewedJob ? `最大 ${cr(viewedJob.maximum_credit)}　確定 ${viewedJob.final_credit == null ? '精算待ち' : cr(viewedJob.final_credit)}`
+          : selectedLocalId ? '一覧から別の結果を開くことができます。' : '画面を閉じても処理は続きます。'}</Copy>
+        {viewedJob?.mode ? <Copy>解析モード {RECEIPT_MODES[viewedJob.mode].name}</Copy> : null}
+        {viewedJob?.deadline && !isReceiptJobTerminal(viewedJob.state)
+          ? <Copy>処理期限 {resultDate.format(new Date(viewedJob.deadline))}（日本時間）</Copy> : null}
+        {localResult ? <Copy>端末に保存済み</Copy> : viewedJob?.result_expired ? <Notice text="解析結果の受信期限を過ぎました。" />
+          : viewedJob?.result_expires_at ? <Copy>受信期限 {resultDate.format(new Date(viewedJob.result_expires_at))}（日本時間）</Copy> : null}
+        {!selectedLocalId && message ? <Notice text={message} /> : null}
+        {!selectedLocalId && (!viewedJob || !isReceiptJobTerminal(viewedJob.state))
+          ? <Action label="状況を更新" onPress={() => setPollRefresh((previous) => previous + 1)} /> : null}
+      </Surface>
+      {viewedJob?.groups.map((group, index) => (
+        <Surface key={`${viewedId}-${group.id}`}>
+          <Heading>書類 {index + 1}</Heading>
+          {group.result && !viewedJob.result_expired ? group.result.documents.map((document, documentIndex) => (
+            <ReceiptRow key={documentIndex}
+              title={document.merchant || DOCUMENT_TYPES[document.document_type] || '読み取り結果'}
+              detail={[DOCUMENT_STATUS[document.status], document.date,
+                document.total_minor !== null ? resultAmount(document, document.total_minor) : null].filter(Boolean).join(' · ')}
+              onPress={() => {
+                setSelection({ jobId: viewedJob.id, groupId: group.id, index: documentIndex });
+                router.navigate('/receipt-review/document');
+              }} />
+          )) : <Copy>{viewedJob.result_expired ? '受信期限切れ' : JOB_STATUS[group.state] ?? '解析結果を待っています。'}</Copy>}
+        </Surface>
+      ))}
+      {selectedLocalId ? <Action label="この結果を端末から削除" onPress={() => removeLocalResult(selectedLocalId)} /> : null}
+      {!selectedLocalId && (notFound || (viewedJob && isReceiptJobTerminal(viewedJob.state)))
+        ? <Action primary label="新しい読み取り" onPress={newDraft} /> : null}
+    </>}
+  </Page>;
+
+  const documentDetails = <Page>
+    {selectedDocument && viewedJob ? <>
+      <Copy>支出を登録する前に、元の書類と見比べてください。</Copy>
+      <DocumentResult key={`${selection?.jobId}-${selection?.groupId}-${selection?.index}`}
+        document={selectedDocument} allowImport={viewedJob.settled} />
+    </> : <Surface><Copy>確認する書類を解析結果から選んでください。</Copy>
+      <Action label="解析結果を見る" onPress={() => router.dismissTo('/receipt-review/results')} />
+    </Surface>}
+  </Page>;
+
+  return (
+    <ReceiptScreens.Provider value={{ index: draft, confirm: confirmation, history, results, document: documentDetails }}>
+      {children}
       <Modal visible={Boolean(sourceTarget)} transparent animationType="fade" onRequestClose={() => setSourceTarget(undefined)}>
         <View style={styles.sourceBackdrop}>
           <View style={[styles.sourcePanel, { backgroundColor: p.card }]}>
@@ -582,7 +701,7 @@ function ReceiptWorkspace({ accountId, credits }: { accountId: string; credits: 
           <Action primary label="閉じる" onPress={() => setPreview(undefined)} />
         </View>
       </Modal>
-    </Page>
+    </ReceiptScreens.Provider>
   );
 }
 
@@ -615,10 +734,29 @@ function DocumentResult({ document, allowImport }: { document: ReceiptDocument; 
   );
 }
 
-function Page({ children }: { children: ReactNode }) {
+function Page({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   const p = usePalette();
-  return <ScrollView style={{ flex: 1, backgroundColor: p.bg }} contentContainerStyle={styles.content}
-    keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">{children}</ScrollView>;
+  const insets = useSafeAreaInsets();
+  return <View style={{ flex: 1, backgroundColor: p.bg }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">{children}</ScrollView>
+    {footer ? <View style={[styles.footer, { backgroundColor: p.card, paddingBottom: Math.max(10, insets.bottom) }]}>
+      {footer}
+    </View> : null}
+  </View>;
+}
+
+function ReceiptRow({ title, detail, onPress }: { title: string; detail: string; onPress: () => void }) {
+  const p = usePalette();
+  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.listRow, {
+    backgroundColor: pressed ? p.fill : p.bg,
+  }]}>
+    <View style={styles.pageText}>
+      <Text style={{ color: p.text, fontWeight: '700', fontSize: 15 }} numberOfLines={2}>{title}</Text>
+      <Text style={{ color: p.textSecondary, fontSize: 13 }}>{detail}</Text>
+    </View>
+    <Text accessible={false} style={{ color: p.textSecondary, fontSize: 22 }}>›</Text>
+  </Pressable>;
 }
 
 function Surface({ children }: { children: ReactNode }) {
@@ -656,6 +794,8 @@ function Action({ label, onPress, accessibilityLabel, primary, disabled }: {
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32, gap: 12 },
+  footer: { paddingHorizontal: 16, paddingTop: 9, gap: 6 },
+  listRow: { minHeight: 52, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', gap: 10, alignItems: 'center' },
   surface: { padding: 16, gap: 10 },
   heading: { fontSize: 17, fontWeight: '700' },
   estimate: { fontSize: 27, fontWeight: '700', fontVariant: ['tabular-nums'] },

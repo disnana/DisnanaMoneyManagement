@@ -58,6 +58,7 @@ type memoryCredits struct {
 	effects         int
 	loseSettlement  bool
 	loseReservation bool
+	onReserve       func()
 	aborted         map[JobKey]bool
 }
 
@@ -72,6 +73,9 @@ func (w *memoryCredits) Reserve(_ context.Context, subject, id string, amount in
 		return ErrJobConflict
 	}
 	w.holds[key] = amount
+	if w.onReserve != nil {
+		w.onReserve()
+	}
 	if w.loseReservation {
 		w.loseReservation = false
 		return lostWrite
@@ -319,5 +323,28 @@ func TestRecoverExpiredIntakeReleasesLostReservationAndBlocksLateReserve(t *test
 	}
 	if err := wallet.Reserve(ctx, key.Subject, key.RequestID, 2); !errors.Is(err, ErrJobConflict) {
 		t.Fatalf("late reserve could recreate hold: %v", err)
+	}
+}
+
+func TestReservationCompletingAtDeadlineDoesNotAcceptIntake(t *testing.T) {
+	ctx := context.Background()
+	service, jobs, wallet, key, now, intake, raw, _ := serviceFixture(t)
+	service.now = func() time.Time { return now }
+	wallet.onReserve = func() { now = intake.Deadline }
+
+	if _, err := service.AcceptDurableInput(ctx, key, intake, raw); !errors.Is(err, ErrJobTransition) {
+		t.Fatalf("acceptance at the deadline should require recovery: %v", err)
+	}
+	row, err := jobs.load(ctx, key)
+	if err != nil || row.Accepted || wallet.holds[key] != intake.MaximumCredit {
+		t.Fatalf("late reservation was not left recoverable: %v", err)
+	}
+	if err := service.RecoverExpiredIntake(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	row, err = jobs.load(ctx, key)
+	if err != nil || row.Accepted || !row.Settled || !row.Abandoned ||
+		wallet.holds[key] != 0 || !wallet.aborted[key] || wallet.effects != 0 {
+		t.Fatalf("late reservation was not released exactly once: %v", err)
 	}
 }

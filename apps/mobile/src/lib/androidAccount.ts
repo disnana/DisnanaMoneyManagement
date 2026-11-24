@@ -191,7 +191,9 @@ async function refresh() {
   const body = JSON.stringify({ session_id, refresh_token });
   try {
     const response = await request({ method: 'POST', path: '/auth/refresh', body }, { sessionId: session_id });
-    await setSession(parseSession(await response.json()));
+    const renewed = parseSession(await response.json());
+    if (renewed.session_id !== session_id || session?.session_id !== session_id) throw new IssuerUnavailable(false);
+    await setSession(renewed);
   } catch (error) {
     if (error instanceof DeviceProofHTTPError && error.status === 401) await setSession(null);
     throw error;
@@ -216,21 +218,37 @@ function authenticated(op: AuthenticatedOperation, signal?: AbortSignal) {
 async function runAuthenticated(op: AuthenticatedOperation, signal?: AbortSignal) {
   if (signal?.aborted) throw new IssuerUnavailable(false, signal.reason);
   if (!session) throw new DeviceProofHTTPError(401, 'login_required');
-  if (session.expires_at * 1000 < Date.now() + 10_000) await refresh();
+  const renewSession = async () => {
+    try {
+      await refresh();
+    } catch (error) {
+      if (op.path.startsWith('/v1/ai/') && error instanceof IssuerUnavailable && error.mayHaveCommitted) {
+        // The refresh may have committed, but this receipt operation has not.
+        throw new IssuerUnavailable(false, error);
+      }
+      throw error;
+    }
+  };
+  if (session.expires_at * 1000 < Date.now() + 10_000) await renewSession();
   const send = () => request(op, { accessToken: session!.access_token }, signal);
   try {
     return await send();
   } catch (error) {
     if (!(error instanceof DeviceProofHTTPError) || error.status !== 401) throw error;
-    await refresh();
+    await renewSession();
     return send();
   }
 }
 
-export async function requestAndroidReceipt(op: ReceiptOperation, signal?: AbortSignal) {
+export async function requestAndroidReceipt(op: ReceiptOperation, signal?: AbortSignal, expectedAccountId?: string) {
   if (!accountAvailable) throw new DeviceProofHTTPError(503, 'receipt_unavailable');
   await restore();
-  return authenticated(op, signal);
+  return forCurrentSession(() => {
+    if (expectedAccountId !== undefined && session?.account_id !== expectedAccountId) {
+      throw new DeviceProofHTTPError(401, 'account_changed');
+    }
+    return runAuthenticated(op, signal);
+  });
 }
 
 function readCreditLots(value: unknown): CreditLot[] | null {
@@ -242,6 +260,7 @@ function readCreditLots(value: unknown): CreditLot[] | null {
 
 async function loadCredits() {
   if (!session) return;
+  const sessionId = session.session_id;
   publish(emptyCredits);
   try {
     const response = await authenticated({ method: 'GET', path: '/v1/credits' });
@@ -254,7 +273,9 @@ async function loadCredits() {
       Number.isSafeInteger(item.operation?.amount) && item.operation.amount >= 0).map(item => ({
       ...item, operation: { ...item.operation, expired_lots: readCreditLots(item.operation.expired_lots) ?? undefined },
     })) : null;
-    publish({ credits: amount, history, lots: readCreditLots(result.lots), expiredLots: readCreditLots(result.expired_lots) });
+    if (session?.session_id === sessionId) {
+      publish({ credits: amount, history, lots: readCreditLots(result.lots), expiredLots: readCreditLots(result.expired_lots) });
+    }
   } catch {
     publish({ message: session ? '残高を取得できませんでした。再読み込みできます。' : 'セッションが切れました。もう一度ログインしてください。' });
   }

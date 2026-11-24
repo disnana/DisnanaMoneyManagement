@@ -15,8 +15,9 @@ vi.mock('./androidReceiptClient', async (importOriginal) => ({ ...(await importO
 
 import {
   deleteLocalReceiptResult, listLocalReceiptResults, readLocalReceiptResult, readPendingReceipt, receivePendingReceiptResult,
-  saveLocalReceiptResult, subscribeLocalReceiptResults, watchPendingReceiptResult, writePendingReceipt,
+  reservePendingReceipt, saveLocalReceiptResult, subscribeLocalReceiptResults, watchPendingReceiptResult, writePendingReceipt,
 } from './receiptLocalResults';
+import { ReceiptAPIError } from './androidReceiptClient';
 
 const accountA = 'account-a';
 const accountB = 'account-b';
@@ -56,12 +57,16 @@ describe('local Android receipt results', () => {
     expect(saveLocalReceiptResult(accountA, original)).toBe(true);
     vi.setSystemTime(new Date('2026-11-26T10:00:00Z'));
     expect(saveLocalReceiptResult(accountA, completed('job-2'))).toBe(true);
-    expect(saveLocalReceiptResult(accountB, completed('job-3'))).toBe(true);
+    expect(saveLocalReceiptResult(accountB, completed('job-3'))).toBe(false);
     expect(saveLocalReceiptResult(accountA, { ...original, result_expired: true, groups: [] })).toBe(true);
     expect(readLocalReceiptResult(accountA, 'job-1')).toEqual(original);
     expect(readLocalReceiptResult(accountB, 'job-1')).toBeUndefined();
     expect(listLocalReceiptResults(accountA).map(job => job.id)).toEqual(['job-2', 'job-1']);
+    mocks.account = accountB;
+    expect(listLocalReceiptResults(accountA)).toEqual([]);
+    expect(saveLocalReceiptResult(accountB, completed('job-3'))).toBe(true);
     expect(listLocalReceiptResults(accountB).map(job => job.id)).toEqual(['job-3']);
+    mocks.account = accountA;
     deleteLocalReceiptResult(accountA, 'job-1');
     expect(readLocalReceiptResult(accountA, 'job-1')).toBeUndefined();
     expect(listLocalReceiptResults(accountA).map(job => job.id)).toEqual(['job-2']);
@@ -130,5 +135,72 @@ describe('local Android receipt results', () => {
     expect(listLocalReceiptResults(accountA)).toEqual([]);
     expect(readLocalReceiptResult(accountA, 'job-1')).toBeUndefined();
     expect(readPendingReceipt(accountA)).toBeUndefined();
+  });
+
+  it('indexes the first non-empty receipt merchant without requiring it on old results', () => {
+    const old = [{ id: 'job-old', savedAt: 1_000, state: 'COMPLETED', documentCount: 1 }];
+    writePendingReceipt(accountA, undefined);
+    storage.set('dmm.receipt.archive.v1.9.account-a.index', JSON.stringify(old));
+    const first = completed('job-1');
+    const original = first.groups[0].result.documents[0];
+    first.groups[0].result.documents = [{ ...original, merchant: ' ' }, { ...original, merchant: `  ${'店'.repeat(150)}  ` }];
+    expect(saveLocalReceiptResult(accountA, first)).toBe(true);
+    expect(listLocalReceiptResults(accountA)).toEqual([
+      { id: 'job-1', savedAt: expect.any(Number), state: 'COMPLETED', documentCount: 2, merchant: '店'.repeat(100) },
+      { ...old[0], merchant: undefined },
+    ]);
+  });
+
+  it('allows only one upload reservation and hides receipts after switching accounts', async () => {
+    const first = { id: 'job-1', startedAt: 1_000 };
+    const second = { id: 'job-2', startedAt: 2_000 };
+    let resolveJob;
+    mocks.getJob.mockImplementationOnce(() => new Promise(resolve => { resolveJob = resolve; }));
+    expect(reservePendingReceipt(accountA, first)).toBe(true);
+    expect(reservePendingReceipt(accountA, second)).toBe(false);
+    expect(reservePendingReceipt(accountB, second)).toBe(false);
+    const receive = receivePendingReceiptResult(accountA);
+    mocks.account = accountB;
+    resolveJob(completed(first.id));
+    await expect(receive).resolves.toBeUndefined();
+    expect(readPendingReceipt(accountA)).toBeUndefined();
+    expect(listLocalReceiptResults(accountA)).toEqual([]);
+    mocks.account = accountA;
+    expect(readPendingReceipt(accountA)).toEqual(first);
+    expect(readLocalReceiptResult(accountA, first.id)).toBeUndefined();
+  });
+
+  it('cancels the shared request once every foreground caller leaves', async () => {
+    const controller = new AbortController();
+    const pointer = { id: 'job-1', startedAt: 1_000 };
+    writePendingReceipt(accountA, pointer);
+    let networkSignal;
+    mocks.getJob.mockImplementationOnce((_, signal) => {
+      networkSignal = signal;
+      return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))));
+    });
+    const pending = receivePendingReceiptResult(accountA, controller.signal);
+    controller.abort();
+    await expect(pending).resolves.toBeUndefined();
+    expect(networkSignal.aborted).toBe(true);
+    expect(readPendingReceipt(accountA)).toEqual(pointer);
+  });
+
+  it('backs off batch polling and stops absent status polling without clearing the pointer', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const pointer = { id: 'job-1', startedAt: Date.now() };
+    writePendingReceipt(accountA, pointer);
+    mocks.getJob.mockResolvedValue({ id: pointer.id, mode: 'batch', state: 'PROCESSING', settled: false });
+    watchPendingReceiptResult(accountA, controller.signal);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(mocks.getJob).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(mocks.getJob).toHaveBeenCalledTimes(2);
+    mocks.getJob.mockRejectedValue(new ReceiptAPIError(404, 'receipt_not_found'));
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(mocks.getJob).toHaveBeenCalledTimes(4);
+    expect(readPendingReceipt(accountA)).toEqual(pointer);
+    controller.abort();
   });
 });

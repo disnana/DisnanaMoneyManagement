@@ -10,15 +10,28 @@ import (
 type deferredFixture struct {
 	submits, polls, aborts, cleanups int
 	pendingFirst, failCleanup        bool
+	submittedDigests                 map[string]string
 }
 
-func (f *deferredFixture) Submit(context.Context, Group) (LunaResponse, error) {
+func (f *deferredFixture) Submit(_ context.Context, input Group) (LunaResponse, error) {
 	f.submits++
+	if f.submittedDigests == nil {
+		f.submittedDigests = make(map[string]string)
+	}
+	f.submittedDigests[input.ID], _ = groupDigest(input)
 	return LunaResponse{ProviderID: "resp_deferred_fixture", Pending: true}, nil
 }
 
-func (f *deferredFixture) Poll(_ context.Context, id string, group Group) (LunaResponse, error) {
+func (f *deferredFixture) Poll(_ context.Context, id string, group Group, digest string) (LunaResponse, error) {
 	f.polls++
+	if digest == "" || digest != f.submittedDigests[group.ID] {
+		return LunaResponse{}, errors.New("poll did not receive its submitted group digest")
+	}
+	for _, image := range group.Images {
+		if len(image.Data) != 0 {
+			return LunaResponse{}, errors.New("poll unexpectedly received original image bytes")
+		}
+	}
 	if f.pendingFirst && f.polls == 1 {
 		return LunaResponse{ProviderID: id, Pending: true}, ErrLunaPollRetry
 	}
@@ -85,6 +98,12 @@ func TestDeferredReceiptResumesAcrossNodesAndUsesPinnedTariff(t *testing.T) {
 	if err := r.process(ctx, key); !errors.Is(err, lostWrite) || provider.submits != 1 {
 		t.Fatalf("expected lost provider ID acknowledgement: %v", err)
 	}
+
+	// Simulate missing image storage after the provider already accepted the
+	// original group. Its persisted IDs and digest are sufficient to recover.
+	savedInput := queue.rows[key]
+	savedInput.data = nil
+	queue.rows[key] = savedInput
 
 	changed := r.config
 	changed.Modes = append([]RuntimeModeConfig(nil), changed.Modes...)
@@ -165,5 +184,45 @@ func TestDeferredExpiryAbortsKnownBatchAndDoesNotCharge(t *testing.T) {
 	if err != nil || view.State != JobExpired || wallet.used[key] != 0 || provider.aborts != 1 ||
 		provider.cleanups != 1 || provider.submits != 1 || len(queue.rows) != 0 {
 		t.Fatalf("expired deferred job was not recovered and cleaned up: %v", err)
+	}
+}
+
+func TestDeferredPollRecoversKnownGroupWhenAnotherGroupsImagesAreMissing(t *testing.T) {
+	ctx := context.Background()
+	runtime, queue, wallet, key, now, _, _ := runtimeFixture(t)
+	provider := &deferredFixture{}
+	runtime = withDeferredMode(t, runtime, provider, ModeBatch, LunaBatch24h)
+	top, bottom := receiptImages(t)
+	request := Request{Groups: []Group{
+		{ID: "awaiting-images", Images: []Image{top}},
+		{ID: "provider-known", Images: []Image{bottom}},
+	}}
+	raw := requestJSON(t, request)
+	if _, err := runtime.SubmitMode(ctx, key, 2, "deferred-v1", ModeBatch, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := runtime.service.runGroup(ctx, key, request.Groups[1], "accepted-by-provider",
+		now.Add(time.Second), now.Add(5*time.Second), provider.Submit); err != nil {
+		t.Fatal(err)
+	}
+	noImages := queue.rows[key]
+	noImages.data = nil
+	queue.rows[key] = noImages
+	if err := runtime.process(ctx, key); err == nil || provider.submits != 1 || provider.polls != 1 {
+		t.Fatalf("failed image read blocked the known provider response: %v", err)
+	}
+	view, err := runtime.Job(ctx, key)
+	if err != nil || view.Groups[0].State != JobQueued || view.Groups[1].State != JobSettling ||
+		view.Groups[1].Result == nil || view.Settled {
+		t.Fatalf("partial in-progress result was not preserved: %v", err)
+	}
+	*now = now.Add(2 * time.Hour)
+	if err := runtime.process(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	view, err = runtime.Job(ctx, key)
+	if err != nil || view.State != JobPartial || wallet.used[key] != 1 || wallet.effects != 1 ||
+		provider.submits != 1 || provider.polls != 1 {
+		t.Fatalf("expired group did not preserve and settle the other result: %v", err)
 	}
 }

@@ -356,6 +356,7 @@ func (r *Runtime) Run(ctx context.Context) {
 	ticker := time.NewTicker(r.config.PollInterval)
 	defer ticker.Stop()
 	var cursors [receiptQueueShards]JobKey
+	var expiryCursors [receiptQueueShards]resultExpiryCursor
 	slots := make(chan struct{}, receiptSendWorkers)
 	var senders sync.WaitGroup
 	defer senders.Wait()
@@ -378,7 +379,7 @@ func (r *Runtime) Run(ctx context.Context) {
 		if err := r.poll(ctx, &cursors, visit); err != nil && ctx.Err() == nil {
 			log.Print("receipt runtime: a pending work operation failed")
 		}
-		if err := r.pollResultExpiry(ctx); err != nil && ctx.Err() == nil {
+		if err := r.pollResultExpiry(ctx, &expiryCursors); err != nil && ctx.Err() == nil {
 			log.Print("receipt runtime: a result expiry operation failed")
 		}
 		select {
@@ -436,14 +437,10 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 	if err != nil {
 		return err
 	}
-	var input *Request
-	request := func() (*Request, error) {
-		if input != nil {
-			return input, nil
-		}
+	request := sync.OnceValues(func() (*Request, error) {
 		raw, err := r.queue.body(ctx, key)
 		if err != nil {
-			return nil, err
+			return nil, errors.New("stored receipt input is unavailable")
 		}
 		if digestString(raw) != pending.Intake.BodySHA256 {
 			return nil, errors.New("stored receipt input digest mismatch")
@@ -452,9 +449,8 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		if err != nil {
 			return nil, err
 		}
-		input = &decoded
-		return input, nil
-	}
+		return &decoded, nil
+	})
 	if job.Revision != 0 && (!matchIntake(job.Intake, pending.Intake.BodySHA256,
 		pending.Intake.MaximumCredit, pending.Intake.PriceVersion, pending.Intake.Mode) || !job.Intake.Deadline.Equal(pending.Intake.Deadline) ||
 		job.Intake.ResultRetention != pending.Intake.ResultRetention || job.Intake.ProviderProfile != pending.Intake.ProviderProfile ||
@@ -465,47 +461,52 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 		return r.recoverIntake(ctx, key, job, pending)
 	}
 	mode, enabled := r.mode(job.Intake.Mode)
+	var processingErr error
 	for i, saved := range job.Groups {
 		state := saved.Job.State
 		now := r.service.now()
 		submit := state == JobQueued || (state == JobClaimed && !now.Before(saved.Job.ClaimUntil))
 		poll := state == JobProcessing && mode.Analyzer != nil && !now.Before(saved.Job.NextPollAt)
 		canSubmit := submit && mode.ProviderProfile == job.Intake.ProviderProfile
-		if allowSend && enabled && now.Before(job.Intake.Deadline) && (canSubmit || poll) {
-			input, err := request()
-			if err != nil {
-				return err
+		var err error
+		switch {
+		case allowSend && enabled && now.Before(job.Intake.Deadline) && canSubmit:
+			var input *Request
+			input, err = request()
+			if err == nil {
+				if i >= len(input.Groups) || input.Groups[i].ID != saved.Job.GroupID {
+					err = errors.New("stored receipt group does not match the accepted job")
+				} else {
+					err = r.runGroup(ctx, key, input.Groups[i], job.Intake.Deadline, mode.Analyzer)
+				}
 			}
-			if i >= len(input.Groups) || input.Groups[i].ID != saved.Job.GroupID {
-				return errors.New("stored receipt group does not match the accepted job")
+		case allowSend && enabled && now.Before(job.Intake.Deadline) && poll:
+			var input Group
+			input, err = pending.groupForPoll(i, saved)
+			if err == nil {
+				err = r.service.pollGroup(ctx, key, input, saved.InputSHA256, mode.Analyzer, mode.PollInterval)
 			}
-			if canSubmit {
-				err = r.runGroup(ctx, key, input.Groups[i], job.Intake.Deadline, mode.Analyzer)
-			} else {
-				err = r.service.pollGroup(ctx, key, input.Groups[i], mode.Analyzer, mode.PollInterval)
-			}
-			if err != nil && !errors.Is(err, ErrJobConflict) && !errors.Is(err, ErrJobTransition) {
-				return err
-			}
-		} else if state != JobSettling && (!now.Before(job.Intake.Deadline) ||
-			(state == JobSubmitting && !now.Before(saved.Job.AcknowledgeUntil))) {
-			if err := r.service.RecoverGroup(ctx, key, saved.Job.GroupID); err != nil &&
-				!errors.Is(err, ErrJobConflict) && !errors.Is(err, ErrJobTransition) {
-				return err
-			}
+		case state != JobSettling && (!now.Before(job.Intake.Deadline) ||
+			(state == JobSubmitting && !now.Before(saved.Job.AcknowledgeUntil))):
+			err = r.service.RecoverGroup(ctx, key, saved.Job.GroupID)
+		}
+		// Groups are independent. A missing input or lost write for one must
+		// not prevent another group's acknowledged result from being fetched.
+		if workFailure(err) && processingErr == nil {
+			processingErr = err
 		}
 	}
 
 	job, err = r.service.store.load(ctx, key)
 	if err != nil {
-		return err
+		return errors.Join(processingErr, err)
 	}
 	if job.Settled {
 		return r.cleanSettledInput(ctx, key, job, allowSend)
 	}
 	for _, group := range job.Groups {
 		if group.Job.State != JobSettling {
-			return nil
+			return processingErr
 		}
 	}
 	var used int64
@@ -521,7 +522,28 @@ func (r *Runtime) processPending(ctx context.Context, key JobKey, allowSend bool
 	if err == nil && final.Settled {
 		return r.cleanSettledInput(ctx, key, final, allowSend)
 	}
-	return err
+	return errors.Join(processingErr, err)
+}
+
+func (p pendingReceipt) groupForPoll(index int, saved SavedGroup) (Group, error) {
+	if index >= len(p.Groups) {
+		return Group{}, errors.New("missing stored receipt group metadata")
+	}
+	group := p.Groups[index]
+	if group.ID != saved.Job.GroupID || group.Digest != saved.InputSHA256 ||
+		len(group.ImageIDs) == 0 || len(group.ImageIDs) > p.Limits.MaxImagesPerGroup {
+		return Group{}, errors.New("invalid stored receipt group metadata")
+	}
+	input := Group{ID: group.ID, Images: make([]Image, 0, len(group.ImageIDs))}
+	seen := make(map[string]bool, len(group.ImageIDs))
+	for _, id := range group.ImageIDs {
+		if !identifier.MatchString(id) || seen[id] {
+			return Group{}, errors.New("invalid stored receipt image ID")
+		}
+		seen[id] = true
+		input.Images = append(input.Images, Image{ID: id})
+	}
+	return input, nil
 }
 
 func (r *Runtime) recoverIntake(ctx context.Context, key JobKey, job ReceiptJob, pending pendingReceipt) error {

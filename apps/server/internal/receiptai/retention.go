@@ -15,7 +15,7 @@ type resultExpiryEntry struct {
 
 type resultExpiryIndex interface {
 	schedule(context.Context, resultExpiryEntry) error
-	due(context.Context, int, time.Time, int) ([]resultExpiryEntry, error)
+	due(context.Context, int, time.Time, []byte, int) ([]resultExpiryEntry, []byte, error)
 	remove(context.Context, resultExpiryEntry) error
 }
 
@@ -94,17 +94,30 @@ func (r *Runtime) adoptLegacyResults(ctx context.Context, key JobKey, job Receip
 	return ReceiptJob{}, ErrJobConflict
 }
 
-func (r *Runtime) pollResultExpiry(ctx context.Context) error {
+type resultExpiryCursor struct {
+	cutoff time.Time
+	page   []byte
+}
+
+func (r *Runtime) pollResultExpiry(ctx context.Context, cursors *[receiptQueueShards]resultExpiryCursor) error {
 	var operationErr error
 	for shard := range receiptQueueShards {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		entries, err := r.results.due(ctx, shard, r.service.now(), r.config.PollBatchSize)
+		cursor := &cursors[shard]
+		if len(cursor.page) == 0 {
+			cursor.cutoff = r.service.now()
+		}
+		entries, next, err := r.results.due(ctx, shard, cursor.cutoff, cursor.page, r.config.PollBatchSize)
 		if err != nil {
 			operationErr = err
+			*cursor = resultExpiryCursor{}
 			continue
 		}
+		// Scan the rest of this slice of the expiry index before retrying its
+		// failed entries. A full page of failures cannot starve later rows.
+		cursor.page = next
 		for _, entry := range entries {
 			if err := r.expireResult(ctx, entry); err != nil {
 				operationErr = err
@@ -161,15 +174,16 @@ func (s scyllaResultExpiry) schedule(ctx context.Context, entry resultExpiryEntr
 		WithContext(ctx).Consistency(gocql.LocalQuorum).Idempotent(true).Exec()
 }
 
-func (s scyllaResultExpiry) due(ctx context.Context, shard int, now time.Time, limit int) ([]resultExpiryEntry, error) {
-	rows := s.db.Query("SELECT expires_at, subject, request_id FROM receipt_ai_result_expiry WHERE shard = ? AND expires_at <= ? LIMIT ?",
-		shard, now, limit).WithContext(ctx).Consistency(gocql.LocalQuorum).PageSize(limit).Iter()
+func (s scyllaResultExpiry) due(ctx context.Context, shard int, now time.Time, page []byte, limit int) ([]resultExpiryEntry, []byte, error) {
+	rows := s.db.Query("SELECT expires_at, subject, request_id FROM receipt_ai_result_expiry WHERE shard = ? AND expires_at <= ?",
+		shard, now).WithContext(ctx).Consistency(gocql.LocalQuorum).PageSize(limit).PageState(page).Iter()
 	var entry resultExpiryEntry
 	due := make([]resultExpiryEntry, 0, limit)
 	for rows.Scan(&entry.ExpiresAt, &entry.Key.Subject, &entry.Key.RequestID) {
 		due = append(due, entry)
 	}
-	return due, rows.Close()
+	next := append([]byte(nil), rows.PageState()...)
+	return due, next, rows.Close()
 }
 
 func (s scyllaResultExpiry) remove(ctx context.Context, entry resultExpiryEntry) error {

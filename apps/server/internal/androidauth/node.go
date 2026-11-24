@@ -30,6 +30,7 @@ type Config struct {
 	CreditDetails                                   func(context.Context, string) (credits.Snapshot, error)
 	Now                                             func() time.Time
 	Receipts                                        ReceiptAPI
+	ReceiptIntakePaused                             bool
 }
 
 type Node struct {

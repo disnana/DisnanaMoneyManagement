@@ -54,7 +54,10 @@ func (n *Node) receiptConfig(w http.ResponseWriter, r *http.Request) {
 		reject(w, 401)
 		return
 	}
-	jsonReply(w, 200, n.cfg.Receipts.Config())
+	jsonReply(w, 200, struct {
+		receiptai.ConfigView
+		IntakePaused bool `json:"intake_paused,omitempty"`
+	}{n.cfg.Receipts.Config(), n.cfg.ReceiptIntakePaused})
 }
 
 type receiptSubmission struct {
@@ -123,6 +126,11 @@ func (n *Node) receiptJob(w http.ResponseWriter, r *http.Request) {
 	if d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF ||
 		input.MaximumCredit < 1 || input.PriceVersion == "" || len(input.Request) == 0 {
 		receiptError(w, 400, "invalid_receipt_request")
+		return
+	}
+	if n.cfg.ReceiptIntakePaused {
+		w.Header().Set("Retry-After", "60")
+		receiptError(w, http.StatusServiceUnavailable, "receipt_intake_paused")
 		return
 	}
 	switch input.Mode {

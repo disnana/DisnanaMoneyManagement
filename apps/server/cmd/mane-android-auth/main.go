@@ -140,6 +140,7 @@ func run(checkConfig bool) error {
 			return err
 		}
 		config.Receipts = receiptRuntime
+		config.ReceiptIntakePaused = os.Getenv("MANE_RECEIPT_INTAKE_PAUSED") == "1"
 	}
 	node, err := androidauth.NewNode(config, sessions)
 	if err != nil {

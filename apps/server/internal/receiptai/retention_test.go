@@ -3,6 +3,7 @@ package receiptai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"testing"
@@ -13,6 +14,7 @@ type memoryResultExpiry struct {
 	mu           sync.Mutex
 	entries      map[resultExpiryEntry]struct{}
 	failSchedule bool
+	failRemove   JobKey
 }
 
 func newMemoryResultExpiry() *memoryResultExpiry {
@@ -30,22 +32,32 @@ func (m *memoryResultExpiry) schedule(_ context.Context, entry resultExpiryEntry
 	return nil
 }
 
-func (m *memoryResultExpiry) due(_ context.Context, shard int, now time.Time, limit int) ([]resultExpiryEntry, error) {
+func (m *memoryResultExpiry) due(_ context.Context, shard int, now time.Time, page []byte, limit int) ([]resultExpiryEntry, []byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var entries []resultExpiryEntry
 	for entry := range m.entries {
-		if shardFor(entry.Key) == shard && !now.Before(entry.ExpiresAt) {
+		if shardFor(entry.Key) == shard && !now.Before(entry.ExpiresAt) && expiryOrder(entry) > string(page) {
 			entries = append(entries, entry)
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].ExpiresAt.Before(entries[j].ExpiresAt) })
-	return entries[:min(len(entries), limit)], nil
+	sort.Slice(entries, func(i, j int) bool { return expiryOrder(entries[i]) < expiryOrder(entries[j]) })
+	if len(entries) <= limit {
+		return entries, nil, nil
+	}
+	return entries[:limit], []byte(expiryOrder(entries[limit-1])), nil
+}
+
+func expiryOrder(entry resultExpiryEntry) string {
+	return fmt.Sprintf("%019d\x00%s\x00%s", entry.ExpiresAt.UnixMilli(), entry.Key.Subject, entry.Key.RequestID)
 }
 
 func (m *memoryResultExpiry) remove(_ context.Context, entry resultExpiryEntry) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if entry.Key == m.failRemove {
+		return lostWrite
+	}
 	delete(m.entries, entry)
 	return nil
 }
@@ -86,7 +98,7 @@ func TestRuntimeResultRetentionStartsAtSettlementAndKeepsJobMetadata(t *testing.
 	digest := stored.Groups[0].Job.Outcome.ResultSHA256
 
 	*now = wantExpiry.Add(-time.Millisecond)
-	if err := runtime.pollResultExpiry(ctx); err != nil {
+	if err := runtime.pollResultExpiry(ctx, new([receiptQueueShards]resultExpiryCursor)); err != nil {
 		t.Fatal(err)
 	}
 	if view, err := runtime.Job(ctx, key); err != nil || view.ResultExpired || view.Groups[0].Result == nil {
@@ -96,7 +108,7 @@ func TestRuntimeResultRetentionStartsAtSettlementAndKeepsJobMetadata(t *testing.
 	if view, err := runtime.Job(ctx, key); err != nil || !view.ResultExpired || view.Groups[0].Result != nil {
 		t.Fatalf("result was visible at expiry before database cleanup: %v", err)
 	}
-	if err := runtime.pollResultExpiry(ctx); err != nil {
+	if err := runtime.pollResultExpiry(ctx, new([receiptQueueShards]resultExpiryCursor)); err != nil {
 		t.Fatal(err)
 	}
 	stored, err = runtime.service.store.load(ctx, key)
@@ -150,7 +162,7 @@ func TestLegacySettledResultGetsAFullWindowOnFirstAuthenticatedRead(t *testing.T
 		t.Fatalf("legacy result did not receive a full retention window: %v", err)
 	}
 	*now = expiry
-	if err := runtime.pollResultExpiry(ctx); err != nil {
+	if err := runtime.pollResultExpiry(ctx, new([receiptQueueShards]resultExpiryCursor)); err != nil {
 		t.Fatal(err)
 	}
 	row, err = runtime.service.store.load(ctx, key)
@@ -173,7 +185,7 @@ func TestExpiryIndexCannotRemoveUnsettledResult(t *testing.T) {
 	if err := runtime.results.schedule(ctx, entry); err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.pollResultExpiry(ctx); err != nil {
+	if err := runtime.pollResultExpiry(ctx, new([receiptQueueShards]resultExpiryCursor)); err != nil {
 		t.Fatal(err)
 	}
 	row, err := runtime.service.store.load(ctx, key)
@@ -187,5 +199,43 @@ func TestExpiryIndexCannotRemoveUnsettledResult(t *testing.T) {
 	if err != nil || !view.Settled || view.ResultExpiresAt == nil || !view.ResultExpiresAt.After(*now) ||
 		view.Groups[0].Result == nil {
 		t.Fatalf("settlement did not preserve the result with its configured period: %v", err)
+	}
+}
+
+func TestResultExpiryWalksPastAFullFailedPage(t *testing.T) {
+	ctx := context.Background()
+	runtime, _, _, first, now, _, _ := runtimeFixture(t)
+	index := runtime.results.(*memoryResultExpiry)
+	index.failRemove = first
+	later := JobKey{Subject: first.Subject}
+	for i := range 256 {
+		later.RequestID = fmt.Sprintf("later-%d", i)
+		if shardFor(first) == shardFor(later) {
+			break
+		}
+	}
+	if shardFor(first) != shardFor(later) {
+		t.Fatal("fixture needs two keys in the same expiry shard")
+	}
+	for _, entry := range []resultExpiryEntry{
+		{Key: first, ExpiresAt: now.Add(-time.Second)},
+		{Key: later, ExpiresAt: *now},
+	} {
+		if err := index.schedule(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var cursors [receiptQueueShards]resultExpiryCursor
+	if err := runtime.pollResultExpiry(ctx, &cursors); !errors.Is(err, lostWrite) {
+		t.Fatalf("expected a failure on the first page: %v", err)
+	}
+	if err := runtime.pollResultExpiry(ctx, &cursors); err != nil {
+		t.Fatalf("later expiry was blocked by the first page: %v", err)
+	}
+	if len(index.entries) != 1 {
+		t.Fatal("expiry retry lost work or failed to advance")
+	}
+	if err := runtime.pollResultExpiry(ctx, &cursors); !errors.Is(err, lostWrite) {
+		t.Fatalf("the failed entry was not retried: %v", err)
 	}
 }

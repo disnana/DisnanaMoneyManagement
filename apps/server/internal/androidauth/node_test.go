@@ -49,10 +49,10 @@ func setup(t *testing.T) *fixture {
 
 func setupWithSessions(t *testing.T, sessions func() SessionStore, direct bool) *fixture {
 	t.Helper()
-	return setupWithReceipts(t, sessions, direct, nil)
+	return setupWithReceipts(t, sessions, direct, nil, false)
 }
 
-func setupWithReceipts(t *testing.T, sessions func() SessionStore, direct bool, receipts ReceiptAPI) *fixture {
+func setupWithReceipts(t *testing.T, sessions func() SessionStore, direct bool, receipts ReceiptAPI, intakePaused bool) *fixture {
 	t.Helper()
 	google, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -88,7 +88,7 @@ func setupWithReceipts(t *testing.T, sessions func() SessionStore, direct bool, 
 		}
 		config := Config{NodeID: label, PublicOrigin: "https://node-" + label + ".example.test", PackageName: "com.disnana.mane_chan", SigningKeyID: "test",
 			ChallengeKey: []byte(strings.Repeat(label, 32)), SigningKey: nodeSigning, Now: f.now, GoogleSubject: verifier.Subject,
-			DirectSessions: direct, Receipts: receipts,
+			DirectSessions: direct, Receipts: receipts, ReceiptIntakePaused: intakePaused,
 			CreditBalance: func(_ context.Context, subject string) (int64, error) {
 				if subject != "google-account-sub" {
 					return 0, errAuth

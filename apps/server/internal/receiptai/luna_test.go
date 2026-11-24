@@ -183,6 +183,8 @@ func TestLunaKeepsAcknowledgedIDWhenResultIsUnavailable(t *testing.T) {
 	group := lunaGroup(t)
 	rawResponses := []string{
 		`{"id":"resp_fixture","status":"incomplete"}`,
+		`{"id":"resp_fixture","status":"completed","output":"sensitive text"}`,
+		lunaOutput(t, `{"documents":[],"sensitive text":"must not appear"}`),
 		`{"id":"resp_fixture","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"refusal","refusal":"sensitive text"}]}]}`,
 		lunaOutput(t, `{"documents":[{"source_image_ids":["another-group"],"document_type":"unknown","status":"unreadable"}]}`),
 	}

@@ -21,6 +21,7 @@ export type ReceiptConfig = {
   max_image_pixels: number;
   max_json_bytes: number;
   result_retention_seconds?: number;
+  intake_paused?: boolean;
   modes?: ReceiptModeTariff[];
 };
 
@@ -125,6 +126,7 @@ function isReceiptModeTariff(value: unknown): value is ReceiptModeTariff {
 function isReceiptConfig(value: unknown): value is ReceiptConfig {
   if (!object(value) || typeof value.price_version !== 'string' || !identifier.test(value.price_version)) return false;
   if (value.result_retention_seconds !== undefined && !integer(value.result_retention_seconds, 1)) return false;
+  if (value.intake_paused !== undefined && typeof value.intake_paused !== 'boolean') return false;
   const modes = value.modes;
   if (modes !== undefined && (!Array.isArray(modes) || modes.length === 0 || modes.length > receiptModes.size ||
     !modes.every(isReceiptModeTariff) || new Set(modes.map(mode => mode.id)).size !== modes.length)) return false;
@@ -216,15 +218,18 @@ function receiptFailure(error: unknown, signal?: AbortSignal): ReceiptAPIError {
   if (error instanceof DeviceProofHTTPError) return new ReceiptAPIError(error.status, error.code ?? httpCode(error.status));
   if (error instanceof IssuerUnavailable) {
     const cause = receiptFailure(error.cause, signal);
-    return new ReceiptAPIError(cause.status, cause.code, error.mayHaveCommitted);
+    const intakePaused = cause.status === 503 && cause.code === 'receipt_intake_paused';
+    return new ReceiptAPIError(cause.status, cause.code, !intakePaused && error.mayHaveCommitted);
   }
   return new ReceiptAPIError(null, signal?.aborted ? 'cancelled' : 'receipt_unavailable');
 }
 
-async function receiptRequest<T>(op: ReceiptOperation, valid: (value: unknown) => value is T, signal?: AbortSignal): Promise<T> {
+async function receiptRequest<T>(
+  op: ReceiptOperation, valid: (value: unknown) => value is T, signal?: AbortSignal, expectedAccountId?: string,
+): Promise<T> {
   let response: Awaited<ReturnType<typeof requestAndroidReceipt>>;
   try {
-    response = await requestAndroidReceipt(op, signal);
+    response = await requestAndroidReceipt(op, signal, expectedAccountId);
   } catch (error) {
     throw receiptFailure(error, signal);
   }
@@ -237,13 +242,15 @@ export function getReceiptConfig(signal?: AbortSignal): Promise<ReceiptConfig> {
   return receiptRequest({ method: 'GET', path: '/v1/ai/receipt-config' }, isReceiptConfig, signal);
 }
 
-export async function submitReceiptJob(id: string, input: ReceiptJobInput, signal?: AbortSignal): Promise<ReceiptJob> {
+export async function submitReceiptJob(
+  id: string, input: ReceiptJobInput, signal?: AbortSignal, expectedAccountId?: string,
+): Promise<ReceiptJob> {
   const path = jobPath(id);
   return receiptRequest({ method: 'POST', path, body: JSON.stringify(input) },
-    (value): value is ReceiptJob => isReceiptJob(value, id), signal);
+    (value): value is ReceiptJob => isReceiptJob(value, id), signal, expectedAccountId);
 }
 
-export async function getReceiptJob(id: string, signal?: AbortSignal): Promise<ReceiptJob> {
+export async function getReceiptJob(id: string, signal?: AbortSignal, expectedAccountId?: string): Promise<ReceiptJob> {
   return receiptRequest({ method: 'GET', path: jobPath(id) },
-    (value): value is ReceiptJob => isReceiptJob(value, id), signal);
+    (value): value is ReceiptJob => isReceiptJob(value, id), signal, expectedAccountId);
 }

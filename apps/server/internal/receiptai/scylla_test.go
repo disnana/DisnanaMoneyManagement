@@ -247,11 +247,62 @@ func TestScyllaReceiptRuntimeStandardAndExpiredIntake(t *testing.T) {
 		t.Fatalf("abandoned job retained its image: %v", err)
 	}
 	now = expiry
-	if err := runtime.pollResultExpiry(ctx); err != nil {
+	if err := runtime.pollResultExpiry(ctx, new([receiptQueueShards]resultExpiryCursor)); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := store.load(ctx, key)
 	if err != nil || !stored.Settled || !stored.ResultExpired || stored.hasResults() {
 		t.Fatalf("Scylla expiry did not clear only the result: %v", err)
+	}
+}
+
+func TestScyllaReceiptExpiryUsesOrderedBoundedPages(t *testing.T) {
+	wallet, ctx, subject := scyllaRuntimeFixture(t)
+	index := scyllaResultExpiry{db: wallet.Session()}
+	first := JobKey{Subject: subject, RequestID: "first"}
+	second := JobKey{Subject: subject}
+	for i := range 256 {
+		second.RequestID = fmt.Sprintf("second-%d", i)
+		if shardFor(first) == shardFor(second) {
+			break
+		}
+	}
+	shard := shardFor(first)
+	if shard != shardFor(second) {
+		t.Fatal("fixture needs two keys in the same expiry shard")
+	}
+	cutoff := time.Now().UTC().Truncate(time.Millisecond)
+	early := resultExpiryEntry{Key: first, ExpiresAt: cutoff.Add(-time.Second)}
+	late := resultExpiryEntry{Key: second, ExpiresAt: cutoff}
+	for _, entry := range []resultExpiryEntry{late, early} {
+		if err := index.schedule(ctx, entry); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			if err := index.remove(context.Background(), entry); err != nil {
+				t.Errorf("remove expiry fixture: %v", err)
+			}
+		})
+	}
+	seen := make(map[JobKey]bool)
+	var page []byte
+	for range 32 {
+		rows, next, err := index.due(ctx, shard, cutoff, page, 1)
+		if err != nil || len(rows) > 1 {
+			t.Fatalf("expiry index returned an invalid page: %v", err)
+		}
+		for _, row := range rows {
+			if row.Key == late.Key && !seen[early.Key] {
+				t.Fatal("expiry index returned the later row first")
+			}
+			seen[row.Key] = true
+		}
+		if len(next) == 0 {
+			break
+		}
+		page = next
+	}
+	if !seen[early.Key] || !seen[late.Key] {
+		t.Fatal("both expiry entries were not returned from paged scanning")
 	}
 }

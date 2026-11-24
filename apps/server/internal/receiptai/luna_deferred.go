@@ -43,6 +43,10 @@ func NewLunaDeferred(luna *Luna, mode string) (*LunaDeferred, error) {
 }
 
 func (d *LunaDeferred) Submit(ctx context.Context, group Group) (LunaResponse, error) {
+	// A Batch has two POSTs. Both share a budget so the provider cannot accept
+	// a new batch after the durable acknowledgement window has closed.
+	ctx, cancel := context.WithTimeout(ctx, d.luna.config.Timeout)
+	defer cancel()
 	if d.mode == LunaBatch24h {
 		return d.submitBatch(ctx, group)
 	}
@@ -97,9 +101,13 @@ func (d *LunaDeferred) backgroundResult(raw []byte, expectedID string, group Gro
 	}
 }
 
-func (d *LunaDeferred) Poll(ctx context.Context, id string, group Group) (LunaResponse, error) {
+// Poll accepts persisted image IDs and the digest of the original group. The
+// original image bytes are only required for Submit.
+func (d *LunaDeferred) Poll(ctx context.Context, id string, group Group, inputDigest string) (LunaResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.luna.config.Timeout)
+	defer cancel()
 	if d.mode == LunaBatch24h {
-		return d.pollBatch(ctx, id, group)
+		return d.pollBatch(ctx, id, group, inputDigest)
 	}
 	if !validLunaResponseID(id) {
 		return LunaResponse{}, ErrLunaResultUnavailable
@@ -199,9 +207,9 @@ func (d *LunaDeferred) submitBatch(ctx context.Context, group Group) (LunaRespon
 	raw, err = d.luna.post(ctx, lunaBatchesPath, "application/json", create)
 	if err != nil {
 		if errors.Is(err, ErrLunaBeforeSend) || errors.Is(err, ErrLunaRejected) {
-			// No batch was created. Attempt deletion even if the intake was canceled;
-			// request() still bounds the cleanup by the provider client timeout.
-			_ = d.deleteArtifact(context.WithoutCancel(ctx), lunaFilesPath+"/"+file.ID)
+			// No batch was created. Delete its file within the submission budget
+			// when time remains. The input TTL also covers an expired context.
+			_ = d.deleteArtifact(ctx, lunaFilesPath, file.ID)
 		}
 		// If the batch might have been created, leave the input accessible until
 		// expiry. The runtime must never create another batch for this attempt.
@@ -232,8 +240,8 @@ func (d *LunaDeferred) batchState(ctx context.Context, id string) (lunaBatch, bo
 	return batch, true, nil
 }
 
-func (d *LunaDeferred) pollBatch(ctx context.Context, id string, group Group) (LunaResponse, error) {
-	if !validLunaBatchID(id) {
+func (d *LunaDeferred) pollBatch(ctx context.Context, id string, group Group, inputDigest string) (LunaResponse, error) {
+	if !validLunaBatchID(id) || !resultDigest.MatchString(inputDigest) {
 		return LunaResponse{}, ErrLunaResultUnavailable
 	}
 	startedAt := time.Now()
@@ -257,7 +265,6 @@ func (d *LunaDeferred) pollBatch(ctx context.Context, id string, group Group) (L
 	if err != nil || code != http.StatusOK {
 		return pendingLuna(id), ErrLunaPollRetry
 	}
-	customID, _ := groupDigest(group)
 	var line struct {
 		CustomID string `json:"custom_id"`
 		Response struct {
@@ -266,7 +273,7 @@ func (d *LunaDeferred) pollBatch(ctx context.Context, id string, group Group) (L
 		} `json:"response"`
 		Error json.RawMessage `json:"error"`
 	}
-	if json.Unmarshal(raw, &line) != nil || line.CustomID != customID || line.Response.StatusCode != http.StatusOK ||
+	if json.Unmarshal(raw, &line) != nil || line.CustomID != inputDigest || line.Response.StatusCode != http.StatusOK ||
 		(len(line.Error) > 0 && !bytes.Equal(line.Error, []byte("null"))) {
 		return LunaResponse{ProviderID: id}, ErrLunaResultUnavailable
 	}
@@ -281,11 +288,13 @@ func (d *LunaDeferred) pollBatch(ctx context.Context, id string, group Group) (L
 // Cleanup releases provider state only after a durable terminal outcome. A
 // running Batch is never cleaned up while it can still require its input file.
 func (d *LunaDeferred) Cleanup(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, d.luna.config.Timeout)
+	defer cancel()
 	if d.mode != LunaBatch24h {
 		if !validLunaResponseID(id) {
 			return ErrLunaResultUnavailable
 		}
-		return d.deleteArtifact(ctx, lunaResponsePath+"/"+id)
+		return d.deleteArtifact(ctx, lunaResponsePath, id)
 	}
 	batch, found, err := d.batchState(ctx, id)
 	if err != nil || !found {
@@ -301,15 +310,26 @@ func (d *LunaDeferred) Cleanup(ctx context.Context, id string) error {
 			continue
 		}
 		seen[file] = true
-		cleanupErr = errors.Join(cleanupErr, d.deleteArtifact(ctx, lunaFilesPath+"/"+file))
+		cleanupErr = errors.Join(cleanupErr, d.deleteArtifact(ctx, lunaFilesPath, file))
 	}
 	return cleanupErr
 }
 
-func (d *LunaDeferred) deleteArtifact(ctx context.Context, path string) error {
-	_, code, err := d.luna.request(ctx, http.MethodDelete, path, "", nil)
-	if err == nil && (code == http.StatusNotFound || (code >= 200 && code < 300)) {
-		return nil
+func (d *LunaDeferred) deleteArtifact(ctx context.Context, resourcePath, id string) error {
+	raw, code, err := d.luna.request(ctx, http.MethodDelete, resourcePath+"/"+id, "", nil)
+	if err == nil {
+		switch code {
+		case http.StatusNotFound, http.StatusNoContent:
+			return nil
+		case http.StatusOK:
+			var response struct {
+				ID      string `json:"id"`
+				Deleted bool   `json:"deleted"`
+			}
+			if json.Unmarshal(raw, &response) == nil && response.ID == id && response.Deleted {
+				return nil
+			}
+		}
 	}
 	return fmt.Errorf("%w: cleanup did not confirm deletion", ErrLunaPollRetry)
 }
@@ -326,6 +346,8 @@ func terminalBatch(status string) bool {
 // Abort stops a known deferred request. Call Cleanup after the request has
 // reached a terminal state. Cancellation may need to be polled on a later run.
 func (d *LunaDeferred) Abort(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, d.luna.config.Timeout)
+	defer cancel()
 	if d.mode == LunaBatch24h {
 		batch, found, err := d.batchState(ctx, id)
 		if err != nil || !found || terminalBatch(batch.Status) {

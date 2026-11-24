@@ -3,10 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
+  deleteFile: vi.fn(),
   device: { loadSession: vi.fn(), saveSession: vi.fn(), signChallenge: vi.fn(), clearGoogleState: vi.fn() },
 }));
 vi.mock('expo', () => ({ requireOptionalNativeModule: () => mocks.device }));
-vi.mock('expo-file-system', () => ({}));
+vi.mock('expo-file-system', () => ({
+  Paths: { cache: { uri: 'file:///app/cache/' } },
+  File: class {
+    constructor(uri) { this.uri = uri; }
+    exists = true;
+    delete() { mocks.deleteFile(this.uri); }
+  },
+}));
 vi.mock('expo/fetch', () => ({ fetch: mocks.fetch }));
 vi.mock('expo-constants', () => ({
   default: { expoConfig: { extra: { maneAuth: { entry: 'https://auth.test' } } } },
@@ -59,6 +67,7 @@ function challenge(init, node) {
 beforeEach(() => {
   vi.resetModules();
   mocks.fetch.mockReset();
+  mocks.deleteFile.mockReset();
   mocks.device.signChallenge.mockReset().mockResolvedValue('device-signature');
   mocks.device.loadSession.mockReset().mockResolvedValue(JSON.stringify(session));
   mocks.device.saveSession.mockReset().mockResolvedValue(undefined);
@@ -235,5 +244,69 @@ describe('authenticated Android receipt jobs', () => {
     mocks.fetch.mockImplementation(async (url, init) => url.endsWith('/auth/challenge')
       ? challenge(init, 'a') : Response.json({ ...config, modes: [{ ...modes[0], millicredits_per_image: 1.5 }] }));
     await expect(api.getReceiptConfig()).rejects.toMatchObject({ code: 'invalid_receipt_response' });
+  });
+
+  it('rejects an upload prepared for a different signed-in account before fetching', async () => {
+    mocks.device.loadSession.mockResolvedValue(JSON.stringify({ ...session, account_id: 'account-a' }));
+    const api = await import('./androidReceiptClient');
+    await expect(api.submitReceiptJob(jobID, input, undefined, 'account-b')).rejects.toMatchObject({
+      status: 401, code: 'account_changed', mayHaveCommitted: false,
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a refresh response with a different session before the upload', async () => {
+    mocks.device.loadSession.mockResolvedValue(JSON.stringify({ ...session, account_id: 'account-a', expires_at: 1 }));
+    mocks.fetch.mockImplementation(async (url, init) => {
+      if (url.endsWith('/auth/challenge')) return challenge(init, 'a');
+      expect(url).toBe(origin + '/auth/refresh');
+      return Response.json({ ...session, session_id: 'other-session' });
+    });
+    const api = await import('./androidReceiptClient');
+    await expect(api.submitReceiptJob(jobID, input, undefined, 'account-a')).rejects.toMatchObject({ mayHaveCommitted: false });
+    expect(mocks.device.saveSession).not.toHaveBeenCalled();
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.endsWith(jobPath))).toHaveLength(0);
+  });
+
+  it('does not mark an unsent upload as uncertain when only its initial refresh failed', async () => {
+    mocks.device.loadSession.mockResolvedValue(JSON.stringify({ ...session, expires_at: 1 }));
+    mocks.fetch.mockImplementation(async (url, init) => {
+      if (url.endsWith('/auth/challenge')) return challenge(init, 'a');
+      expect(url).toBe(origin + '/auth/refresh');
+      throw new TypeError('refresh response lost');
+    });
+    const api = await import('./androidReceiptClient');
+    vi.useFakeTimers();
+    try {
+      const outcome = expect(api.submitReceiptJob(jobID, input)).rejects.toMatchObject({ mayHaveCommitted: false });
+      await vi.advanceTimersByTimeAsync(10_000);
+      await outcome;
+      expect(mocks.fetch.mock.calls.filter(([url]) => url.endsWith(jobPath))).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats only explicit intake pause as a definite server rejection', async () => {
+    const api = await import('./androidReceiptClient');
+    let paused = true;
+    mocks.fetch.mockImplementation(async (url, init) => {
+      if (url.endsWith('/auth/challenge')) return challenge(init, 'a');
+      if (url.endsWith('/receipt-config')) return Response.json({ ...config, intake_paused: paused });
+      return Response.json({ error: paused ? 'receipt_intake_paused' : 'temporarily_unavailable' }, { status: 503 });
+    });
+    expect(await api.getReceiptConfig()).toMatchObject({ intake_paused: true });
+    await expect(api.submitReceiptJob(jobID, input)).rejects.toMatchObject({ code: 'receipt_intake_paused', mayHaveCommitted: false });
+    paused = false;
+    await expect(api.submitReceiptJob(jobID, input)).rejects.toMatchObject({ code: 'temporarily_unavailable', mayHaveCommitted: true });
+  });
+
+  it('only removes canonical files under the app cache', async () => {
+    const { removeReceiptFile } = await import('./receiptDraftFiles');
+    for (const uri of ['content://photos/cache/receipt.jpg', 'file:///app/cache/../files/receipt.jpg',
+      'file:///app/cache/nested%2F..%2F..%2Ffiles%2Freceipt.jpg', 'file:///app/cache-other/receipt.jpg',
+      'file:///app/cache/']) removeReceiptFile(uri);
+    removeReceiptFile('file:///app/cache/documents/receipt%20copy.jpg');
+    expect(mocks.deleteFile.mock.calls).toEqual([['file:///app/cache/documents/receipt%20copy.jpg']]);
   });
 });

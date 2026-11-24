@@ -236,14 +236,7 @@ func (l *Luna) decodeResponse(raw []byte, group Group, elapsed time.Duration) (L
 		ID     string          `json:"id"`
 		Status string          `json:"status"`
 		Usage  json.RawMessage `json:"usage"`
-		Output []struct {
-			Type    string `json:"type"`
-			Role    string `json:"role"`
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-		} `json:"output"`
+		Output json.RawMessage `json:"output"`
 	}
 	if err := json.Unmarshal(raw, &response); err != nil || !providerID.MatchString(response.ID) {
 		return LunaResponse{}, ErrLunaSubmissionUnknown
@@ -269,8 +262,19 @@ func (l *Luna) decodeResponse(raw []byte, group Group, elapsed time.Duration) (L
 		return result, ErrLunaResultUnavailable
 	}
 
+	var outputs []struct {
+		Type    string `json:"type"`
+		Role    string `json:"role"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(response.Output, &outputs) != nil {
+		return result, ErrLunaResultUnavailable
+	}
 	var text strings.Builder
-	for _, output := range response.Output {
+	for _, output := range outputs {
 		if output.Type != "message" || output.Role != "assistant" {
 			continue
 		}
@@ -286,7 +290,8 @@ func (l *Luna) decodeResponse(raw []byte, group Group, elapsed time.Duration) (L
 
 	decoded, err := DecodeResult([]byte(text.String()), group, l.config.ResultLimits)
 	if err != nil {
-		return result, fmt.Errorf("%w: %v", ErrLunaResultUnavailable, err)
+		// Decoder details can contain field names or content from the image.
+		return result, ErrLunaResultUnavailable
 	}
 	result.Result = decoded
 	return result, nil

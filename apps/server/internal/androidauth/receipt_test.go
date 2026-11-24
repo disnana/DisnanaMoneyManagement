@@ -30,7 +30,7 @@ func (fixtureReceiptModes) SubmitMode(_ context.Context, key receiptai.JobKey, m
 
 func TestReceiptUploadBindsModeAndForwardsSeparateGroups(t *testing.T) {
 	sessions := NewMemorySessions()
-	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptModes{})
+	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptModes{}, false)
 	session := f.login()
 	path := receiptJobsPrefix + "fixture"
 	source := `{"maximum_credit":2,"price_version":"test-modes","mode":"background","request":{"groups":[{"id":"first"},{"id":"second"}]}}`
@@ -58,7 +58,7 @@ func (fixtureReceiptAPI) Job(_ context.Context, key receiptai.JobKey) (receiptai
 
 func TestReceiptUploadPreservesSignedBodyAndDoesNotWidenOtherProofs(t *testing.T) {
 	sessions := NewMemorySessions()
-	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptAPI{})
+	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptAPI{}, false)
 	session := f.login()
 	origin := f.a.URL
 	path := receiptJobsPrefix + "fixture"
@@ -75,6 +75,29 @@ func TestReceiptUploadPreservesSignedBodyAndDoesNotWidenOtherProofs(t *testing.T
 	f.want(origin, http.MethodPost, path, request+" ", session.Access, changed, f.device, 401)
 	status := f.challenge(origin, http.MethodGet, path, "", session.Access, "")
 	f.want(origin, http.MethodGet, path, "", session.Access, status, f.device, 200)
+}
+
+func TestReceiptIntakePauseLeavesConfigAndExistingResultsReadable(t *testing.T) {
+	sessions := NewMemorySessions()
+	f := setupWithReceipts(t, func() SessionStore { return sessions }, true, fixtureReceiptAPI{}, true)
+	session := f.login()
+	path := receiptJobsPrefix + "fixture"
+
+	config := f.challenge(f.a.URL, http.MethodGet, receiptConfigPath, "", session.Access, "")
+	configBody := f.want(f.a.URL, http.MethodGet, receiptConfigPath, "", session.Access, config, f.device, http.StatusOK)
+	if !strings.Contains(string(configBody), `"intake_paused":true`) {
+		t.Fatalf("configuration did not report the pause: %s", configBody)
+	}
+
+	source := `{"maximum_credit":1,"price_version":"test-1","request":{"groups":[]}}`
+	upload := f.challenge(f.a.URL, http.MethodPost, path, source, session.Access, "")
+	errorBody := f.want(f.a.URL, http.MethodPost, path, source, session.Access, upload, f.device, http.StatusServiceUnavailable)
+	if !strings.Contains(string(errorBody), `"receipt_intake_paused"`) {
+		t.Fatalf("upload did not return a definitive pause: %s", errorBody)
+	}
+
+	status := f.challenge(f.a.URL, http.MethodGet, path, "", session.Access, "")
+	f.want(f.a.URL, http.MethodGet, path, "", session.Access, status, f.device, http.StatusOK)
 }
 
 func TestReceiptErrorsAreStable(t *testing.T) {

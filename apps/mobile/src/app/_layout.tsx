@@ -106,7 +106,7 @@ export default function RootLayout() {
           {(['planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm', 'planning', 'search'] as const).map((name) => (
             <Stack.Screen key={name} name={name} options={detailOptions} />
           ))}
-          <Stack.Screen name="receipt-review" options={{ ...detailOptions, title: 'レシートを読み取る' }} />
+          <Stack.Screen name="receipt-review" options={{ headerShown: false }} />
           <Stack.Screen
             name="add"
             options={{

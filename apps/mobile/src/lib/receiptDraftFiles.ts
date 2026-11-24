@@ -47,8 +47,13 @@ export async function inspectReceiptFile(uri: string): Promise<{ type: ReceiptMi
 
 export function removeReceiptFile(uri: string) {
   try {
-    const cache = Paths.cache.uri.replace(/\/+$/, '');
-    if (!uri.startsWith(`${cache}/`)) return;
+    const cacheURI = Paths.cache.uri;
+    if (!cacheURI.startsWith('file:///') || !uri.startsWith('file:///') || /[?#]/.test(uri)) return;
+    // React Native's URL.pathname only parses HTTP(S) URLs.
+    const cachePath = decodeURIComponent(cacheURI.slice('file://'.length)).replace(/\/+$/, '') + '/';
+    const targetPath = decodeURIComponent(uri.slice('file://'.length));
+    if (!targetPath.startsWith(cachePath) || targetPath === cachePath ||
+        /[\\\0]/.test(targetPath) || targetPath.split('/').some((segment) => segment === '..' || segment === '.')) return;
     const file = new File(uri);
     if (file.exists) file.delete();
   } catch {

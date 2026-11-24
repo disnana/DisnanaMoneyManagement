@@ -15,7 +15,7 @@ const (
 
 type AsyncAnalyzer interface {
 	Submit(context.Context, Group) (LunaResponse, error)
-	Poll(context.Context, string, Group) (LunaResponse, error)
+	Poll(context.Context, string, Group, string) (LunaResponse, error)
 }
 
 type RuntimeModeConfig struct {

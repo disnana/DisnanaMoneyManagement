@@ -89,6 +89,11 @@ func (s *Service) AcceptDurableInput(ctx context.Context, key JobKey, intake Rec
 		if err := s.credits.Reserve(ctx, key.Subject, key.RequestID, current.Intake.MaximumCredit); err != nil {
 			return ReceiptJob{}, err
 		}
+		// Reserving credits can itself take us past the deadline. Leave the
+		// intake unaccepted so the recovery worker can release the recorded hold.
+		if !s.now().Before(current.Intake.Deadline) {
+			return ReceiptJob{}, ErrJobTransition
+		}
 		next := current.accept()
 		changed, err := s.store.replace(ctx, key, current.Revision, next)
 		if err != nil {
@@ -174,7 +179,13 @@ func (s *Service) runGroup(ctx context.Context, key JobKey, input Group, attempt
 		return err
 	}
 
-	response, err := submit(ctx, input)
+	var response LunaResponse
+	err = ErrLunaBeforeSend
+	if remaining := acknowledgeUntil.Sub(s.now()); remaining > 0 && ctx.Err() == nil {
+		submitCtx, cancel := context.WithTimeout(ctx, remaining)
+		response, err = submit(submitCtx, input)
+		cancel()
+	}
 	if err == nil && response.ProviderID == "" {
 		err = ErrLunaSubmissionUnknown
 	}
@@ -198,20 +209,22 @@ func (s *Service) runGroup(ctx context.Context, key JobKey, input Group, attempt
 	return s.recordProviderResult(ctx, key, input, digest, attemptID, response, err)
 }
 
-func (s *Service) pollGroup(ctx context.Context, key JobKey, input Group, analyzer AsyncAnalyzer, interval time.Duration) error {
-	digest, err := groupDigest(input)
-	if err != nil {
-		return err
+func (s *Service) pollGroup(ctx context.Context, key JobKey, input Group, digest string, analyzer AsyncAnalyzer, interval time.Duration) error {
+	if !resultDigest.MatchString(digest) {
+		return ErrJobConflict
 	}
 	var attemptID, providerID string
+	var deadline time.Time
 	if err := s.changeGroup(ctx, key, input.ID, digest, func(job Job) (Job, string, error) {
 		next, err := job.SchedulePoll(s.now(), interval)
-		attemptID, providerID = job.AttemptID, job.ProviderID
+		attemptID, providerID, deadline = job.AttemptID, job.ProviderID, job.Deadline
 		return next, "", err
 	}); err != nil {
 		return err
 	}
-	response, err := analyzer.Poll(ctx, providerID, input)
+	pollCtx, cancel := context.WithTimeout(ctx, min(interval, deadline.Sub(s.now())))
+	response, err := analyzer.Poll(pollCtx, providerID, input, digest)
+	cancel()
 	if (err == nil || response.ProviderID != "") && response.ProviderID != providerID {
 		return ErrJobConflict
 	}

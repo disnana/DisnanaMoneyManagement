@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const lunaDeferredReceipt = `{"documents":[{"source_image_ids":["top","bottom"],"document_type":"payment_receipt","status":"success","currency":"JPY","total_minor":900}]}`
@@ -26,6 +27,14 @@ func mockDeferredLuna(t *testing.T, mode string, transport lunaRoundTrip) *LunaD
 		t.Fatal(err)
 	}
 	return deferred
+}
+
+func persistedPollGroup(group Group) Group {
+	images := make([]Image, 0, len(group.Images))
+	for _, image := range group.Images {
+		images = append(images, Image{ID: image.ID})
+	}
+	return Group{ID: group.ID, Images: images}
 }
 
 func TestLunaBackgroundWindowsAndPolling(t *testing.T) {
@@ -77,12 +86,12 @@ func TestLunaBackgroundWindowsAndPolling(t *testing.T) {
 				t.Fatalf("submission did not persist the response ID: %+v, %v", submitted, err)
 			}
 			for range 2 {
-				got, err := d.Poll(ctx, submitted.ProviderID, group)
+				got, err := d.Poll(ctx, submitted.ProviderID, persistedPollGroup(group), "")
 				if !errors.Is(err, ErrLunaPollRetry) || got.ProviderID != submitted.ProviderID || !got.Pending || strings.Contains(err.Error(), "private") {
 					t.Fatalf("recoverable polling returned %+v, %v", got, err)
 				}
 			}
-			got, err := d.Poll(ctx, submitted.ProviderID, group)
+			got, err := d.Poll(ctx, submitted.ProviderID, persistedPollGroup(group), "")
 			if err != nil || got.Pending || got.ProviderID != submitted.ProviderID || len(got.Result.Documents) != 1 {
 				t.Fatalf("unexpected terminal result: %+v, %v", got, err)
 			}
@@ -110,7 +119,7 @@ func TestLunaBackgroundUnknownSubmitAndKnownTerminalFailure(t *testing.T) {
 	if response, err := d.Submit(context.Background(), group); !errors.Is(err, ErrLunaSubmissionUnknown) || response.ProviderID != "" || calls != 1 {
 		t.Fatalf("unknown acceptance was retried or treated as rejected: %+v, %v calls=%d", response, err, calls)
 	}
-	if response, err := d.Poll(context.Background(), "resp_fixture", group); !errors.Is(err, ErrLunaResultUnavailable) ||
+	if response, err := d.Poll(context.Background(), "resp_fixture", persistedPollGroup(group), ""); !errors.Is(err, ErrLunaResultUnavailable) ||
 		response.Pending || response.ProviderID != "resp_fixture" || calls != 2 {
 		t.Fatalf("known completed but invalid output lost its provider ID: %+v, %v calls=%d", response, err, calls)
 	}
@@ -204,7 +213,7 @@ func TestLunaBatchSubmitsOneGroupAndCleansOnlyAfterDurableOutcome(t *testing.T) 
 			line := `{"custom_id":"` + customID + `","response":{"status_code":200,"body":` + lunaOutput(t, lunaDeferredReceipt) + `},"error":null}`
 			return mockLunaResponse(http.StatusOK, line+"\n"), nil
 		case 8, 9, 10:
-			return mockLunaResponse(http.StatusOK, `{"deleted":true}`), nil
+			return mockLunaResponse(http.StatusOK, `{"id":"`+strings.TrimPrefix(r.URL.Path, "/v1/files/")+`","deleted":true}`), nil
 		default:
 			t.Fatal("unexpected Batch request")
 			return nil, nil
@@ -218,10 +227,10 @@ func TestLunaBatchSubmitsOneGroupAndCleansOnlyAfterDurableOutcome(t *testing.T) 
 	if err := d.Cleanup(ctx, submitted.ProviderID); !errors.Is(err, ErrLunaPollRetry) {
 		t.Fatalf("cleanup while active = %v", err)
 	}
-	if response, err := d.Poll(ctx, submitted.ProviderID, group); err != nil || !response.Pending || response.ProviderID != submitted.ProviderID {
+	if response, err := d.Poll(ctx, submitted.ProviderID, persistedPollGroup(group), customID); err != nil || !response.Pending || response.ProviderID != submitted.ProviderID {
 		t.Fatalf("pending Batch = %+v, %v", response, err)
 	}
-	result, err := d.Poll(ctx, submitted.ProviderID, group)
+	result, err := d.Poll(ctx, submitted.ProviderID, persistedPollGroup(group), customID)
 	if err != nil || result.Pending || result.ProviderID != submitted.ProviderID || len(result.Result.Documents) != 1 {
 		t.Fatalf("completed Batch = %+v, %v", result, err)
 	}
@@ -319,8 +328,52 @@ func TestLunaBatchRejectsMismatchedOutputGrouping(t *testing.T) {
 			return nil, nil
 		}
 	})
-	result, err := d.Poll(context.Background(), "batch_fixture", lunaGroup(t))
+	result, err := d.Poll(context.Background(), "batch_fixture", persistedPollGroup(lunaGroup(t)), strings.Repeat("a", 64))
 	if !errors.Is(err, ErrLunaResultUnavailable) || result.ProviderID != "batch_fixture" || result.Pending || len(result.Result.Documents) != 0 {
 		t.Fatalf("misbound output = %+v, %v", result, err)
+	}
+}
+
+func TestLunaBatchSharesOneSubmissionDeadline(t *testing.T) {
+	var uploadDeadline time.Time
+	calls := 0
+	d := mockDeferredLuna(t, LunaBatch24h, func(request *http.Request) (*http.Response, error) {
+		calls++
+		deadline, ok := request.Context().Deadline()
+		if !ok {
+			t.Fatal("provider request was unbounded")
+		}
+		switch request.URL.Path {
+		case "/v1/files":
+			uploadDeadline = deadline
+			return mockLunaResponse(http.StatusOK, `{"id":"file-input","purpose":"batch"}`), nil
+		case "/v1/batches":
+			if !deadline.Equal(uploadDeadline) {
+				t.Fatal("Batch creation received a new full deadline")
+			}
+			return nil, errors.New("mock ambiguous send")
+		default:
+			t.Fatal("ambiguous submission must not be retried or cleaned immediately")
+			return nil, nil
+		}
+	})
+	if _, err := d.Submit(context.Background(), lunaGroup(t)); !errors.Is(err, ErrLunaSubmissionUnknown) || calls != 2 {
+		t.Fatalf("submission result = %v, calls = %d", err, calls)
+	}
+}
+
+func TestLunaCleanupRequiresMatchingDeletionAcknowledgement(t *testing.T) {
+	for _, response := range []string{
+		`{"id":"resp_fixture","deleted":false}`, `{"id":"resp_other","deleted":true}`, `{}`,
+	} {
+		d := mockDeferredLuna(t, LunaBackground2h, func(request *http.Request) (*http.Response, error) {
+			if request.Method != http.MethodDelete || request.URL.Path != "/v1/responses/resp_fixture" {
+				t.Fatal("unexpected deletion request")
+			}
+			return mockLunaResponse(http.StatusOK, response), nil
+		})
+		if err := d.Cleanup(context.Background(), "resp_fixture"); !errors.Is(err, ErrLunaPollRetry) {
+			t.Fatalf("unconfirmed deletion returned %v", err)
+		}
 	}
 }

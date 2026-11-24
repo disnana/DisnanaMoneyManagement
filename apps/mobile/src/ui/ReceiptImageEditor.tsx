@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, PanResponder, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import { File } from 'expo-file-system';
 import { ImageManipulator, SaveFormat, type ImageRef } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { inspectReceiptFile, removeReceiptFile } from '@/lib/receiptDraftFiles';
+import { useAppReducedMotion } from '@/lib/motionPref';
 import { metrics, usePalette } from '@/lib/theme';
 
 export type ReceiptImageSource = {
@@ -32,7 +33,11 @@ export async function openReceiptCamera() {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) throw new Error(permission.canAskAgain ? '撮影するにはカメラへのアクセスを許可してください。'
     : '端末の設定でカメラを許可すると撮影できます。');
-  return sources(await ImagePicker.launchCameraAsync({ ...pickerOptions, cameraType: ImagePicker.CameraType.back }), 'camera');
+  try {
+    return sources(await ImagePicker.launchCameraAsync({ ...pickerOptions, cameraType: ImagePicker.CameraType.back }), 'camera');
+  } catch {
+    throw new Error('カメラを起動できませんでした。写真かファイルから画像を選べます。');
+  }
 }
 
 export async function openReceiptGallery(selectionLimit: number) {
@@ -52,7 +57,7 @@ type Crop = { left: number; top: number; right: number; bottom: number };
 const full: Crop = { left: 0, top: 0, right: 1, bottom: 1 };
 const workingEdge = 4096;
 const previewEdge = 1280;
-const handleSize = 44;
+const handleSize = 48;
 const noSize: Size = { width: 0, height: 0 };
 
 function scaledSize(size: Size, longest: number, pixels = Infinity): Size {
@@ -105,6 +110,7 @@ const corners: Corner[] = [
   { x: 'left', y: 'bottom', label: '左下' }, { x: 'right', y: 'bottom', label: '右下' },
 ];
 const accessibilityActions = [
+  { name: 'increment', label: '範囲を広げる' }, { name: 'decrement', label: '範囲を狭める' },
   { name: 'left', label: '左へ移動' }, { name: 'right', label: '右へ移動' },
   { name: 'up', label: '上へ移動' }, { name: 'down', label: '下へ移動' },
 ];
@@ -128,17 +134,21 @@ function CropHandle({ corner, crop, canvas, setCrop, disabled }: {
   const start = useRef(crop);
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => !disabled,
+    onPanResponderTerminationRequest: () => false,
     onPanResponderGrant: () => { start.current = current.current; },
     onPanResponderMove: (_, gesture) => setCrop(moveCorner(start.current, corner,
       gesture.dx / canvas.width, gesture.dy / canvas.height, canvas)),
   }), [canvas, corner, disabled, setCrop]);
   return <View {...pan.panHandlers}
     accessible accessibilityRole="adjustable" accessibilityLabel={`切り取り枠の${corner.label}`}
+    accessibilityValue={{ text: `横 ${Math.round(crop[corner.x] * 100)}%、縦 ${Math.round(crop[corner.y] * 100)}%` }}
     accessibilityState={{ disabled }} accessibilityActions={accessibilityActions}
     onAccessibilityAction={({ nativeEvent: { actionName } }) => {
       if (disabled) return;
-      const dx = actionName === 'left' ? -0.04 : actionName === 'right' ? 0.04 : 0;
-      const dy = actionName === 'up' ? -0.04 : actionName === 'down' ? 0.04 : 0;
+      const step = 0.04;
+      const amount = actionName === 'increment' ? step : actionName === 'decrement' ? -step : 0;
+      const dx = actionName === 'left' ? -step : actionName === 'right' ? step : corner.x === 'left' ? -amount : amount;
+      const dy = actionName === 'up' ? -step : actionName === 'down' ? step : corner.y === 'top' ? -amount : amount;
       setCrop(moveCorner(current.current, corner, dx, dy, canvas));
     }}
     style={[styles.handle, { left: crop[corner.x] * canvas.width, top: crop[corner.y] * canvas.height }]}>
@@ -181,6 +191,7 @@ export function ReceiptImageEditor({ source, maxBytes, maxPixels, onConfirm, onC
   onReplace?: () => Promise<ReceiptImageSource | undefined>;
 }) {
   const p = usePalette();
+  const reduceMotion = useAppReducedMotion();
   const [preview, setPreview] = useState<{ uri: string; size: Size }>();
   const [crop, setCrop] = useState(full);
   const [viewport, setViewport] = useState(noSize);
@@ -305,29 +316,31 @@ export function ReceiptImageEditor({ source, maxBytes, maxPixels, onConfirm, onC
   }
 
   const adjusted = crop.left > 0 || crop.top > 0 || crop.right < 1 || crop.bottom < 1;
-  return <Modal animationType="slide" onRequestClose={close}>
+  return <Modal animationType={reduceMotion ? 'none' : 'slide'} onRequestClose={close}>
     <SafeAreaView accessibilityViewIsModal style={[styles.root, { backgroundColor: p.bg }]}>
-      <View style={styles.header}>
-        <View style={styles.titleBox}>
-          <Text accessibilityRole="header" style={[styles.title, { color: p.text }]}>画像の範囲を調整</Text>
-          <Text style={[styles.help, { color: p.textSecondary }]}>四隅の丸を動かして、使う範囲を選びます。</Text>
+      <ScrollView contentContainerStyle={styles.editorContent} keyboardShouldPersistTaps="handled">
+        <View style={styles.header}>
+          <View style={styles.titleBox}>
+            <Text accessibilityRole="header" style={[styles.title, { color: p.text }]}>画像の範囲を調整</Text>
+            <Text style={[styles.help, { color: p.textSecondary }]}>四隅の丸を動かして、使う範囲を選びます。</Text>
+          </View>
+          <EditorButton label="閉じる" onPress={close} disabled={busy} />
         </View>
-        <EditorButton label="閉じる" onPress={close} disabled={busy} />
-      </View>
-      <View style={styles.viewer} onLayout={layout}>
-        {loading ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="画像を読み込み中" /> : null}
-        {preview && canvas.width > 0 ? <CropFrame uri={preview.uri} crop={crop} canvas={canvas} disabled={busy} setCrop={setCrop} /> : null}
-      </View>
-      <View style={styles.footer}>
-        {message ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.help, { color: p.danger }]}>{message}</Text> : null}
-        {busy ? <ActivityIndicator color={p.tint} accessibilityLabel="画像を処理中" /> : null}
-        <View style={styles.tools}>
-          {onReplace ? <EditorButton label={source.kind === 'camera' ? '撮り直す' : '選び直す'} onPress={() => void replace()} disabled={busy} /> : null}
-          {adjusted ? <EditorButton label="枠を戻す" onPress={() => setCrop(full)} disabled={busy} /> : null}
+        <View style={styles.viewer} onLayout={layout}>
+          {loading ? <ActivityIndicator color="#FFFFFF" accessibilityLabel="画像を読み込み中" /> : null}
+          {preview && canvas.width > 0 ? <CropFrame uri={preview.uri} crop={crop} canvas={canvas} disabled={busy} setCrop={setCrop} /> : null}
         </View>
-        {adjusted ? <EditorButton primary label="この範囲を使う" onPress={() => void confirm(crop)} disabled={busy || !preview} /> : null}
-        <EditorButton primary={!adjusted} label="切り取らずに使う" onPress={() => void confirm(full)} disabled={busy || !preview} />
-      </View>
+        <View style={styles.footer}>
+          {message ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.help, { color: p.danger }]}>{message}</Text> : null}
+          {busy ? <ActivityIndicator color={p.tint} accessibilityLabel="画像を処理中" /> : null}
+          <View style={styles.tools}>
+            {onReplace ? <EditorButton label={source.kind === 'camera' ? '撮り直す' : '選び直す'} onPress={() => void replace()} disabled={busy} /> : null}
+            <EditorButton label="枠を戻す" onPress={() => setCrop(full)} disabled={busy || !adjusted} />
+          </View>
+          <EditorButton primary label={adjusted ? 'この範囲を使う' : '画像全体を使う'}
+            onPress={() => void confirm(adjusted ? crop : full)} disabled={busy || !preview || !canvas.width} />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   </Modal>;
 }
@@ -346,21 +359,22 @@ function EditorButton({ label, onPress, primary, disabled }: {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  editorContent: { flexGrow: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10 },
   titleBox: { flex: 1, gap: 4 },
   title: { fontSize: 20, fontWeight: '700' },
   help: { fontSize: 13, lineHeight: 18 },
-  viewer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#161A1A' },
+  viewer: { flex: 1, minHeight: 180, alignItems: 'center', justifyContent: 'center', backgroundColor: '#161A1A' },
   canvas: { position: 'relative' },
   imageBounds: { position: 'absolute', left: handleSize / 2, top: handleSize / 2, backgroundColor: '#FFFFFF' },
   shade: { position: 'absolute', backgroundColor: 'rgba(0, 0, 0, 0.56)' },
   frame: { position: 'absolute', borderColor: '#FFFFFF', borderWidth: 1.5 },
-  grid: { position: 'absolute', backgroundColor: 'rgba(255, 255, 255, 0.6)' },
+  grid: { position: 'absolute', backgroundColor: 'rgba(31, 36, 36, 0.52)' },
   handle: { position: 'absolute', height: handleSize, width: handleSize, alignItems: 'center', justifyContent: 'center' },
   handleDot: { height: 18, width: 18, borderRadius: 9, borderWidth: 2, borderColor: '#FFFFFF', backgroundColor: '#176961' },
   footer: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   tools: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  button: { minHeight: 46, minWidth: 44, paddingHorizontal: 14, paddingVertical: 6,
+  button: { minHeight: 48, minWidth: 48, paddingHorizontal: 14, paddingVertical: 6,
     flexShrink: 1, alignItems: 'center', justifyContent: 'center', borderRadius: metrics.controlRadius },
   buttonLabel: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
 });
