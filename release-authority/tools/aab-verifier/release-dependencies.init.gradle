@@ -4,19 +4,34 @@ import org.gradle.api.artifacts.result.UnresolvedDependencyResult
 import org.gradle.api.artifacts.dsl.LockMode
 
 def releaseConfigurations = ['releaseCompileClasspath', 'releaseRuntimeClasspath'] as Set
+def buildDependencyUpdates = [
+    'com.google.guava:guava:33.3.1-jre': '33.7.2-jre',
+    'org.apache.commons:commons-lang3:3.16.0': '3.20.0',
+    'org.bitbucket.b_c:jose4j:0.9.5': '0.9.6',
+    'org.bouncycastle:bcpkix-jdk18on:1.79': '1.85',
+    'org.bouncycastle:bcprov-jdk18on:1.79': '1.85',
+    'org.bouncycastle:bcutil-jdk18on:1.79': '1.85',
+    'org.jdom:jdom2:2.0.6': '2.0.6.1',
+    'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.0': '2.4.20',
+    'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.10': '2.4.20',
+]
+
 gradle.beforeProject { project ->
-    if (gradle.parent == null && project.name == 'react-native-keyboard-controller') {
-        project.buildscript.configurations.named('classpath').configure {
-            resolutionStrategy.eachDependency { dependency ->
-                if (dependency.requested.group == 'com.android.tools.build' &&
-                    dependency.requested.name == 'gradle' && dependency.requested.version == '4.2.2') {
-                    dependency.useVersion('9.2.1')
-                    dependency.because('Use the same Android Gradle plugin as the Expo application')
-                }
+    if (gradle.parent != null) return
+    project.buildscript.configurations.named('classpath').configure {
+        resolutionStrategy.eachDependency { dependency ->
+            def requested = dependency.requested
+            def coordinate = "${requested.group}:${requested.name}:${requested.version}".toString()
+            if (project.name == 'react-native-keyboard-controller' && coordinate == 'com.android.tools.build:gradle:4.2.2') {
+                dependency.useVersion('9.2.1')
+                dependency.because('Use the same Android Gradle plugin as the Expo application')
+            } else if (buildDependencyUpdates.containsKey(coordinate)) {
+                dependency.useVersion(buildDependencyUpdates[coordinate])
+                dependency.because('Use the advisory-fixed version on the Android build classpath')
             }
         }
     }
-    if (gradle.parent == null && project.path == ':app') {
+    if (project.path == ':app') {
         project.dependencyLocking.lockMode = LockMode.STRICT
         project.configurations.configureEach {
             if (releaseConfigurations.contains(name)) resolutionStrategy.activateDependencyLocking()
