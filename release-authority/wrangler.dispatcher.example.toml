@@ -1,0 +1,7 @@
+name = "disnana-release-dispatcher-staging"
+main = "workers/dispatcher/index.mjs"
+compatibility_date = "2026-11-23"
+workers_dev = false
+preview_urls = false
+
+# Set GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID and GITHUB_APP_PKCS8_PEM in this Worker.

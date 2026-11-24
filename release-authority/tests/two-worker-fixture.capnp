@@ -40,6 +40,8 @@ const config :Workerd.Config = (
         (name = "UPLOAD_PRIVATE_KEY_PEM", text = embed "fixture-upload-key.pem"),
         (name = "RELEASE_INTAKE_ENABLED", text = "true"),
         (name = "RELEASE_SIGNING_ENABLED", text = "true"),
+        (name = "RELEASE_AUTO_DISPATCH", text = "true"),
+        (name = "GITHUB_DISPATCHER", service = (name = "edge", entrypoint = "FixtureDispatcher")),
         (name = "RELEASE_LEDGER", durableObjectNamespace = "SignerLedger")
       ],
       durableObjectNamespaces = [(className = "SignerLedger", uniqueKey = "release-two-worker-test-only", enableSql = true)],

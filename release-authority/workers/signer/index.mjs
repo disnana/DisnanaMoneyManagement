@@ -108,6 +108,8 @@ export class SignerLedger extends DurableObject {
       signatureLength: rsaBits / 8,
       requireFinalizer: true,
       disabled: () => env.RELEASE_INTAKE_ENABLED !== 'true',
+      autoDispatch: () => env.RELEASE_AUTO_DISPATCH === 'true' && env.RELEASE_SIGNING_ENABLED === 'true'
+        && Boolean(env.GITHUB_DISPATCHER),
       isAdministrator: (id) => access.administrators.includes(id),
       isSigner: (principal) => this.#signers.has(principal),
     });
@@ -115,7 +117,34 @@ export class SignerLedger extends DurableObject {
   register(wire, principal) { return this.#ledger.register(wire, principal); }
   approvalView(id, administrator) { return this.#ledger.approvalView(id, administrator); }
   arm(id, hash, administrator) { return this.#ledger.arm(id, hash, administrator); }
-  confirm(id, hash, administrator, nonce) { return this.#ledger.confirm(id, hash, administrator, nonce); }
+  async confirm(id, hash, administrator, nonce) {
+    if (!this.#ledger.policy.autoDispatch()) return this.#ledger.confirm(id, hash, administrator, nonce);
+    // Set the durable wakeup first, without allowing it to race the approval transaction.
+    let failure;
+    await this.ctx.blockConcurrencyWhile(async () => {
+      try {
+        const existing = await this.ctx.storage.getAlarm();
+        if (existing === null) await this.ctx.storage.setAlarm(Date.now() + 1000);
+        await this.#ledger.confirm(id, hash, administrator, nonce);
+      } catch (error) { failure = error; }
+    });
+    if (failure) throw failure;
+  }
+  async alarm() {
+    for (const id of this.#ledger.pendingDispatchIds()) {
+      const request = await this.#ledger.beginDispatch(id);
+      if (!request) continue;
+      let outcome = 'unknown';
+      try {
+        const response = await this.env.GITHUB_DISPATCHER.fetch('https://release-dispatch.internal/finalize', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request),
+        });
+        if (response.status === 204) outcome = 'sent';
+        if (response.status === 409) outcome = 'failed';
+      } catch { /* No blind retry after an ambiguous result. */ }
+      await this.#ledger.finishDispatch(id, outcome);
+    }
+  }
   reject(id, hash, administrator) { return this.#ledger.reject(id, hash, administrator); }
   async recordPlayUpload(id, report, publisher) {
     const keyId = this.env.RELEASE_RECEIPT_KEY_ID;

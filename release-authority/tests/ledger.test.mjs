@@ -86,6 +86,25 @@ test('registration rejects mismatched verifier, unknown fields and duplicate key
   assert.equal(f.ledger.auditEvents().length, 0);
 });
 
+test('only a confirmed upload-only release queues one dispatch and an unknown result is not retried', async (t) => {
+  const f = await fixture(t, { autoDispatch: () => true, releaseStatus: 'upload-only' });
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
+  const hash = await sha256Hex(wire);
+  const id = f.manifest.releaseId;
+  await f.ledger.register(wire, verifier);
+  const nonce = await f.ledger.arm(id, hash, administrator);
+  assert.deepEqual(f.ledger.pendingDispatchIds(), []);
+  await assert.rejects(f.ledger.confirm(id, hash, administrator, nonce));
+  f.advance(8000);
+  await f.ledger.confirm(id, hash, administrator, nonce);
+  assert.deepEqual(f.ledger.pendingDispatchIds(), [id]);
+  const reservations = await Promise.all([f.ledger.beginDispatch(id), f.ledger.beginDispatch(id)]);
+  assert.deepEqual(reservations.filter(Boolean), [{ buildRunId: '567', verifierRunId: '1234', workflowSha: verifier.workflowSha }]);
+  await f.ledger.finishDispatch(id, 'unknown');
+  assert.equal(f.ledger.read(id).dispatch, 'UNKNOWN');
+  assert.equal(await f.ledger.beginDispatch(id), undefined);
+});
+
 test('staging requester binds identity and sends credentials only to their intended hosts', async (t) => {
   const f = await fixture(t);
   const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });

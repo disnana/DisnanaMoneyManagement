@@ -10,8 +10,14 @@ APPROVAL_ORIGIN = "https://release-stg.disnana.com"
 VERIFIER_ORIGIN = "https://release-api-stg.disnana.com"
 RELEASE_INTAKE_ENABLED = "false"
 RELEASE_SIGNING_ENABLED = "false"
+RELEASE_AUTO_DISPATCH = "false"
 # Set these values through the Signer's isolated configuration before testing intake.
 # RELEASE_POLICY, ACCESS_POLICY, VERIFIER_POLICY
+
+# Enable only after deploying the private Dispatcher and authorizing the GitHub App.
+# [[services]]
+# binding = "GITHUB_DISPATCHER"
+# service = "disnana-release-dispatcher-staging"
 
 [[rules]]
 type = "Text"

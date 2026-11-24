@@ -64,7 +64,8 @@ export function makeCiAuthenticator(policy, {
       || (policy.callerSha && claims.workflow_sha !== policy.callerSha)
       || ((reusable || hasJobIdentity)
         && (claims.job_workflow_sha !== expectedJobSha || claims.job_workflow_ref !== expectedJobRef))
-      || claims.event_name !== 'workflow_dispatch' || claims.runner_environment !== 'github-hosted'
+      || (claims.event_name !== 'workflow_dispatch' && !(policy.role === 'verifier' && claims.event_name === 'workflow_run'))
+      || claims.runner_environment !== 'github-hosted'
       || (policy.environment && claims.environment !== policy.environment)
       || claims.exp <= claims.iat || claims.exp - claims.iat > 305) deny();
     return Object.freeze({

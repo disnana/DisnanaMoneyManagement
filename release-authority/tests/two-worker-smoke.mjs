@@ -127,6 +127,7 @@ if (mode === 'prepare') {
   await timers(8100);
   assert.equal((await edge(page + '/confirm', accessHeaders, confirmBody)).status, 204);
   assert.equal((await edge(page + '/confirm', accessHeaders, confirmBody)).status, 409);
+  await timers(1600);
   assert.equal((await edge(registration + '/sign', verifyHeaders, wire)).status, 404);
   assert.equal((await edge(page + '/audit', accessHeaders)).status, 404);
   assert.equal((await edge(resultUrl, finalizerHeaders, Buffer.from('31050403010204', 'hex'))).status, 409);
@@ -160,7 +161,7 @@ if (mode === 'prepare') {
       report: completed, runId: '105', runAttempt: 1,
     });
   }
-  console.log('Gateway routes, authenticated approval, one RSA signature, and upload audit verified.');
+  console.log('Gateway routes, authenticated approval, dispatch alarm, one RSA signature, and upload audit verified.');
 } else {
   throw new Error('Expected prepare or exercise');
 }

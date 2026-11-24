@@ -96,6 +96,15 @@ test('same-repository release workflows require an exact SHA and reject a differ
   await assert.rejects(fixed(authorization(await signed({ ...claims, job_workflow_ref: reusableRef, job_workflow_sha: reusableSha }))));
 });
 
+test('a completed-build event can authenticate only as the verifier', async () => {
+  const token = await signed({ ...base, event_name: 'workflow_run' });
+  assert.equal((await ci(authorization(token))).role, 'verifier');
+  for (const role of ['finalizer', 'publisher']) {
+    const authenticate = makeCiAuthenticator({ ...policy, role }, { resolveKey, equal: timingSafeEqual });
+    await assert.rejects(authenticate(authorization(token)));
+  }
+});
+
 test('Access requires a valid token scoped to the app and a configured admin subject', async () => {
   const access = makeAccessAuthenticator({ team: 'fixture-team', audience: 'admin-audience', administrators: ['allowed'] }, { resolveKey });
   const admin = { iss: 'https://fixture-team.cloudflareaccess.com', aud: ['admin-audience'], sub: 'allowed', iat: now, exp: now + 240 };
