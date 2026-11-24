@@ -26,8 +26,8 @@ const { chromium, webkit, devices } = require('playwright');
     },
   };
   const assets = {
-    '/approve.js': { body: await fs.readFile(path.join(root, 'approve.js')), type: 'application/javascript' },
-    '/approve.css': { body: await fs.readFile(path.join(root, 'approve.css')), type: 'text/css' },
+    '/approve.js': { body: await fs.readFile(path.join(root, 'approve.js.txt')), type: 'application/javascript' },
+    '/approve.css': { body: await fs.readFile(path.join(root, 'approve.css.txt')), type: 'text/css' },
   };
   const handle = makeApprovalHandler({ origin, ledger, assets, authenticate: () => 'browser-fixture' });
   const browser = process.env.APPROVAL_BROWSER === 'webkit'

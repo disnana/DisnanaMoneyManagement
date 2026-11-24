@@ -18,7 +18,12 @@
 | Private Signer | 承認されたCMS属性 → RSA署名とハッシュ | 署名開始と監査を同時に保存し、署名と鍵指紋を検証。鍵はSignerに限定。GatewayにSignerのBindingを配布しない |
 | Finalizer / Publisher | 同じAABと署名 → 検証済みAAB・Play下書き・receipt | 固定CI、WIF、手動再開。Playで返されたハッシュと下書きの状態を照合し、提出操作はPlay Console |
 
-GatewayとApprovalから呼ぶ台帳の入り口を分け、署名を予約・確定するCapabilityはSignerのみに与えます。具体案は内部サービスに複数の名前付きWorkerEntrypointを設け、Service Bindingを入り口単位に限定することです。台帳の内部メソッドへGatewayから任意のprincipalを送れると境界が崩れます。Accessの認証済み主体も、クライアントが送った値から生成しません。DOのクラウド構成とBindingは未接続です。
+## Cloudflareは2 Worker
+
+- GatewayはCI APIと承認画面の入口を担当し、ホストと経路で振り分けます。Accessは承認ホスト全体に適用します。
+- Signerのデプロイ単位にSQLite Durable Objectを置きます。GatewayのService Bindingは名前付き `ApprovalIntake` と `VerifierIntake` だけです。Cloudflare AccessとCIの署名付き認証情報は各Intakeで照合し、主体のIDをリクエストJSONから受け付けません。公開用の既定エントリポイントは常に404を返します。
+- 認可済みの申請、承認、署名、将来のPlay操作の監査は、同じリリースIDでSigner側の台帳に集約します。現段階で接続したのは申請と承認です。ローカルworkerd結合テストで、テスト用JWKSからの署名検証、承認の再送拒否、同じSQLite台帳への4イベントの記録、署名・監査閲覧経路の404を確認しました。Wrangler 4.167.0で両設定例のdry-runも成功しました。署名鍵、台帳を直接読む権限、署名の予約・確定操作はGatewayに渡しません。
+- Gatewayで実行されるコードには、経由したAccess JWTやCIの認証情報が見えます。有効な認証情報の窃取や再送による代理操作は残余リスクです。短い有効期間、固定CI、別管理のデプロイ権限とAccessの監査を使い、Gateway侵害まで耐える追加の認証境界はステージングで別途判断します。
 
 D1やScyllaDBの追加は初期運用に不要です。SQLiteで状態と監査をトランザクション保存し、Web Cryptoで算出した次の監査ハッシュは台帳ヘッドと比較してから同時に書き込みます。外部署名をトランザクションに含めず、結果が不明なら隔離する設計です。通知と自動dispatchの導入前は手動でFinalizeを開始できます。
 
@@ -28,7 +33,7 @@ D1やScyllaDBの追加は初期運用に不要です。SQLiteで状態と監査�
 | --- | --- | --- |
 | 0 | v6の独立した形式・内容検査、実workerdで別プロセス署名、JDKとOpenSSLで検証 | 実アップロード証明書との互換、Cloudflare実環境 |
 | 1 | バージョン固定のツールと依存ハッシュ、ZIP/AAB検証、canonical manifest、JOSEのOIDC/Access検査、ローカル監査とテスト専用CI設定 | 固定独立CIからの実OIDC登録、GitHub来歴の受入検証とartifact/runの取得、アプリのBun/Gradle監査・SBOMを必須化するゲート |
-| 2 | SQLiteの承認・署名予約・追記監査（ローカル実workerdのDOでも確認）、署名の再取得と異常時隔離、承認UI、ローカルの非公開署名処理、Chromium/WebKitのiPhone相当の画面での操作確認 | CFのホスト、WAF、Access設定、DOと個別Binding、失効・監査閲覧・外部アンカー、Bark、iPhone実機のSafariとAccessセッション |
+| 2 | SQLiteの承認・署名予約・追記監査（ローカルの実workerdで2 WorkerとDOを接続して確認）、署名の再取得と異常時隔離、承認UI、ローカルの非公開署名処理、Chromium/WebKitのiPhone相当の画面での操作確認 | CFのホスト、WAF、Access、実環境でのDOと個別Binding、Signerの署名接続、失効・監査閲覧・外部アンカー、Bark、iPhone実機のSafariとAccessセッション |
 | 3 | AABの再構成・厳格検証・全エントリ比較、テスト鍵による別鍵JWSのdraft receipt、既存Playコードのモックテスト | Finalizerの証跡束縛、Play API `edits.validate`、結果不明の照合、アップロード結果の台帳記録、WIF実測と受入試験 |
 | 4 | JWT・ZIP・承認・署名・receiptの拒否テスト、ローカルworkerdのHTTP計測 | CFでのCPU・JWKS miss・DOストレージ・Free枠、実ルーティング環境での境界と並行処理の検証 |
 

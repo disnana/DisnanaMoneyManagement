@@ -21,3 +21,5 @@ python3 -B -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ルートのPlaywright依存がある環境では `node tests/approval-browser.cjs` を実行できます。導入済みWebKitで試す場合は `APPROVAL_BROWSER=webkit` を指定します。CIの確認ワークフローはテストと依存監査を行います。クラウドへのデプロイとPlayへのアップロードは独立した手順です。
+
+2 WorkerとSQLite台帳のローカル結合テストは、`WORKERD=/path/to/workerd tests/run-two-worker-smoke.sh` で実行します。使う認証情報はテスト時に生成します。
