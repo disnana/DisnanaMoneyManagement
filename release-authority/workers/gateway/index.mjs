@@ -8,7 +8,7 @@ export default {
     }
     if (!url.search && url.origin === env.VERIFIER_ORIGIN && request.method === 'POST') {
       if (url.pathname === '/v1/releases') return env.VERIFIER_INTAKE.fetch(request);
-      if (/^\/v1\/releases\/[a-f0-9]{32}\/result$/.test(url.pathname) && env.FINALIZER_INTAKE) {
+      if (/^\/v1\/releases\/[a-f0-9]{32}\/(?:result|upload)$/.test(url.pathname) && env.FINALIZER_INTAKE) {
         return env.FINALIZER_INTAKE.fetch(request);
       }
     }

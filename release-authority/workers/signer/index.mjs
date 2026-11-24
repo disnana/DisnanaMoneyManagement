@@ -7,6 +7,7 @@ import approveScript from '../approval/approve.js.txt';
 import approveStyle from '../approval/approve.css.txt';
 import { makeVerifierIntake } from './intake.mjs';
 import { makeFinalizeIntake } from './finalize-intake.mjs';
+import { makePublisherIntake } from './publisher-intake.mjs';
 import { makeReleaseSigner } from './sign-release.mjs';
 
 const assets = {
@@ -61,6 +62,18 @@ export class VerifierIntake extends WorkerEntrypoint {
 export class FinalizerIntake extends WorkerEntrypoint {
   fetch(request) {
     const state = getHandlers(this.env);
+    if (new URL(request.url).pathname.endsWith('/upload')) {
+      if (!this.env.PUBLISHER_POLICY) return new Response('Not found', { status: 404 });
+      if (!state.publisher) {
+        const policy = JSON.parse(this.env.PUBLISHER_POLICY);
+        if (!policy.callerSha) throw new Error('Upload requires a fixed publisher caller');
+        state.publisher = makePublisherIntake({
+          origin: this.env.VERIFIER_ORIGIN, ledger: state.ledger,
+          authenticate: makeCiAuthenticator({ ...policy, role: 'publisher' }),
+        });
+      }
+      return state.publisher(request);
+    }
     if (!this.env.FINALIZER_POLICY) return new Response('Not found', { status: 404 });
     if (!state.finalizer) {
       const finalizerPolicy = JSON.parse(this.env.FINALIZER_POLICY);
@@ -100,6 +113,7 @@ export class SignerLedger extends DurableObject {
   arm(id, hash, administrator) { return this.#ledger.arm(id, hash, administrator); }
   confirm(id, hash, administrator, nonce) { return this.#ledger.confirm(id, hash, administrator, nonce); }
   reject(id, hash, administrator) { return this.#ledger.reject(id, hash, administrator); }
+  recordPlayUpload(id, report, publisher) { return this.#ledger.recordPlayUpload(id, report, publisher); }
 
   async #loadSigningKeys() {
     const certificate = new X509Certificate(this.env.UPLOAD_CERTIFICATE_PEM);

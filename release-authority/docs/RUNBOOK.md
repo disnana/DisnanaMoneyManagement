@@ -13,12 +13,12 @@
 
 [Gateway設定例](../wrangler.gateway.example.toml) と [Signer設定例](../wrangler.signer.example.toml) を使います。Signer側の `new_sqlite_classes` で台帳を作成し、Gateway側は `ApprovalIntake`、`VerifierIntake`、`FinalizerIntake` のService Bindingを設定します。ステージングの名前は `disnana-release-gateway-staging` と `disnana-release-signer-staging` を使います。GatewayへCustom Domainを登録する前に、`release-stg.disnana.com` にAccessを設定してください。
 
-`RELEASE_INTAKE_ENABLED` と `RELEASE_SIGNING_ENABLED` は初期値 `false`。固定CIのワークフローを確定してから、ステージングのテスト鍵で個別に有効化します。Play結果の台帳記録は未接続です。
+`RELEASE_INTAKE_ENABLED` と `RELEASE_SIGNING_ENABLED` は初期値 `false`。固定CIのワークフローを確定してから、ステージングのテスト鍵で個別に有効化します。
 
 | 保存先 | 設定候補 |
 | --- | --- |
 | Gateway | `APPROVAL_ORIGIN`、`VERIFIER_ORIGIN`、名前付きService Binding 3本 |
-| Signerの認証設定 | `ACCESS_POLICY` にAccessのteam、audience、管理者のsub allowlist。`VERIFIER_POLICY` と `FINALIZER_POLICY` にはそれぞれの固定ref、repo/ownerの数値ID、reusable workflow SHA、個別audienceとSecretのSHA-256 |
+| Signerの認証設定 | `ACCESS_POLICY` にAccessのteam、audience、管理者のsub allowlist。`VERIFIER_POLICY`、`FINALIZER_POLICY`、`PUBLISHER_POLICY` に固定ref、repo/ownerの数値ID、固定workflow SHA、個別audienceとSecretのSHA-256 |
 | Signerのリリース設定 | `RELEASE_POLICY` にアプリID・package・repo・許可track・鍵IDと公開証明書SHA-256・ポリシーバージョン |
 | 台帳 | アプリ単位のSQLite DO、鍵とポリシーの版、署名停止フラグ、保持期間、外部アンカーの保存先 |
 | Signer | 秘密鍵を `UPLOAD_PRIVATE_KEY_PEM`、対応する公開証明書を `UPLOAD_CERTIFICATE_PEM` に登録します。証明書のSHA-256とRSA鍵長（`rsaBits`、既定値3072）をポリシーで検証します |
@@ -34,6 +34,7 @@
 
 - 署名が `SIGNING` で途切れたら、未確認の結果を再署名しない。監査の最後のハッシュと署名予約を確認し、期限経過後は隔離する。隔離解除は運用の追加承認を通して行う。
 - PlayへのAPI呼び出しが途切れたら、対象版のbundleとtrackの状態をPlay Consoleまたは読み取りAPIで確認する。事実が確認できるまで同じeditの自動再実行や審査送信をしない。
+- AAB登録専用ジョブは、Playを呼ぶ前に署名と同じActions実行ID・attempt・AABハッシュを台帳に予約します。結果が未記録なら `UPLOADING` に留まり、新しい予約を拒否します。Play側の結果を確認してから運用側で照合します。確認済みの結果通知の再送は新しい監査イベントを作りません。
 - 漏洩の疑いがあればSignerの緊急停止、CIのアプリ権限停止、WIFとAccessセッションの失効、未承認要求の失効を実施する。すでに配布された版への対応はPlay Consoleで判断する。
 - アップロード鍵の変更時はPlayの正式な鍵リセットで新しい公開証明書を登録。鍵ID・証明書指紋・ポリシー版を更新し、旧版の要求を作り直す。receipt鍵とCI Secretは独立に更新し、どの鍵で署名したかを監査する。
 - 監査の外部バックアップには署名付きチェックポイントを使う。JWTやCookie、秘密鍵は保存対象に含めない。
@@ -56,6 +57,7 @@ Release AuthorityのFinalizerから検証済みの署名済みAABを引き継い
 - `Release Authority AAB` を `operation=verify` で実行し、上のBuild run IDを渡します。Actions要約のリンクをiPhoneで開いてハッシュを照合し、Cloudflare側で承認します。
 - 同じワークフローを `operation=finalize` で実行します。Build run IDと先ほどのVerifier run IDを渡すと、AABを再取得して署名・検証まで進みます。Play権限と実アップロード証明書を確認した運用時にだけ `upload_to_play=true` を使います。初期運用のFinalizer起動は手動で、承認待ちのrunnerや定期ポーリングはありません。
 - Playのjobだけが `release-authority-play` のWIF設定を使用します。プロバイダ側でもrepository/owner ID、`refs/heads/main`、`workflow_ref`、`workflow_sha`、対象environmentを固定します。アプリに限定したPlay権限と、App Bundle Explorerに登録できることを実環境で確認してください。
+- 同じjobが `RELEASE_PUBLISHER_SECRET` と専用audience `urn:disnana:release-authority:staging:publisher` でSigner台帳に登録開始と確定結果を記録します。Playの認証や応答を受け取れるのはこのjobです。
 - GitHubの変数は `RELEASE_VERSION_NAME`、`RELEASE_VERSION_CODE`、`RELEASE_UPLOAD_CERTIFICATE_PEM`、`RELEASE_UPLOAD_CERTIFICATE_SHA256`、`RELEASE_UPLOAD_KEY_ID`、`RELEASE_TARGET_TRACK`、`RELEASE_POLICY_VERSION` です。公開証明書を置く場所であり、秘密鍵は登録しません。
 - `Release Authority preflight` は、対象ビルドの完了状態、ソース、成果物ID・出所・アーカイブハッシュのメタデータを確認し、監査結果とSBOMを格納する成果物の欠落を検出します。来歴の暗号学的な検証、監査資料の検証、署名申請は後段です。
 - v6の既存run `45284819969` には未署名AABの成果物 `14874240148` だけがあり、必須の監査結果・SBOMに対応する成果物がありません。このrunは本番署名申請の前に停止します。

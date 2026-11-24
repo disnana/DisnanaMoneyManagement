@@ -11,7 +11,7 @@ function response(message, status) {
   });
 }
 
-async function readManifestBody(request) {
+export async function readManifestBody(request) {
   if (!request.body || request.headers.get('Content-Type') !== 'application/json') throw new Error('Expected a manifest');
   const reader = request.body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });

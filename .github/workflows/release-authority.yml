@@ -151,7 +151,10 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Mane-chan-authority-signed-aab
-          path: ${{ runner.temp }}/mane-authority/mane-chan-signed.aab
+          path: |
+            ${{ runner.temp }}/mane-authority/mane-chan-signed.aab
+            ${{ runner.temp }}/mane-authority/manifest.json
+            ${{ runner.temp }}/mane-authority/signature.bin
           if-no-files-found: error
           retention-days: 2
 
@@ -171,6 +174,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@d3f86a106a0bc45b974a628896c90dbdf5c8093 # v4
         with:
           name: Mane-chan-authority-signed-aab
@@ -188,6 +194,18 @@ jobs:
         env:
           PLAY_ACCESS_TOKEN: ${{ steps.google.outputs.access_token }}
           SIGNED_SHA256: ${{ needs.finalize.outputs.signed_sha256 }}
+          RELEASE_PUBLISHER_SECRET: ${{ secrets.RELEASE_PUBLISHER_SECRET }}
         run: |
-          python3 scripts/android_play_draft.py --bundle-only \
-            signed/mane-chan-signed.aab "$RELEASE_VERSION_CODE" "$SIGNED_SHA256" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf '%s  %s\n' "$SIGNED_SHA256" signed/mane-chan-signed.aab | sha256sum -c -
+          audit=(node release-authority/tools/remote-jarsigner/record-play-upload.mjs)
+          evidence=(signed/manifest.json signed/signature.bin "$SIGNED_SHA256")
+          "${audit[@]}" start "${evidence[@]}"
+          result=$(python3 scripts/android_play_draft.py --bundle-only \
+            signed/mane-chan-signed.aab "$RELEASE_VERSION_CODE" "$SIGNED_SHA256")
+          case "$result" in
+            'Bundle stored:'*) status=stored ;;
+            'Bundle already_present:'*) status=already_present ;;
+            *) echo 'Unexpected upload outcome. Inspect Play Console before retrying.' >&2; exit 1 ;;
+          esac
+          "${audit[@]}" finish "${evidence[@]}" "$status"
+          printf '%s\n' "$result" >> "$GITHUB_STEP_SUMMARY"

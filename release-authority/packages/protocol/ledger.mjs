@@ -222,7 +222,10 @@ export class ReleaseLedger {
       const busy = this.sql.exec('SELECT id FROM releases WHERE state = ? LIMIT 1', 'SIGNING').toArray()[0];
       requireRule(!busy, 'Another signature is in progress');
       return {
-        record: { ...record, state: 'SIGNING', attemptId, signingUntil: now + minute },
+        record: {
+          ...record, state: 'SIGNING', attemptId, signingUntil: now + minute,
+          finalizerRunId: principal.finalizer?.runId, finalizerRunAttempt: principal.finalizer?.runAttempt,
+        },
         event: {
           type: 'sign_started', attemptId, inputHash, keyId: record.manifest.keyId,
           finalizerRunId: principal.finalizer?.runId, finalizerRunAttempt: principal.finalizer?.runAttempt,
@@ -244,6 +247,40 @@ export class ReleaseLedger {
       return {
         record: { ...record, state: 'SIGNED', signature: encoded, signatureHash },
         event: { type: 'signed', attemptId, signatureHash }, response: signatureHash,
+      };
+    });
+  }
+
+  recordPlayUpload(releaseId, report, publisher) {
+    return this.mutate(releaseId, (record, now) => {
+      requireRule(record?.hash === report.releaseHash && record.signatureHash === report.signatureHash
+        && record.manifest.versionCode === report.versionCode && record.manifest.releaseStatus === 'upload-only',
+      'Upload evidence does not match the signed release');
+      requireRule(publisher.role === 'publisher' && publisher.repositoryId === record.manifest.repositoryId
+        && publisher.runId === record.finalizerRunId && publisher.runAttempt === record.finalizerRunAttempt
+        && (publisher.commitSha === record.manifest.commitSha || this.policy.sourceCommitSha === record.manifest.commitSha),
+      'Publisher does not match the signing run');
+      if (report.phase === 'start') {
+        this.checkPolicy(record.manifest, now);
+        requireRule(record.state === 'SIGNED', 'Upload has already started or been recorded');
+        return {
+          record: { ...record, state: 'UPLOADING', signedAabSha256: report.signedAabSha256 },
+          event: { type: 'upload_started', signedAabSha256: report.signedAabSha256, versionCode: report.versionCode,
+            runId: publisher.runId, runAttempt: publisher.runAttempt, workflowSha: publisher.workflowSha },
+          response: { status: 'reserved' },
+        };
+      }
+      requireRule(report.phase === 'finish' && ['stored', 'already_present'].includes(report.result)
+        && record.signedAabSha256 === report.signedAabSha256, 'Upload result differs from its reservation');
+      if (record.state === 'UPLOADED' && record.uploadResult === report.result) {
+        return { response: { status: 'recorded' } };
+      }
+      requireRule(record.state === 'UPLOADING', 'No matching upload reservation');
+      return {
+        record: { ...record, state: 'UPLOADED', uploadResult: report.result },
+        event: { type: 'upload_result', result: report.result, signedAabSha256: report.signedAabSha256,
+          versionCode: report.versionCode, runId: publisher.runId, runAttempt: publisher.runAttempt },
+        response: { status: 'recorded' },
       };
     });
   }

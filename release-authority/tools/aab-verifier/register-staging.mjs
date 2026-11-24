@@ -4,8 +4,8 @@ import { readManifest, sha256Hex } from '../../packages/protocol/manifest.mjs';
 const stagingApi = 'https://release-api-stg.disnana.com/v1/releases';
 const stagingApproval = 'https://release-stg.disnana.com/approve/';
 export async function getStagingCiCredentials(env, role, request) {
-  if (role !== 'verifier' && role !== 'finalizer') throw new Error('Unknown CI role');
-  const secret = role === 'verifier' ? env.RELEASE_VERIFIER_SECRET : env.RELEASE_FINALIZER_SECRET;
+  if (!['verifier', 'finalizer', 'publisher'].includes(role)) throw new Error('Unknown CI role');
+  const secret = env[`RELEASE_${role.toUpperCase()}_SECRET`];
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(secret ?? '') || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
     throw new Error('CI credentials are missing');
   }

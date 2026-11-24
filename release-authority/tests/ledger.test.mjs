@@ -152,6 +152,31 @@ test('a later CI commit may process only the historical source pinned by Signer'
   await assert.rejects(pinned.ledger.register(differentSource, fixedCaller), /policy mismatch/);
 });
 
+test('Play upload is reserved once and only the signing run can complete its audit', async (t) => {
+  const f = await fixture(t, { releaseStatus: 'upload-only', requireFinalizer: true });
+  const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
+  const releaseHash = await f.ledger.register(wire, verifier);
+  const { releaseId, versionCode, repositoryId } = f.manifest;
+  const nonce = await f.ledger.arm(releaseId, releaseHash, administrator);
+  f.advance(8_000);
+  await f.ledger.confirm(releaseId, releaseHash, administrator, nonce);
+  const finalizer = { ...verifier, role: 'finalizer', runId: '999', runAttempt: 1 };
+  const signingIdentity = { ...signer, finalizer };
+  const publisher = { ...finalizer, role: 'publisher', repositoryId };
+  const { attemptId } = await f.ledger.beginSigning(releaseId, releaseHash, bytes, signingIdentity);
+  const signatureHash = await f.ledger.finishSigning(releaseId, attemptId, new Uint8Array(256), signingIdentity);
+  const report = { phase: 'start', releaseHash, signatureHash, signedAabSha256: hashValue, versionCode };
+  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, finalizer), /Publisher does not match/);
+  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, { ...publisher, runAttempt: 2 }), /Publisher does not match/);
+  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, report, publisher), { status: 'reserved' });
+  await assert.rejects(f.ledger.recordPlayUpload(releaseId, report, publisher), /already started/);
+  const finished = { ...report, phase: 'finish', result: 'stored' };
+  await assert.rejects(f.ledger.recordPlayUpload(releaseId, { ...finished, signedAabSha256: 'a'.repeat(64) }, publisher), /differs/);
+  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
+  assert.deepEqual(await f.ledger.recordPlayUpload(releaseId, finished, publisher), { status: 'recorded' });
+  assert.deepEqual(f.ledger.auditEvents().slice(-2).map(row => JSON.parse(row.body).event.type), ['upload_started', 'upload_result']);
+});
+
 test('staging finalizer rejects a reused verifier run and changed CMS input before requesting credentials', async (t) => {
   const f = await fixture(t);
   const wire = manifestWire({ ...f.manifest, releaseStatus: 'upload-only' });
