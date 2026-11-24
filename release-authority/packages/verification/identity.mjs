@@ -70,7 +70,8 @@ export function makeCiAuthenticator(policy, {
       || claims.exp <= claims.iat || claims.exp - claims.iat > 305) deny();
     return Object.freeze({
       role: policy.role, repositoryId: claims.repository_id, commitSha: claims.sha,
-      runId: claims.run_id, runAttempt: Number(claims.run_attempt), workflowSha: expectedJobSha,
+      runId: claims.run_id, runAttempt: Number(claims.run_attempt),
+      workflowSha: expectedJobSha, callerWorkflowSha: claims.workflow_sha,
     });
   };
 }

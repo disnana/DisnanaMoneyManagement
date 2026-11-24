@@ -2,3 +2,9 @@
 self-hosted-runner:
   labels:
     - macos-26
+
+# These GitHub.com job context fields were added after the pinned actionlint release.
+paths:
+  .github/workflows/release-authority-jobs.yml:
+    ignore:
+      - '^property "workflow_(repository|sha)" is not defined in object type'

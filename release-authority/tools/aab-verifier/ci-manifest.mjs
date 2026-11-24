@@ -68,12 +68,17 @@ if (process.argv[2] === 'validate') {
     const issuedAt = new Date(process.env.RELEASE_ISSUED_AT);
     const wire = manifestWire({
       ...fields, schema: 'disnana.release-manifest.v1', releaseId: randomId(), nonce: randomId(),
-      verifierRunId: process.env.GITHUB_RUN_ID, verifierWorkflowSha: process.env.GITHUB_WORKFLOW_SHA,
+      verifierRunId: process.env.GITHUB_RUN_ID,
+      verifierWorkflowSha: process.env.RELEASE_AUTHORITY_WORKFLOW_SHA ?? process.env.GITHUB_WORKFLOW_SHA,
       issuedAt: issuedAt.toISOString(), expiresAt: new Date(issuedAt.getTime() + 15 * 60_000).toISOString(),
     });
     await writeFile(resolve(dir, 'manifest.json'), wire, { flag: 'wx' });
   } else if (process.argv[2] === 'compare') {
     const manifest = readManifest(await readFile(resolve(dir, 'manifest.json'), 'utf8'));
+    const authoritySha = process.env.RELEASE_AUTHORITY_WORKFLOW_SHA;
+    if (authoritySha) {
+      requireValue(manifest.verifierWorkflowSha === authoritySha, 'Authority revision differs from the approved verifier');
+    }
     for (const [field, value] of Object.entries(fields)) {
       // Verification output can include transient metadata. attestation is checked again above.
       if (field === 'buildProofSha256' || field === 'artifactProofSha256') continue;

@@ -27,32 +27,38 @@ export function makeDispatcher(env, request = fetch) {
   return async function dispatch({ buildRunId, verifierRunId, workflowSha }) {
     if (!numericId.test(buildRunId ?? '') || !numericId.test(verifierRunId ?? '')
       || !/^[a-f0-9]{40}$/.test(workflowSha ?? '') || buildRunId === verifierRunId) return 409;
-    let sending = false;
+    let stage = 'app-assertion';
+    const denied = (status, githubStatus) => {
+      console.warn('release_dispatch_failed', { stage, verifierRunId, githubStatus });
+      return status;
+    };
     try {
       key ??= importPKCS8(env.GITHUB_APP_PKCS8_PEM, 'RS256');
       const now = Math.floor(Date.now() / 1000);
       const assertion = await new SignJWT({}).setProtectedHeader({ alg: 'RS256' })
         .setIssuer(appId).setIssuedAt(now - 60).setExpirationTime(now + 480).sign(await key);
+      stage = 'installation-token';
       const installation = await call(`/app/installations/${installationId}/access_tokens`, assertion, {
         repository_ids: [repositoryId], permissions: { actions: 'write' },
       });
-      if (installation.status !== 201) return 409;
+      if (installation.status !== 201) return denied(409, installation.status);
       const { token } = await installation.json();
-      if (typeof token !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) return 409;
+      if (typeof token !== 'string' || !/^[A-Za-z0-9._~+/-]+=*$/.test(token)) return denied(409, installation.status);
+      stage = 'verifier-run';
       const verifier = await call(`${repo}/actions/runs/${verifierRunId}`, token);
-      if (!verifier.ok) return 409;
+      if (!verifier.ok) return denied(409, verifier.status);
       const run = await verifier.json();
       if (String(run.id) !== verifierRunId || run.conclusion !== 'success' || !['workflow_dispatch', 'workflow_run'].includes(run.event)
         || run.path !== `.github/workflows/${workflow}` || run.head_branch !== branch || run.head_sha !== workflowSha
-        || run.repository?.id !== repositoryId || run.head_repository?.id !== repositoryId) return 409;
-      sending = true;
+        || run.repository?.id !== repositoryId || run.head_repository?.id !== repositoryId) return denied(409, verifier.status);
+      stage = 'workflow-dispatch';
       const result = await call(`${repo}/actions/workflows/${workflow}/dispatches`, token, {
         ref: branch, inputs: { operation: 'finalize', build_run_id: buildRunId, verifier_run_id: verifierRunId, upload_to_play: 'true' },
       });
       if (result.status === 204 || result.status === 200) return 204;
-      return [400, 401, 403, 404, 422, 429].includes(result.status) ? 409 : 502;
+      return denied([400, 401, 403, 404, 422, 429].includes(result.status) ? 409 : 502, result.status);
     } catch {
-      return sending ? 502 : 409;
+      return denied(stage === 'workflow-dispatch' ? 502 : 409);
     }
   };
 }
@@ -65,6 +71,7 @@ export default {
       const status = await makeDispatcher(env)(await request.json());
       return new Response(null, { status });
     } catch {
+      console.warn('release_dispatch_failed', { stage: 'worker-configuration-or-request' });
       return new Response(null, { status: 409 });
     }
   },

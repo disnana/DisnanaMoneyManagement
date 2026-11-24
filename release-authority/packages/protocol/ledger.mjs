@@ -114,11 +114,12 @@ export class ReleaseLedger {
         .toArray().some((row) => !releasable.has(JSON.parse(row.payload).state));
       requireRule(!versionUsed, 'Version code already reserved');
       return {
-        record: { manifest, hash, state: 'AWAITING_APPROVAL' },
+        record: { manifest, hash, state: 'AWAITING_APPROVAL', verifierCallerSha: principal.callerWorkflowSha },
         event: {
           type: 'registered', repositoryId: manifest.repositoryId, commitSha: manifest.commitSha,
           buildRunId: manifest.buildRunId, buildRunAttempt: manifest.buildRunAttempt,
           buildWorkflowSha: manifest.buildWorkflowSha, runId: principal.runId, workflowSha: principal.workflowSha,
+          callerWorkflowSha: principal.callerWorkflowSha,
           artifactId: manifest.artifactId, unsignedAabSha256: manifest.unsignedAabSha256,
           signingInputSha256: manifest.signingInputSha256, buildProofSha256: manifest.buildProofSha256,
           artifactProofSha256: manifest.artifactProofSha256, policyVersion: manifest.policyVersion,
@@ -209,7 +210,7 @@ export class ReleaseLedger {
       const { buildRunId, verifierRunId, verifierWorkflowSha } = record.manifest;
       return {
         record: { ...record, dispatch: 'STARTED' }, event: { type: 'dispatch_started', verifierRunId },
-        response: { buildRunId, verifierRunId, workflowSha: verifierWorkflowSha },
+        response: { buildRunId, verifierRunId, workflowSha: record.verifierCallerSha ?? verifierWorkflowSha },
       };
     });
   }
