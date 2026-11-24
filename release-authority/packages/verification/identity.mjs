@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from 'jose';
 
 const githubIssuer = 'https://token.actions.githubusercontent.com';
-const secretPattern = /^[A-Za-z0-9_-]{43}$/;
+const secretPattern = /^(?:[A-Za-z0-9_-]{43}|[a-f0-9]{64})$/;
 const digestPattern = /^[a-f0-9]{64}$/;
 const shaPattern = /^[a-f0-9]{40}$/;
 const idPattern = /^[1-9][0-9]{0,19}$/;

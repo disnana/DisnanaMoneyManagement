@@ -46,6 +46,15 @@ test('valid GitHub JWT and distinct 256-bit release secret are jointly required'
   await assert.rejects(ci(authorization(token, 'b'.repeat(43))));
 });
 
+test('32-byte hexadecimal secrets are authenticated using the digest of their text', async () => {
+  const hexSecret = 'ab'.repeat(32);
+  const hexCi = makeCiAuthenticator({ ...policy, secretSha256: await sha256Hex(hexSecret) }, { resolveKey, equal: timingSafeEqual });
+  const token = await signed(base);
+  assert.equal((await hexCi(authorization(token, hexSecret))).runId, '987');
+  await assert.rejects(hexCi(authorization(token, 'cd'.repeat(32))));
+  await assert.rejects(hexCi(authorization(token, hexSecret.slice(0, -1))));
+});
+
 test('bad signature, algorithm, key id, issuer, audience, clock and missing claims are rejected', async () => {
   const token = await signed(base);
   const [header, claims, signature] = token.split('.');
