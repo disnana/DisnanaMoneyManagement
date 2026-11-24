@@ -5,6 +5,17 @@ import org.gradle.api.artifacts.dsl.LockMode
 
 def releaseConfigurations = ['releaseCompileClasspath', 'releaseRuntimeClasspath'] as Set
 gradle.beforeProject { project ->
+    if (gradle.parent == null && project.name == 'react-native-keyboard-controller') {
+        project.buildscript.configurations.named('classpath').configure {
+            resolutionStrategy.eachDependency { dependency ->
+                if (dependency.requested.group == 'com.android.tools.build' &&
+                    dependency.requested.name == 'gradle' && dependency.requested.version == '4.2.2') {
+                    dependency.useVersion('9.2.1')
+                    dependency.because('Use the same Android Gradle plugin as the Expo application')
+                }
+            }
+        }
+    }
     if (gradle.parent == null && project.path == ':app') {
         project.dependencyLocking.lockMode = LockMode.STRICT
         project.configurations.configureEach {

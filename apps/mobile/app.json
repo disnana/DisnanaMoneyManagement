@@ -54,7 +54,8 @@
       "./plugins/with-finance-backup",
       "./plugins/with-launcher-icons",
       "./plugins/with-optional-portrait-feature",
-      "./plugins/with-android-build-commit"
+      "./plugins/with-android-build-commit",
+      "./plugins/with-android-dependency-constraints"
     ],
     "experiments": {
       "typedRoutes": true,
