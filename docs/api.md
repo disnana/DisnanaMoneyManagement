@@ -16,3 +16,7 @@ Android認証のHTTPハンドラは `apps/server/internal/androidauth`。本接�
 指定ノードへの要求には `X-Mane-Challenge`、`X-Mane-Request-Id`、`X-Mane-Device-Signature` を付ける。署名入力はUTF-8の `mane-device-proof-v1\n` とチャレンジ文字列の連結。公開鍵と署名はパディングなしbase64urlのDER。チャレンジはbase64urlのJSONとHMACをピリオドで結ぶ。認証情報を含む応答はキャッシュ禁止。400は入力不正、401は認証・期限・使用済み・宛先の不一致、503は発行枠の逼迫等。レスポンスにトークン検証の内部エラーを含めない。
 
 後続の候補には `/v1/credit-packs`、`/v1/billing/verify`、`/v1/ai/receipt-jobs`、`/v1/discount`、`/v1/feedback`、`/health/live` と `/health/ready` がある。AdMob SSVの公開コールバックはGoogleからのGETを原文の署名対象で検証する。Androidの端末署名とは別経路。[AdMob SSV](https://developers.google.com/admob/android/ssv)
+
+## AIレシートの実装計画
+
+端末署名を検証した担当Goノードで画像を受け取り、ジョブの状態をScyllaDBで共有する予定。受付・再送・確定時のクレジット処理と、Androidの撮影補助をまとめた。 [AIレシートの実装計画](ai-receipt-plan.md)

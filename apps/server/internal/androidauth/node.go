@@ -29,6 +29,7 @@ type Config struct {
 	CreditBalance                                   func(context.Context, string) (int64, error)
 	CreditDetails                                   func(context.Context, string) (credits.Snapshot, error)
 	Now                                             func() time.Time
+	Receipts                                        ReceiptAPI
 }
 
 type Node struct {
@@ -47,7 +48,7 @@ func NewNode(cfg Config, sessions SessionStore) (*Node, error) {
 		origin.Path != "" || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" ||
 		!identifier.MatchString(cfg.NodeID) || cfg.PackageName == "" || !identifier.MatchString(cfg.SigningKeyID) ||
 		len(cfg.ChallengeKey) < 32 || len(cfg.SigningKey) != ed25519.PrivateKeySize ||
-		cfg.GoogleSubject == nil || cfg.DecodeIntegrity == nil || sessions == nil {
+		cfg.GoogleSubject == nil || cfg.DecodeIntegrity == nil || sessions == nil || (cfg.Receipts != nil && !cfg.DirectSessions) {
 		return nil, errAuth
 	}
 	if cfg.Now == nil {
@@ -65,6 +66,11 @@ func NewNode(cfg Config, sessions SessionStore) (*Node, error) {
 	}
 	n.mux.HandleFunc("GET /v1/me", n.me)
 	n.mux.HandleFunc("GET /v1/credits", n.credits)
+	if cfg.Receipts != nil {
+		n.mux.HandleFunc("GET "+receiptConfigPath, n.receiptConfig)
+		n.mux.HandleFunc("GET "+receiptJobsPrefix+"{id}", n.receiptJob)
+		n.mux.HandleFunc("POST "+receiptJobsPrefix+"{id}", n.receiptJob)
+	}
 	if cfg.ScyllaStatus != nil {
 		n.mux.Handle("GET /_internal/scylla-status", cfg.ScyllaStatus)
 	}
@@ -156,7 +162,8 @@ type issueRequest struct {
 func (n *Node) createChallenge(w http.ResponseWriter, r *http.Request) {
 	raw, err := read(w, r, 4096)
 	var in issueRequest
-	if err != nil || json.Unmarshal(raw, &in) != nil || !validOperation(in.Operation) {
+	if err != nil || json.Unmarshal(raw, &in) != nil || !validOperation(in.Operation) ||
+		(receiptOperation(in.Operation) && n.cfg.Receipts == nil) {
 		reject(w, 400)
 		return
 	}
@@ -190,7 +197,7 @@ func (n *Node) createChallenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonReply(w, 200, map[string]any{"challenge": token, "request_id": c.ID, "issuer_node_id": c.Node,
-		"origin": n.cfg.PublicOrigin, "expires_in_ms": proofTTL.Milliseconds()})
+		"origin": n.cfg.PublicOrigin, "expires_in_ms": proofLifetime(in.Operation).Milliseconds()})
 }
 
 func validOperation(op operation) bool {
@@ -204,7 +211,7 @@ func validOperation(op operation) bool {
 	case "/v1/me", "/v1/credits":
 		return op.Method == http.MethodGet && op.BodySHA256 == digest(nil)
 	default:
-		return false
+		return receiptOperation(op)
 	}
 }
 

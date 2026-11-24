@@ -17,6 +17,7 @@ import { useFinance } from '@/lib/store';
 import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
+import { receiptExpenseDate, receiptPreviewEnabled } from '@/lib/receiptDraftFiles';
 import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
@@ -52,7 +53,10 @@ export default function AddScreen() {
   const reduceMotion = useAppReducedMotion();
   const pickLedger = useLedgerPicker();
   const pickCategory = useCategoryPicker();
-  const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string;
+    receiptAmount?: string; receiptDate?: string; receiptTitle?: string;
+  }>();
   const { id } = params;
   const submit = useFinanceSubmit();
   const lastContinuedAmount = useRef('');
@@ -65,11 +69,14 @@ export default function AddScreen() {
   const transferAccounts = state.accounts.filter((a) => a.type !== 'debit');
   const defaultAccount = state.accounts.find((a) => a.id === params.accountId) ??
     (paymentMonth ? transferAccounts.find((a) => a.type === 'bank') : visibleState.accounts[0] ?? state.accounts[0]);
+  const receiptAmount = receiptPreviewEnabled && !id && !paymentMonth && typeof params.receiptAmount === 'string' &&
+    /^[1-9]\d*$/.test(params.receiptAmount) && Number.isSafeInteger(Number(params.receiptAmount))
+    ? params.receiptAmount : undefined;
 
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
-  const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : receiptAmount ?? '');
   const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
-  const [date, setDate] = useState(editing?.date ?? getTodayString());
+  const [date, setDate] = useState(editing?.date ?? (receiptAmount ? receiptExpenseDate(params.receiptDate) : undefined) ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
@@ -78,7 +85,8 @@ export default function AddScreen() {
   const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? paymentCard?.id ??
     transferAccounts.find((a) => a.id !== defaultAccount?.id)?.id ?? '');
   const [title, setTitle] = useState(editing?.title ?? (paymentMonth && paymentCard
-    ? `${paymentCard.name} ${formatMonthLabel(paymentMonth)}の支払い` : ''));
+    ? `${paymentCard.name} ${formatMonthLabel(paymentMonth)}の支払い`
+    : receiptAmount && typeof params.receiptTitle === 'string' ? params.receiptTitle : ''));
   const [memo, setMemo] = useState(editing?.memo ?? '');
   const [scope, setScope] = useState<TransactionScope>(editing?.scope ??
     (!paymentMonth && (activeLedger?.kind === 'business' || defaultAccount?.usageScope === 'business') ? 'business' : 'personal'));

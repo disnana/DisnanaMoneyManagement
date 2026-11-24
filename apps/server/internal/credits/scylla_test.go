@@ -29,6 +29,8 @@ func TestScyllaWallet(t *testing.T) {
 	defer b.Close()
 
 	subject := fmt.Sprintf("wallet-test-%d", time.Now().UnixNano())
+	emptySubject := subject + "-empty"
+	expirySubject := subject + "-expiry"
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
@@ -38,8 +40,10 @@ func TestScyllaWallet(t *testing.T) {
 			return
 		}
 		defer wallet.Close()
-		if err := wallet.session.Query("DELETE FROM credit_wallet_entries WHERE subject = ?", subject).WithContext(cleanup).Exec(); err != nil {
-			t.Error(err)
+		for _, testSubject := range []string{subject, emptySubject, expirySubject} {
+			if err := wallet.session.Query("DELETE FROM credit_wallet_entries WHERE subject = ?", testSubject).WithContext(cleanup).Exec(); err != nil {
+				t.Error(err)
+			}
 		}
 	})
 	if n, err := a.Balance(ctx, subject); n != 0 || err != nil {
@@ -85,6 +89,149 @@ func TestScyllaWallet(t *testing.T) {
 	if err != nil || snapshot.Balance != 4 || len(snapshot.History) != 6 {
 		t.Fatalf("unexpected snapshot after reversal and retry: %+v, %v", snapshot, err)
 	}
+	t.Run("receipt reservations are atomic and preserve purchase reversals", func(t *testing.T) {
+		if err := a.GrantPurchase(ctx, subject, "receipt-purchase", 8, time.Now().Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+		runConcurrently(func(w *Wallet) error { return w.Reserve(ctx, subject, "same-spend", 6) })
+		if err := b.Reserve(ctx, subject, "same-spend", 5); !errors.Is(err, ErrOperationConflict) {
+			t.Fatalf("mismatched reserve retry = %v", err)
+		}
+		if n, err := b.Balance(ctx, subject); n != 6 || err != nil {
+			t.Fatalf("balance after holding credits = %d, %v", n, err)
+		}
+		if err := a.ReversePurchase(ctx, subject, "receipt-purchase"); err != nil {
+			t.Fatal(err)
+		}
+		runConcurrently(func(w *Wallet) error { return w.Settle(ctx, subject, "same-spend", 2) })
+		if n, err := b.Balance(ctx, subject); n != 4 || err != nil {
+			t.Fatalf("balance after settling reversed credits = %d, %v", n, err)
+		}
+		if err := a.Settle(ctx, subject, "same-spend", 0); !errors.Is(err, ErrOperationConflict) {
+			t.Fatalf("mismatched settle retry = %v", err)
+		}
+		if err := a.Reserve(ctx, subject, "cancel-receipt", 4); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Spend(ctx, subject, "unavailable-while-held", 1); !errors.Is(err, ErrInsufficient) {
+			t.Fatalf("spend of held credits = %v", err)
+		}
+		runConcurrently(func(w *Wallet) error { return w.Settle(ctx, subject, "cancel-receipt", 0) })
+		if n, err := b.Balance(ctx, subject); n != 4 || err != nil {
+			t.Fatalf("balance after releasing hold = %d, %v", n, err)
+		}
+	})
+	t.Run("abort blocks delayed reservation and preserves completed charges", func(t *testing.T) {
+		runConcurrently(func(w *Wallet) error { return w.AbortReservation(ctx, emptySubject, "expired") })
+		if err := b.Reserve(ctx, emptySubject, "expired", 1); !errors.Is(err, ErrReservationCanceled) {
+			t.Fatalf("reserve of canceled ID without wallet = %v", err)
+		}
+		if err := a.Settle(ctx, emptySubject, "expired", 0); err != nil {
+			t.Fatalf("settle cancellation with zero = %v", err)
+		}
+		if err := a.Settle(ctx, emptySubject, "expired", 1); !errors.Is(err, ErrOperationConflict) {
+			t.Fatalf("settle cancellation with consumption = %v", err)
+		}
+		if err := b.Grant(ctx, emptySubject, "fund-account", 4, time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.Reserve(ctx, emptySubject, "expired", 1); !errors.Is(err, ErrReservationCanceled) {
+			t.Fatalf("grant reopened canceled ID = %v", err)
+		}
+
+		runConcurrently(func(w *Wallet) error {
+			if w == b {
+				return w.AbortReservation(ctx, emptySubject, "racing")
+			}
+			err := w.Reserve(ctx, emptySubject, "racing", 4)
+			if errors.Is(err, ErrReservationCanceled) {
+				return nil
+			}
+			return err
+		})
+		if err := a.Reserve(ctx, emptySubject, "racing", 4); !errors.Is(err, ErrReservationCanceled) {
+			t.Fatalf("reserve after racing abort = %v", err)
+		}
+		if n, err := b.Balance(ctx, emptySubject); n != 4 || err != nil {
+			t.Fatalf("racing abort left a hold = %d, %v", n, err)
+		}
+
+		if err := a.Reserve(ctx, emptySubject, "held", 4); err != nil {
+			t.Fatal(err)
+		}
+		runConcurrently(func(w *Wallet) error { return w.AbortReservation(ctx, emptySubject, "held") })
+		if n, err := b.Balance(ctx, emptySubject); n != 4 || err != nil {
+			t.Fatalf("abort did not restore hold exactly once = %d, %v", n, err)
+		}
+		if err := b.AbortReservation(ctx, subject, "same-spend"); !errors.Is(err, ErrOperationConflict) {
+			t.Fatalf("abort of positive settlement = %v", err)
+		}
+		if err := a.Reserve(ctx, subject, "same-spend", 6); err != nil {
+			t.Fatalf("retry of prior completed reservation = %v", err)
+		}
+	})
+	t.Run("available expiration is listed then archived exactly once", func(t *testing.T) {
+		if err := a.Grant(ctx, expirySubject, "active", 4, time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+		seedExpired := func(item lot) {
+			t.Helper()
+			_, lots, err := a.read(ctx, expirySubject)
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := json.Marshal(append(lots, item))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.session.Query("UPDATE credit_wallet_entries SET lots = ? WHERE subject = ? AND entry = 'wallet'", string(data), expirySubject).WithContext(ctx).Exec(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		first := lot{Amount: 3, Expires: 1000, Source: "expired-reserve"}
+		second := lot{Amount: 2, Expires: 2000, Source: "expired-settle"}
+		seedExpired(first)
+		snapshot, err := b.Snapshot(ctx, expirySubject)
+		if err != nil || snapshot.Balance != 4 || len(snapshot.ExpiredLots) != 1 || snapshot.ExpiredLots[0] != first {
+			t.Fatalf("unarchived expiration = %+v, %v", snapshot, err)
+		}
+		runConcurrently(func(w *Wallet) error { return w.Reserve(ctx, expirySubject, "hold", 2) })
+		seedExpired(second)
+		runConcurrently(func(w *Wallet) error { return w.Settle(ctx, expirySubject, "hold", 1) })
+		snapshot, err = b.Snapshot(ctx, expirySubject)
+		if err != nil || snapshot.Balance != 3 || len(snapshot.ExpiredLots) != 0 {
+			t.Fatalf("after archiving expiration = %+v, %v", snapshot, err)
+		}
+		expired := map[string]lot{}
+		cursor := ""
+		for {
+			page, err := b.History(ctx, expirySubject, cursor, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, record := range page.Items {
+				if record.Operation.Kind != "expire" {
+					continue
+				}
+				op := record.Operation
+				if len(op.ExpiredLots) != 1 || op.Amount != op.ExpiredLots[0].Amount {
+					t.Fatalf("unexpected expiration record: %+v", record)
+				}
+				item := op.ExpiredLots[0]
+				if _, exists := expired[item.Source]; exists {
+					t.Fatalf("archived lot twice: %+v", item)
+				}
+				expired[item.Source] = item
+			}
+			cursor = page.NextCursor
+			if cursor == "" {
+				break
+			}
+		}
+		if len(expired) != 2 || expired[first.Source] != first || expired[second.Source] != second {
+			t.Fatalf("archived original lot details = %+v", expired)
+		}
+	})
 	t.Run("history beyond 50 records", func(t *testing.T) {
 		const count = 55
 		const stamp = 1700000000000

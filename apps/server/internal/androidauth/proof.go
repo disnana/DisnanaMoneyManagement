@@ -72,7 +72,7 @@ func (p *proofs) issue(op operation, binding string) (string, challenge, error) 
 	c := challenge{randomID(), p.node, now.UnixMilli(), op, binding}
 	payload, _ := json.Marshal(c)
 	encoded := wire.EncodeToString(payload)
-	p.pending[c.ID] = now.Add(proofTTL)
+	p.pending[c.ID] = now.Add(proofLifetime(op))
 	return encoded + "." + wire.EncodeToString(p.mac(encoded)), c, nil
 }
 
@@ -85,6 +85,14 @@ func (p *proofs) prune(now time.Time) {
 }
 
 func (p *proofs) check(token string, op operation, binding string) (challenge, error) {
+	c, err := p.open(token)
+	if err != nil || c.Operation != op || c.Binding != binding {
+		return c, errAuth
+	}
+	return c, nil
+}
+
+func (p *proofs) open(token string) (challenge, error) {
 	var c challenge
 	encoded, sig, ok := strings.Cut(token, ".")
 	if !ok || len(token) > 4096 {
@@ -95,7 +103,7 @@ func (p *proofs) check(token string, op operation, binding string) (challenge, e
 		return c, errAuth
 	}
 	data, err := wire.DecodeString(encoded)
-	if err != nil || json.Unmarshal(data, &c) != nil || c.Node != p.node || c.Operation != op || c.Binding != binding {
+	if err != nil || json.Unmarshal(data, &c) != nil || c.Node != p.node {
 		return c, errAuth
 	}
 	return c, nil

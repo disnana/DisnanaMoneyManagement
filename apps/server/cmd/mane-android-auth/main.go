@@ -18,6 +18,7 @@ import (
 
 	"github.com/disnana/dmm/server/internal/androidauth"
 	"github.com/disnana/dmm/server/internal/credits"
+	"github.com/disnana/dmm/server/internal/receiptai"
 	"github.com/disnana/dmm/server/internal/webshop"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -129,6 +130,17 @@ func run(checkConfig bool) error {
 		}
 		config.DirectSessions = true
 	}
+	var receiptRuntime *receiptai.Runtime
+	if os.Getenv("MANE_RECEIPT_ENABLED") == "1" {
+		if !config.DirectSessions {
+			return errors.New("AI receipts require direct Android sessions")
+		}
+		receiptRuntime, err = openReceipts(ctx, wallet)
+		if err != nil {
+			return err
+		}
+		config.Receipts = receiptRuntime
+	}
 	node, err := androidauth.NewNode(config, sessions)
 	if err != nil {
 		return errors.New("invalid Android auth environment settings")
@@ -162,6 +174,9 @@ func run(checkConfig bool) error {
 	}
 	server := &http.Server{Addr: addresses, Handler: handler, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 6 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 30 * time.Second}
 	go node.RunExpiry(ctx)
+	if receiptRuntime != nil {
+		go receiptRuntime.Run(ctx)
+	}
 	if config.ScyllaStatus != nil {
 		nodetool := os.Getenv("MANE_NODETOOL_PATH")
 		if nodetool == "" {

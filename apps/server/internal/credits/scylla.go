@@ -158,12 +158,9 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 		if err != nil {
 			return err
 		}
-		value, _ := json.Marshal(next)
-		batch := w.session.NewBatch(gocql.LoggedBatch).WithContext(ctx).SerialConsistency(gocql.LocalSerial)
-		if missing {
-			batch.Query("INSERT INTO credit_wallet_entries (subject, entry, revision, lots) VALUES (?, 'wallet', 1, ?) IF NOT EXISTS", subject, string(value))
-		} else {
-			batch.Query("UPDATE credit_wallet_entries SET revision = ?, lots = ? WHERE subject = ? AND entry = 'wallet' IF revision = ?", revision+1, string(value), subject, revision)
+		batch, err := w.walletBatch(ctx, subject, revision, missing, lots, next, at.UnixMilli())
+		if err != nil {
+			return err
 		}
 		batch.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?) IF NOT EXISTS", subject, journalKey, string(encoded))
 		record := historyEntry{Operation: op, ID: id, At: at.UnixMilli()}
@@ -172,15 +169,10 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 			after, _ := activeBalance(next, record.At)
 			record.Operation.Amount = before - after
 		}
-		history, _ := json.Marshal(record)
-		batch.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)",
-			subject, fmt.Sprintf("history:%019d:%s", record.At, id), string(history))
-		applied, rows, err := w.session.MapExecuteBatchCAS(batch, make(map[string]interface{}))
-		if rows != nil {
-			err = errors.Join(err, rows.Close())
-		}
+		addHistory(batch, subject, id, record)
+		applied, err := w.commitBatch(batch)
 		if err != nil {
-			return fmt.Errorf("credit write result uncertain; reuse the same operation ID: %w", err)
+			return err
 		}
 		if applied {
 			return nil
@@ -189,10 +181,58 @@ func (w *Wallet) mutate(ctx context.Context, subject, id string, op operation) e
 	return errors.New("credit write contention; reuse the same operation ID")
 }
 
+func (w *Wallet) walletBatch(ctx context.Context, subject string, revision int64, missing bool, before, next []lot, at int64) (*gocql.Batch, error) {
+	expiration, err := expirationOperation(before, at)
+	if err != nil {
+		return nil, err
+	}
+	value, _ := json.Marshal(next)
+	batch := w.session.NewBatch(gocql.LoggedBatch).WithContext(ctx).SerialConsistency(gocql.LocalSerial)
+	if missing {
+		batch.Query("INSERT INTO credit_wallet_entries (subject, entry, revision, lots) VALUES (?, 'wallet', 1, ?) IF NOT EXISTS", subject, string(value))
+	} else {
+		batch.Query("UPDATE credit_wallet_entries SET revision = ?, lots = ? WHERE subject = ? AND entry = 'wallet' IF revision = ?", revision+1, string(value), subject, revision)
+	}
+	if expiration.Amount != 0 {
+		addExpirationHistory(batch, subject, revision+1, at, expiration)
+	}
+	return batch, nil
+}
+
+func (w *Wallet) commitBatch(batch *gocql.Batch) (bool, error) {
+	applied, rows, err := w.session.MapExecuteBatchCAS(batch, make(map[string]interface{}))
+	if rows != nil {
+		err = errors.Join(err, rows.Close())
+	}
+	if err != nil {
+		return false, fmt.Errorf("credit write result uncertain; reuse the same operation ID: %w", err)
+	}
+	return applied, nil
+}
+
+func addHistory(batch *gocql.Batch, subject, id string, record historyEntry) {
+	insertHistory(batch, subject, fmt.Sprintf("history:%019d:%s", record.At, id), record)
+}
+
+func addExpirationHistory(batch *gocql.Batch, subject string, revision, at int64, op operation) {
+	id := fmt.Sprintf("expire:%019d", revision)
+	record := historyEntry{ID: id, At: at, Operation: op, WalletRevision: revision}
+	// Reserve a separator distinct from caller-supplied history IDs, while
+	// staying in the same timestamp-ordered history key range.
+	insertHistory(batch, subject, fmt.Sprintf("history:%019d;%s", at, id), record)
+}
+
+func insertHistory(batch *gocql.Batch, subject, key string, record historyEntry) {
+	history, _ := json.Marshal(record)
+	batch.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)",
+		subject, key, string(history))
+}
+
 type historyEntry struct {
-	ID        string    `json:"id"`
-	At        int64     `json:"at_ms"`
-	Operation operation `json:"operation"`
+	ID             string    `json:"id"`
+	At             int64     `json:"at_ms"`
+	Operation      operation `json:"operation"`
+	WalletRevision int64     `json:"wallet_revision,omitempty"`
 }
 
 type Snapshot struct {
@@ -201,39 +241,48 @@ type Snapshot struct {
 }
 
 type Summary struct {
-	Balance int64 `json:"available_credits"`
-	Lots    []lot `json:"lots"`
+	Balance     int64 `json:"available_credits"`
+	Lots        []lot `json:"lots"`
+	ExpiredLots []lot `json:"expired_lots"`
 }
 
 func (w *Wallet) Snapshot(ctx context.Context, subject string) (Snapshot, error) {
-	summary, err := w.Summary(ctx, subject)
+	revision, summary, err := w.readSummary(ctx, subject)
 	if err != nil {
 		return Snapshot{}, err
 	}
 	page, err := w.History(ctx, subject, "", 50)
-	return Snapshot{Summary: summary, History: page.Items}, err
+	items := page.Items[:0]
+	for _, item := range page.Items {
+		// A newer archive may have pruned a lot that is already shown in
+		// ExpiredLots from this read of the wallet.
+		if item.WalletRevision <= revision {
+			items = append(items, item)
+		}
+	}
+	return Snapshot{Summary: summary, History: items}, err
 }
 
 func (w *Wallet) Summary(ctx context.Context, subject string) (Summary, error) {
-	summary := Summary{Lots: []lot{}}
-	_, lots, err := w.read(ctx, subject)
-	if errors.Is(err, gocql.ErrNotFound) {
-		return summary, nil
+	_, summary, err := w.readSummary(ctx, subject)
+	return summary, err
+}
+
+func (w *Wallet) readSummary(ctx context.Context, subject string) (int64, Summary, error) {
+	revision, lots, err := w.read(ctx, subject)
+	if err != nil && !errors.Is(err, gocql.ErrNotFound) {
+		return 0, Summary{}, err
 	}
+	summary, err := summarizeLots(lots, time.Now().UnixMilli())
+	return revision, summary, err
+}
+
+func summarizeLots(lots []lot, now int64) (Summary, error) {
+	balance, err := activeBalance(lots, now)
 	if err != nil {
 		return Summary{}, err
 	}
-	now := time.Now().UnixMilli()
-	summary.Balance, err = activeBalance(lots, now)
-	if err != nil {
-		return Summary{}, err
-	}
-	for _, item := range lots {
-		if item.Expires == 0 || item.Expires > now {
-			summary.Lots = append(summary.Lots, item)
-		}
-	}
-	return summary, nil
+	return Summary{Balance: balance, Lots: unexpiredLots(lots, now), ExpiredLots: expiredAvailableLots(lots, now)}, nil
 }
 
 type HistoryPage struct {

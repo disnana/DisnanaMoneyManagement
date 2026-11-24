@@ -49,6 +49,11 @@ func setup(t *testing.T) *fixture {
 
 func setupWithSessions(t *testing.T, sessions func() SessionStore, direct bool) *fixture {
 	t.Helper()
+	return setupWithReceipts(t, sessions, direct, nil)
+}
+
+func setupWithReceipts(t *testing.T, sessions func() SessionStore, direct bool, receipts ReceiptAPI) *fixture {
+	t.Helper()
 	google, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +88,7 @@ func setupWithSessions(t *testing.T, sessions func() SessionStore, direct bool) 
 		}
 		config := Config{NodeID: label, PublicOrigin: "https://node-" + label + ".example.test", PackageName: "com.disnana.mane_chan", SigningKeyID: "test",
 			ChallengeKey: []byte(strings.Repeat(label, 32)), SigningKey: nodeSigning, Now: f.now, GoogleSubject: verifier.Subject,
-			DirectSessions: direct,
+			DirectSessions: direct, Receipts: receipts,
 			CreditBalance: func(_ context.Context, subject string) (int64, error) {
 				if subject != "google-account-sub" {
 					return 0, errAuth
@@ -201,7 +206,7 @@ func (f *fixture) challenge(host, method, path, body, access, sid string) ticket
 	}
 	data := f.want(host, "POST", "/auth/challenge", encode(f.t, input), access, ticket{}, nil, 200)
 	var proof ticket
-	if err := json.Unmarshal(data, &proof); err != nil || proof.TTL != 5000 || proof.Origin != "https://node-"+proof.Node+".example.test" {
+	if err := json.Unmarshal(data, &proof); err != nil || proof.TTL != proofLifetime(input.Operation).Milliseconds() || proof.Origin != "https://node-"+proof.Node+".example.test" {
 		f.t.Fatalf("invalid challenge response: %v", err)
 	}
 	return proof
