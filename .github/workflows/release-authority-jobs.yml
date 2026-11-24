@@ -54,12 +54,12 @@ jobs:
           AUTHORITY_SHA: ${{ job.workflow_sha }}
         run: |
           [[ "$AUTHORITY_REPOSITORY" == "$GITHUB_REPOSITORY" && "$AUTHORITY_SHA" =~ ^[a-f0-9]{40}$ ]]
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - name: Install the checksum-pinned signing JDK
@@ -93,7 +93,7 @@ jobs:
           java -cp "$out/classes:$out/tools/*" DeterministicAab capture \
             "$out/app-release.aab" "$out/certificate.pem" "$RELEASE_ISSUED_AT" "$out/proof"
           node release-authority/tools/aab-verifier/ci-manifest.mjs create
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.release_evidence.outputs.available != 'false'
         with:
           name: Mane-chan-release-manifest
@@ -130,12 +130,12 @@ jobs:
           AUTHORITY_SHA: ${{ job.workflow_sha }}
         run: |
           [[ "$AUTHORITY_REPOSITORY" == "$GITHUB_REPOSITORY" && "$AUTHORITY_SHA" =~ ^[a-f0-9]{40}$ ]]
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - name: Install the checksum-pinned signing JDK
@@ -152,7 +152,7 @@ jobs:
                .path == ".github/workflows/release-authority.yml" and .head_branch == "main" and
                .head_sha == $sha and .head_repository.full_name == $repo' >/dev/null
           bash release-authority/tools/aab-verifier/prepare-ci.sh
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Mane-chan-release-manifest
           path: ${{ runner.temp }}/mane-authority
@@ -186,7 +186,7 @@ jobs:
           LC_ALL=C jarsigner -verify "$out/mane-chan-signed.aab" > "$out/jarsigner.log"
           grep -Fx 'jar verified.' "$out/jarsigner.log"
           printf 'sha256=%s\n' "$(sha256sum "$out/mane-chan-signed.aab" | cut -d ' ' -f1)" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Mane-chan-authority-signed-aab
           path: |
@@ -215,12 +215,12 @@ jobs:
           AUTHORITY_SHA: ${{ job.workflow_sha }}
         run: |
           [[ "$AUTHORITY_REPOSITORY" == "$GITHUB_REPOSITORY" && "$AUTHORITY_SHA" =~ ^[a-f0-9]{40}$ ]]
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -229,7 +229,7 @@ jobs:
       - name: Install the pinned receipt verifier
         working-directory: release-authority
         run: bun install --frozen-lockfile --ignore-scripts
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: Mane-chan-authority-signed-aab
           path: signed
@@ -277,7 +277,7 @@ jobs:
           if [[ "$mode" == --internal-draft ]]; then
             printf '%s\n' 'Verified Play internal-testing draft. Distribution requires a Play Console action.' >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Mane-chan-Play-upload-receipt
           path: signed/release-receipt.jws
