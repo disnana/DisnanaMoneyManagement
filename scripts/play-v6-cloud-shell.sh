@@ -19,7 +19,7 @@ fi
 probe=$(mktemp -d)
 trap 'rm -rf -- "$probe"' EXIT
 mkdir -p "$probe/scripts"
-raw=https://raw.githubusercontent.com/disnana/DisnanaMoneyManagement/fcaf4b0824e978cbdf65b75a40048348e0eb1f2e/scripts
+raw=https://raw.githubusercontent.com/disnana/DisnanaMoneyManagement/a743ff3860d00401b48dea25220bb65c74deb3b0/scripts
 curl -fsSL "$raw/play-v6-internal-draft.py" -o "$probe/play-v6-internal-draft.py"
 curl -fsSL "$raw/android_play_draft.py" -o "$probe/scripts/android_play_draft.py"
 cd "$probe"
