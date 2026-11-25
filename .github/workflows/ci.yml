@@ -74,6 +74,7 @@ jobs:
             if docker exec dmm-scylla cqlsh -e "CREATE KEYSPACE IF NOT EXISTS dmm_test WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': 1} AND tablets = {'enabled': false}"; then
               docker exec -i dmm-scylla cqlsh -k dmm_test < internal/credits/schema.cql
               docker exec -i dmm-scylla cqlsh -k dmm_test < internal/webshop/schema.cql
+              docker exec -i dmm-scylla cqlsh -k dmm_test < internal/receiptai/schema.cql
               exit 0
             fi
             sleep 3
@@ -86,7 +87,9 @@ jobs:
           MANE_SCYLLA_HOSTS: '127.0.0.1'
           MANE_SCYLLA_KEYSPACE: 'dmm_test'
           MANE_SCYLLA_DATACENTER: 'datacenter1'
-        run: go test -count=1 -v ./internal/credits ./internal/webshop
+        run: |
+          go test -count=1 -v ./internal/credits ./internal/webshop
+          go test -count=1 -v ./internal/receiptai -run '^TestScyllaReceipt'
 
   e2e:
     name: E2E · Playwright (mobile + desktop)
