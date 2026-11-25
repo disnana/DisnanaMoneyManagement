@@ -31,6 +31,7 @@ func TestScyllaWallet(t *testing.T) {
 	subject := fmt.Sprintf("wallet-test-%d", time.Now().UnixNano())
 	emptySubject := subject + "-empty"
 	expirySubject := subject + "-expiry"
+	historySubject := subject + "-history"
 	t.Cleanup(func() {
 		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
@@ -40,7 +41,7 @@ func TestScyllaWallet(t *testing.T) {
 			return
 		}
 		defer wallet.Close()
-		for _, testSubject := range []string{subject, emptySubject, expirySubject} {
+		for _, testSubject := range []string{subject, emptySubject, expirySubject, historySubject} {
 			if err := wallet.session.Query("DELETE FROM credit_wallet_entries WHERE subject = ?", testSubject).WithContext(cleanup).Exec(); err != nil {
 				t.Error(err)
 			}
@@ -233,7 +234,7 @@ func TestScyllaWallet(t *testing.T) {
 		}
 	})
 	t.Run("history beyond 50 records", func(t *testing.T) {
-		const count = 55
+		const count = 61
 		const stamp = 1700000000000
 		for index := range count {
 			id := fmt.Sprintf("history-test-%02d", index)
@@ -242,13 +243,13 @@ func TestScyllaWallet(t *testing.T) {
 				t.Fatal(err)
 			}
 			key := fmt.Sprintf("history:%019d:%s", stamp, id)
-			if err := a.session.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)", subject, key, string(data)).WithContext(ctx).Exec(); err != nil {
+			if err := a.session.Query("INSERT INTO credit_wallet_entries (subject, entry, operation) VALUES (?, ?, ?)", historySubject, key, string(data)).WithContext(ctx).Exec(); err != nil {
 				t.Fatal(err)
 			}
 		}
 		seen, cursor := map[string]bool{}, ""
 		for _, size := range []int{20, 20, 20, 1} {
-			page, err := b.History(ctx, subject, cursor, 20)
+			page, err := b.History(ctx, historySubject, cursor, 20)
 			if err != nil || len(page.Items) != size {
 				t.Fatalf("history page = %+v, %v", page, err)
 			}

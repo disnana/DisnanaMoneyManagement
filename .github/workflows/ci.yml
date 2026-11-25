@@ -87,9 +87,7 @@ jobs:
           MANE_SCYLLA_HOSTS: '127.0.0.1'
           MANE_SCYLLA_KEYSPACE: 'dmm_test'
           MANE_SCYLLA_DATACENTER: 'datacenter1'
-        run: |
-          go test -count=1 -v ./internal/credits ./internal/webshop
-          go test -count=1 -v ./internal/receiptai -run '^TestScyllaReceipt'
+        run: go test -count=1 -v ./internal/credits ./internal/webshop ./internal/receiptai
 
   e2e:
     name: E2E · Playwright (mobile + desktop)
