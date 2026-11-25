@@ -13,10 +13,24 @@ export type DeviceProof = {
   clearGoogleState(): Promise<void>;
 };
 
-type Operation = { method: 'GET'; path: '/v1/me' | '/v1/credits' } | { method: 'POST'; path: '/auth/google' | '/auth/refresh' | '/auth/logout'; body?: string };
+export type ReceiptJobPath = `/v1/ai/receipt-jobs/${string}`;
+export type ReceiptOperation = { method: 'GET'; path: '/v1/ai/receipt-config' | ReceiptJobPath } |
+  { method: 'POST'; path: ReceiptJobPath; body: string };
+export type AuthenticatedOperation = ReceiptOperation | { method: 'GET'; path: '/v1/me' | '/v1/credits' } |
+  { method: 'POST'; path: '/auth/logout' };
+type Operation = AuthenticatedOperation | { method: 'POST'; path: '/auth/google' | '/auth/refresh'; body: string };
 type Credentials = { accessToken?: string; sessionId?: string; publicKey?: string };
 type Challenge = { challenge: string; request_id: string; issuer_node_id: string; expires_in_ms: number };
 const proofWindowMs = 5000;
+const receiptProofWindowMs = 60000;
+const receiptJob = /^\/v1\/ai\/receipt-jobs\/[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+export function deviceProofWindow(op: Operation) {
+  if (receiptJob.test(op.path)) return op.method === 'POST' ? receiptProofWindowMs : proofWindowMs;
+  if (op.method === 'GET' && ['/v1/me', '/v1/credits', '/v1/ai/receipt-config'].includes(op.path)) return proofWindowMs;
+  if (op.method === 'POST' && ['/auth/google', '/auth/refresh', '/auth/logout'].includes(op.path)) return proofWindowMs;
+  throw new Error('Unsupported operation');
+}
 
 function sha(input: string) {
   return bytesToHex(sha256(utf8ToBytes(input)));
@@ -54,9 +68,20 @@ export class IssuerUnavailable extends Error {
 }
 
 export class DeviceProofHTTPError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly code?: string) {
     super(`Device proof request failed (${status})`);
   }
+}
+
+export async function deviceProofHTTPError(response: Awaited<ReturnType<typeof fetch>>) {
+  let code: string | undefined;
+  if (response.headers.get('Content-Type')?.includes('application/json')) {
+    try {
+      const value: unknown = (await response.json())?.error;
+      if (typeof value === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(value)) code = value;
+    } catch { /* Fall back to the status when the error body cannot be read. */ }
+  }
+  return new DeviceProofHTTPError(response.status, code);
 }
 
 async function send(
@@ -67,7 +92,9 @@ async function send(
   device: DeviceProof,
   signal?: AbortSignal,
 ): ReturnType<typeof fetch> {
-  const body = op.method === 'POST' ? op.body : undefined;
+  const windowMs = deviceProofWindow(op);
+  if (signal?.aborted) throw new IssuerUnavailable(false, signal.reason);
+  const body = 'body' in op ? op.body : undefined;
   const entryOrigin = new URL(entry);
   if (entryOrigin.protocol !== 'https:' || entry !== entryOrigin.origin) throw new Error('Invalid auth entry');
   const authorization: Record<string, string> = credentials.accessToken ? { Authorization: `Bearer ${credentials.accessToken}` } : {};
@@ -90,19 +117,18 @@ async function send(
     clearTimeout(handshakeDeadline);
     signal?.removeEventListener('abort', stopHandshake);
   });
-  if (response.status >= 500) throw new IssuerUnavailable(false);
-  if (!response.ok) throw new DeviceProofHTTPError(response.status);
+  if (response.status >= 500) throw new IssuerUnavailable(false, await deviceProofHTTPError(response));
+  if (!response.ok) throw await deviceProofHTTPError(response);
   const receivedAt = performance.now();
   const proof = await response.json() as Challenge;
   if (typeof proof.issuer_node_id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(proof.issuer_node_id) ||
-    (issuer !== undefined && proof.issuer_node_id !== issuer) || proof.expires_in_ms !== proofWindowMs ||
+    (issuer !== undefined && proof.issuer_node_id !== issuer) || proof.expires_in_ms !== windowMs ||
     typeof proof.challenge !== 'string' || typeof proof.request_id !== 'string') {
     throw new Error('Unexpected challenge response');
   }
   const signature = await device.signChallenge(proof.challenge);
-  const timeLeft = proofWindowMs - (performance.now() - receivedAt);
-  if (timeLeft <= 0) throw new IssuerUnavailable(false);
-  if (!/^\/(auth\/(google|refresh|logout)|v1\/(me|credits))$/.test(op.path)) throw new Error('Unsupported operation');
+  const timeLeft = windowMs - (performance.now() - receivedAt);
+  if (timeLeft <= 0 || signal?.aborted) throw new IssuerUnavailable(false, signal?.reason);
   const controller = new AbortController();
   const cancel = () => controller.abort();
   if (signal?.aborted) cancel();
@@ -123,15 +149,15 @@ async function send(
         'X-Mane-Device-Signature': signature,
       },
     });
-    if (result.status >= 500) throw new Error('Issuer unavailable');
+    if (result.status >= 500) throw await deviceProofHTTPError(result);
     return result;
   } catch (error) {
-    if (!signal?.aborted && op.method === 'POST') {
+    if (!signal?.aborted && op.method === 'POST' && windowMs === proofWindowMs) {
       // The receipt time gives a conservative bound on expiry without comparing device and server clocks.
-      const remaining = Math.max(0, proofWindowMs - (performance.now() - receivedAt));
+      const remaining = Math.max(0, windowMs - (performance.now() - receivedAt));
       await new Promise<void>(resolve => setTimeout(resolve, remaining));
     }
-    if (signal?.aborted) throw error;
+    if (signal?.aborted && op.method === 'GET') throw error;
     throw new IssuerUnavailable(op.method === 'POST', error);
   } finally {
     clearTimeout(deadline);
