@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import type { Account, IncomeTaxCategory, Transaction, TransactionScope, TransactionType } from '@dmm/core/types/finance';
 import { ACCOUNTING_SUBJECTS, ACCOUNT_TYPE_LABELS, INCOME_TAX_CATEGORY_LABELS, getCategoryById, getOrderedCategories } from '@dmm/core/data/categories';
@@ -17,6 +17,8 @@ import { useFinance } from '@/lib/store';
 import { closeEditor, useFinanceSubmit } from '@/lib/useFinanceSubmit';
 import { usePalette, metrics } from '@/lib/theme';
 import { pickOne } from '@/lib/pick';
+import { receiptExpenseDate, receiptPreviewEnabled } from '@/lib/receiptDraftFiles';
+import { clearReceiptImport, getReceiptImport } from '@/lib/receiptImport';
 import { success, tick } from '@/lib/haptics';
 import { KEYBOARD_ACCESSORY_ID } from '@/ui/KeyboardDone';
 import { Group, IconBadge, Segmented } from '@/ui/kit';
@@ -52,11 +54,15 @@ export default function AddScreen() {
   const reduceMotion = useAppReducedMotion();
   const pickLedger = useLedgerPicker();
   const pickCategory = useCategoryPicker();
-  const params = useLocalSearchParams<{ id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string; accountId?: string; toAccountId?: string; billingMonth?: string; amount?: string;
+    receiptImportId?: string;
+  }>();
   const { id } = params;
   const submit = useFinanceSubmit();
   const lastContinuedAmount = useRef('');
-  const { state, visibleState, ledgers, activeLedger, addTransaction, updateTransaction, deleteTransaction, reorderAccounts, showSavedTransaction } = useFinance();
+  const { state, visibleState, ledgers, activeLedger, addTransaction, addTransactionsBatch, updateTransaction,
+    deleteTransaction, reorderAccounts, showSavedTransaction } = useFinance();
   const accountsById = useMemo(() => new Map(state.accounts.map((a) => [a.id, a])), [state.accounts]);
   const editing = useMemo(() => (id ? state.transactions.find((t) => t.id === id) : undefined), [id, state.transactions]);
   const paymentCard = state.accounts.find((a) => a.id === params.toAccountId && a.type === 'credit');
@@ -65,11 +71,17 @@ export default function AddScreen() {
   const transferAccounts = state.accounts.filter((a) => a.type !== 'debit');
   const defaultAccount = state.accounts.find((a) => a.id === params.accountId) ??
     (paymentMonth ? transferAccounts.find((a) => a.type === 'bank') : visibleState.accounts[0] ?? state.accounts[0]);
+  const receiptImportId = receiptPreviewEnabled && !id && !paymentMonth && typeof params.receiptImportId === 'string'
+    ? params.receiptImportId : undefined;
+  const [receiptDraft] = useState(() => receiptImportId ? getReceiptImport(receiptImportId) : undefined);
+  const receiptEntries = receiptDraft?.mode === 'items' ? receiptDraft.entries : undefined;
+  const [receiptCategories, setReceiptCategories] = useState<Record<number, string>>({});
 
   const [type, setType] = useState<TransactionType>(editing?.type ?? (paymentMonth ? 'transfer' : 'expense'));
-  const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? '' : '');
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : paymentMonth ? params.amount ?? ''
+    : receiptDraft ? String(receiptDraft.total) : '');
   const [pointUsed, setPointUsed] = useState(editing?.pointUsed ? String(editing.pointUsed) : '');
-  const [date, setDate] = useState(editing?.date ?? getTodayString());
+  const [date, setDate] = useState(editing?.date ?? receiptExpenseDate(receiptDraft?.date ?? undefined) ?? getTodayString());
   const [dateOpen, setDateOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [categoryId, setCategoryId] = useState(() => editing?.categoryId ??
@@ -78,8 +90,9 @@ export default function AddScreen() {
   const [toAccountId, setToAccountId] = useState(editing?.toAccountId ?? paymentCard?.id ??
     transferAccounts.find((a) => a.id !== defaultAccount?.id)?.id ?? '');
   const [title, setTitle] = useState(editing?.title ?? (paymentMonth && paymentCard
-    ? `${paymentCard.name} ${formatMonthLabel(paymentMonth)}の支払い` : ''));
-  const [memo, setMemo] = useState(editing?.memo ?? '');
+    ? `${paymentCard.name} ${formatMonthLabel(paymentMonth)}の支払い`
+    : receiptDraft?.merchant ?? ''));
+  const [memo, setMemo] = useState(editing?.memo ?? receiptDraft?.memo ?? '');
   const [scope, setScope] = useState<TransactionScope>(editing?.scope ??
     (!paymentMonth && (activeLedger?.kind === 'business' || defaultAccount?.usageScope === 'business') ? 'business' : 'personal'));
   const [ledgerId, setLedgerId] = useState(() => editing
@@ -88,7 +101,7 @@ export default function AddScreen() {
   const [ratio, setRatio] = useState(String(editing?.businessRatio ?? 100));
   const [ratioFocused, setRatioFocused] = useState(false);
   const [subject, setSubject] = useState(editing?.accountingSubject ?? '');
-  const [counterparty, setCounterparty] = useState(editing?.counterparty ?? '');
+  const [counterparty, setCounterparty] = useState(editing?.counterparty ?? receiptDraft?.merchant ?? '');
   const [taxCat, setTaxCat] = useState<IncomeTaxCategory | undefined>(editing?.incomeTaxCategory);
   const taxSelection = taxCat ?? (scope === 'business' ? 'business' : undefined);
   const [withholding, setWithholding] = useState(editing?.withholdingTax ? String(editing.withholdingTax) : '');
@@ -103,7 +116,7 @@ export default function AddScreen() {
   const account = state.accounts.find((a) => a.id === accountId);
   const destination = state.accounts.find((a) => a.id === toAccountId);
   const isCardPayment = type === 'transfer' && destination?.type === 'credit';
-  const allowsPoints = type === 'expense' || isCardPayment;
+  const allowsPoints = (type === 'expense' && !receiptEntries) || isCardPayment;
   const points = allowsPoints ? Number(pointUsed) : 0;
   const validPoints = Number.isSafeInteger(points) && points >= 0 && points <= Number(amount);
   const linkedBank = account?.type === 'debit'
@@ -167,6 +180,10 @@ export default function AddScreen() {
 
   const save = async (keepOpen: boolean) => {
     if (amount && lastContinuedAmount.current === amount) return;
+    if (receiptImportId && (!receiptDraft || getReceiptImport(receiptImportId) !== receiptDraft)) {
+      Alert.alert('レシートの結果を開き直してください');
+      return;
+    }
     if (id && !editing) {
       Alert.alert('取引が見つかりません');
       return;
@@ -222,11 +239,19 @@ export default function AddScreen() {
           ? { ...(editing?.advance ?? {}), for: advanceFor.trim() || '未設定' }
           : undefined,
     };
-    const continuing = keepOpen && !editing;
-    const saved = await submit(
-      () => editing ? updateTransaction(editing.id, payload) : addTransaction(payload),
-      continuing ? 'stay' : 'leave',
-    );
+    const continuing = keepOpen && !editing && !receiptDraft;
+    const saved = await submit(async () => {
+      const result = receiptEntries ? await addTransactionsBatch(receiptEntries.map((item, index) => {
+        const itemCategoryId = receiptCategories[index] ?? categoryId;
+        return {
+          ...payload, title: item.title, amount: item.amount, categoryId: itemCategoryId,
+          accountingSubject: isBusiness
+            ? subject || getCategoryById(itemCategoryId, customCategories).defaultAccountingSubject : undefined,
+        };
+      })) : editing ? await updateTransaction(editing.id, payload) : await addTransaction(payload);
+      if (result && receiptImportId) clearReceiptImport(receiptImportId);
+      return result;
+    }, continuing ? 'stay' : 'leave');
     if (!saved) return;
     showSavedTransaction(date, type, ledger.id);
     success();
@@ -238,7 +263,8 @@ export default function AddScreen() {
       setMemo((current) => current === memo ? '' : current);
       return;
     }
-    closeEditor('/transactions');
+    if (receiptDraft) router.dismissTo('/transactions');
+    else closeEditor('/transactions');
   };
 
   const fieldRow = (
@@ -291,7 +317,8 @@ export default function AddScreen() {
           }} />
       ) : null}
       <HeaderAction name={{ ios: 'checkmark', android: 'check' }}
-        label={editing ? '取引を保存' : '取引を登録'} accent circular onPress={() => save(false)} />
+        label={editing ? '取引を保存' : receiptEntries ? `${receiptEntries.length}件を登録` : '取引を登録'}
+        accent circular onPress={() => save(false)} />
     </View>
   );
 
@@ -299,7 +326,7 @@ export default function AddScreen() {
     <View style={{ flex: 1, backgroundColor: p.bg }}>
       <Stack.Screen
         options={{
-          title: editing ? `${TYPE_LABELS[type]}を編集` : `${TYPE_LABELS[type]}を記録`,
+          title: receiptEntries ? '商品ごとの支出を確認' : editing ? `${TYPE_LABELS[type]}を編集` : `${TYPE_LABELS[type]}を記録`,
           ...(Platform.OS === 'ios' ? {
             unstable_headerRightItems: () => [{
               type: 'custom', element: headerActions(), hidesSharedBackground: true,
@@ -315,7 +342,7 @@ export default function AddScreen() {
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ flexGrow: 1, padding: 16, gap: 16, paddingBottom: 28 }}>
-        {!paymentMonth ? <Segmented<TransactionType>
+        {!paymentMonth && !receiptDraft ? <Segmented<TransactionType>
           value={type}
           onChange={changeType}
           options={[
@@ -336,7 +363,7 @@ export default function AddScreen() {
           {dateStep(1, '次の日', { ios: 'chevron.right', android: 'chevron_right' })}
         </View>
         <Group>
-          {type !== 'transfer' ? fieldRow('カテゴリ', categoryId ? category.name : '選択',
+          {type !== 'transfer' ? fieldRow(receiptEntries ? '共通カテゴリ' : 'カテゴリ', categoryId ? category.name : '選択',
             () => pickCategory(type, categoryId, setCategoryId),
             { name: categoryIcon(category.icon ?? category.id), color: category.color }) : null}
           {accountRow(type === 'transfer' ? '出金元' : type === 'income' ? '入金先' : '支払い方法',
@@ -364,8 +391,23 @@ export default function AddScreen() {
           ) : null}
         </Group>
 
+        {receiptEntries ? <Group>
+          <Text style={{ color: p.text, fontWeight: '700', padding: 16 }}>
+            {receiptEntries.length}件 · 合計 {formatJPY(expenseAmount)}
+          </Text>
+          {receiptEntries.map((item, index) => {
+            const itemCategoryId = receiptCategories[index] ?? categoryId;
+            return (
+              <View key={index}>
+                {fieldRow(item.title, formatJPY(item.amount), () => pickCategory('expense', itemCategoryId, (choice) => {
+                  setReceiptCategories((current) => ({ ...current, [index]: choice }));
+                }), undefined, getCategoryById(itemCategoryId, customCategories).name)}
+              </View>
+            );
+          })}
+        </Group> : null}
         <Group>
-          <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
+          {!receiptEntries ? <TransactionInput label={isCardPayment ? 'カードへの支払総額' : '金額'} icon={{ ios: 'yensign', android: 'currency_yen' }}
             accessibilityHint="円単位で入力" value={amount}
             onChangeText={(value) => {
               lastContinuedAmount.current = '';
@@ -373,7 +415,7 @@ export default function AddScreen() {
             }}
             keyboardType="number-pad" inputAccessoryViewID={KEYBOARD_ACCESSORY_ID}
             style={{ minHeight: 34, color: type === 'income' ? p.income : p.text,
-              fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} />
+              fontSize: 28, fontWeight: '700', fontVariant: ['tabular-nums'] }} /> : null}
           {allowsPoints ? (
             <TransactionInput label="うちポイント充当" icon={{ ios: 'star.circle', android: 'stars' }} optional unit="円"
               accessibilityHint="使ったポイントの円換算額" value={pointUsed} placeholder="0"
@@ -388,8 +430,8 @@ export default function AddScreen() {
                 : 'ポイント充当額は合計金額以下で入力してください'}
             </Text>
           ) : null}
-          <TransactionInput label="取引内容" icon={{ ios: 'text.alignleft', android: 'subject' }} optional
-            value={title} onChangeText={setTitle} placeholder="取引の名前" />
+          {!receiptEntries ? <TransactionInput label="取引内容" icon={{ ios: 'text.alignleft', android: 'subject' }} optional
+            value={title} onChangeText={setTitle} placeholder="取引の名前" /> : null}
           <TransactionInput label="メモ" icon={{ ios: 'note.text', android: 'notes' }} optional
             value={memo} onChangeText={setMemo} placeholder="補足があれば入力" />
         </Group>
@@ -526,10 +568,10 @@ export default function AddScreen() {
               alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
             })}>
             <Text style={{ color: p.onTint, fontSize: 16, fontWeight: '700' }}>
-              登録
+              {receiptEntries ? `${receiptEntries.length}件を登録` : '登録'}
             </Text>
           </Pressable>
-          {!paymentMonth ? (
+          {!paymentMonth && !receiptDraft ? (
             <Pressable
               accessibilityRole="button"
               onPress={() => save(true)}

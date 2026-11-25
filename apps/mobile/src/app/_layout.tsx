@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState, useSegments, type NativeStackNavigationOptions } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as SystemUI from 'expo-system-ui';
-import { Platform, useColorScheme } from 'react-native';
+import { AppState, Platform, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FinanceProvider } from '@/lib/store';
 import { AndroidKeyboardProvider } from '@/ui/AndroidKeyboardProvider';
@@ -11,9 +11,41 @@ import { KeyboardDone } from '@/ui/KeyboardDone';
 import { LockGate } from '@/ui/LockGate';
 import { androidSettingsTransition, useAppReducedMotion } from '@/lib/motionPref';
 import { usePalette } from '@/lib/theme';
+import { accountAvailable, refreshAndroidAccount, restoreAndroidAccount, useAndroidAccount } from '@/lib/androidAccount';
+import { receiptPreviewEnabled } from '@/lib/receiptDraftFiles';
+import { watchPendingReceiptResult } from '@/lib/receiptLocalResults';
 import '@/lib/themePref';
 
 SplashScreen.preventAutoHideAsync();
+
+function ReceiptResultReceiver() {
+  const { accountId } = useAndroidAccount();
+  useEffect(() => {
+    if (!receiptPreviewEnabled || !accountAvailable) return;
+    let active: AbortController | undefined;
+    function onAppState(value: typeof AppState.currentState) {
+      active?.abort();
+      active = undefined;
+      if (value !== 'active') return;
+      const current = new AbortController();
+      active = current;
+      if (accountId) {
+        void watchPendingReceiptResult(accountId, current.signal);
+      } else {
+        void restoreAndroidAccount().then(async () => {
+          if (!current.signal.aborted) await refreshAndroidAccount();
+        }).catch(() => {});
+      }
+    }
+    onAppState(AppState.currentState);
+    const subscription = AppState.addEventListener('change', onAppState);
+    return () => {
+      active?.abort();
+      subscription.remove();
+    };
+  }, [accountId]);
+  return null;
+}
 
 export default function RootLayout() {
   const scheme = useColorScheme();
@@ -65,6 +97,7 @@ export default function RootLayout() {
     <LockGate>
     <ThemeProvider value={navigationTheme}>
       <FinanceProvider>
+        <ReceiptResultReceiver />
         <Stack screenOptions={{ headerShown: false, animation: reduceMotion ? 'none' : 'default' }}>
           {/* Back from a direct settings link replaces the route with /accounts. */}
           <Stack.Screen name="(tabs)" options={Platform.OS === 'android' ? { animationTypeForReplace: 'pop' } : undefined} />
@@ -78,6 +111,7 @@ export default function RootLayout() {
           {(['planning/savings-editor', 'budget-editor', 'purchase-editor', 'purchase-compare', 'purchase-confirm', 'planning', 'search'] as const).map((name) => (
             <Stack.Screen key={name} name={name} options={detailOptions} />
           ))}
+          <Stack.Screen name="receipt-review" options={{ headerShown: false }} />
           <Stack.Screen
             name="add"
             options={{

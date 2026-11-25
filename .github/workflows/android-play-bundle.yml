@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      EXPO_PUBLIC_ANDROID_RECEIPT_ENABLED: ${{ inputs.staging_auth && 'true' || vars.RELEASE_AI_RECEIPT_ENABLED }}
       MANE_ANDROID_BUILD_COMMIT: ${{ github.sha }}
       MANE_AUTH_ENTRY: ${{ inputs.staging_auth && 'https://mane-auth-stg.disnana.com' || vars.MANE_AUTH_ENTRY }}
       MANE_GOOGLE_WEB_CLIENT_ID: ${{ inputs.staging_auth && '433981502913-fuq95bpmu1tf6sfir5ui28b0vrnk7npb.apps.googleusercontent.com' || vars.MANE_GOOGLE_WEB_CLIENT_ID }}
